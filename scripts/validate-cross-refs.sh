@@ -10,7 +10,6 @@
 #   1. Every definition referenced in a spec Requires table exists in docs/definitions/
 #   2. Every spec listed in REGISTER.md exists in docs/specs/
 #   3. contracts.yaml entries match actual spec Requires/Provides
-#   4. REGISTER.md dependency notation is consistent
 #
 # Exit code: 0 if consistent, 1 if issues found.
 
@@ -55,8 +54,14 @@ else
     [ ! -f "$spec_file" ] && continue
     spec_name=$(basename "$spec_file")
 
-    # Extract all definition references from Requires and Provides tables
-    def_refs=$(grep -oE 'definitions/[^@|[:space:])]+' "$spec_file" 2>/dev/null \
+    # Extract all definition references from Requires and Provides tables.
+    # The regex captures `definitions/...`; the script later prefixes with
+    # $PROJECT_DIR/docs/ when checking existence (see line ~70). Backtick is
+    # excluded from the character class so that a trailing backtick in a
+    # markdown-wrapped reference like `definitions/foo` is not consumed into
+    # the captured reference (would otherwise produce a false positive
+    # missing-file error of the shape "definitions/foo`.md does not exist").
+    def_refs=$(grep -oE 'definitions/[^@|[:space:])`]+' "$spec_file" 2>/dev/null \
       | sort -u || true)
 
     while IFS= read -r ref; do
@@ -168,47 +173,13 @@ else
   [ "$check3_issues" -eq 0 ] && ok "contracts.yaml matches all spec tables"
 fi
 
-# ── Check 4: REGISTER.md dependency notation consistency ─────────────
-
-echo ""
-echo "━━━ Check 4: Register dependency notation consistency ━━━"
-
-if [ ! -f "$REGISTER" ]; then
-  info "No REGISTER.md — skipping"
-else
-  check4_issues=0
-  # Extract the "Depends On" column from spec index rows
-  # Expected format: spec-name.spec.md or definitions/foo.md@vN, comma-separated
-  register_specs=$(grep -E '^\|.*\.spec' "$REGISTER" 2>/dev/null || true)
-
-  while IFS='|' read -r _ spec _ _ _ deps _; do
-    spec=$(echo "$spec" | xargs)
-    deps=$(echo "$deps" | xargs)
-    [ -z "$spec" ] || [ -z "$deps" ] && continue
-    [ "$deps" = "—" ] || [ "$deps" = "-" ] || [ "$deps" = "(none)" ] && continue
-
-    # Check that dependency references use consistent notation
-    # Definitions should be definitions/foo.md, specs should be foo.spec.md
-    for dep in $(echo "$deps" | tr ',' '\n'); do
-      dep=$(echo "$dep" | xargs)
-      [ -z "$dep" ] && continue
-
-      # Warn if a definition ref lacks .md extension
-      if [[ "$dep" == definitions/* ]] && [[ "$dep" != *.md ]] && [[ "$dep" != *@* ]]; then
-        warn "$spec depends on '$dep' — missing .md extension"
-        ((check4_issues++)) || true
-      fi
-
-      # Warn if a spec dep lacks .spec.md suffix
-      if [[ "$dep" != definitions/* ]] && [[ "$dep" != *.spec.md ]] && [[ "$dep" != *.spec* ]]; then
-        warn "$spec depends on '$dep' — expected .spec.md suffix for spec dependencies"
-        ((check4_issues++)) || true
-      fi
-    done
-  done <<< "$register_specs"
-
-  [ "$check4_issues" -eq 0 ] && ok "Dependency notation is consistent"
-fi
+# Note: a previous Check 4 validated REGISTER.md dependency-notation
+# consistency by parsing a "Depends On" column. That column was removed
+# when generate-register.sh moved to the 4-column schema (Spec | Status |
+# Owner | Owns); dependency tracking now lives in spec frontmatter and in
+# the human-readable "Dependency Resolution Order" section of REGISTER.md
+# (which is prose, not a structured contract). The check therefore became
+# a silent no-op and was removed in the same commit that surfaced this.
 
 # ── Summary ──────────────────────────────────────────────────────────
 
