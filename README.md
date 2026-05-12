@@ -83,13 +83,23 @@ Arboretum installs as a Claude Code plugin and scaffolds projects via the `/arbo
 
 # Install arboretum:
 /plugin marketplace add stvangaal/arboretum
-/plugin install arboretum@stvangaal-arboretum
+/plugin install arboretum@arboretum
 
 # Then in any new project directory, scaffold the governed structure:
 /arboretum:init
 ```
 
 `/arboretum:init` creates `CLAUDE.md`, `PRINCIPLES.md`, `docs/`, `workflows/`, hooks, and git config; verifies `superpowers` is installed; and hands off to `/architect` for the project-shape interview. The plugin updates from upstream automatically on subsequent `/plugin install` runs — projects don't carry frozen framework copies.
+
+### Troubleshooting
+
+**`Permission denied (publickey)` during install** — Claude Code clones plugins via SSH by default. If you haven't added an SSH key to GitHub, run this once in your terminal to switch to HTTPS instead:
+
+```bash
+git config --global url."https://github.com/".insteadOf "git@github.com:"
+```
+
+Then retry the `/plugin install` command.
 
 ## Sample Project
 
