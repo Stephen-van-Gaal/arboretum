@@ -23,6 +23,7 @@ Run the project health check to detect drift across the spec-driven workflow.
    - Check 6: Spec status consistency (enum is one of `draft`, `active`, `stale`)
    - Check 7: Spec drift detection (**auto-flips `active → stale`** when owned files were modified after the spec's last commit; writes the flip into `docs/REGISTER.md` and the spec status field, supporting both YAML frontmatter `status:` and the legacy `## Status` markdown section)
    - Check 8: Plan files — Tests section (advisory)
+   - Check 9: Strategic Anchor — section present in CLAUDE.md, time horizon future, in/out scope non-empty, cadence not overdue (silent pass when `roadmap.config.yaml` absent)
 3. If the script exits with code 0 (healthy), confirm the project is in good shape
 4. If the script exits with code 1 (drift detected), summarize the issues found and suggest specific fixes
 5. For any spec freshly flipped to `stale`, surface that the user should run `/consolidate` to reconcile (this is the baseline help flow — the richer guided-reconciliation UX is tracked in #108)

@@ -6,7 +6,7 @@
 # Usage:
 #   ./scripts/health-check.sh [project-dir]
 #
-# Runs eight checks:
+# Runs nine checks:
 #   1. Governed documents exist (ARCHITECTURE, REGISTER, contracts, etc.)
 #   2. Register vs. disk (do owned files exist?)
 #   3. Unowned source files
@@ -17,6 +17,9 @@
 #      are modified after the spec's last commit). This is the only
 #      mutation; status is structurally bounded so writing it is safe.
 #   8. Plan files missing Tests section (advisory)
+#   9. Strategic Anchor validity (section present, time horizon future,
+#      in/out scope non-empty, cadence not overdue). Silent pass when
+#      roadmap.config.yaml is absent.
 #
 # Produces a drift report. Mutates only spec status (Check 7).
 # Exit code: 0 if healthy, 1 if drift detected.
@@ -507,6 +510,123 @@ else
 
   [ "$plans_checked" -eq 0 ] && info "No test-prudent plans found"
   [ "$plans_checked" -gt 0 ] && [ "$plans_warned" -eq 0 ] && ok "All test-prudent plans have a Tests section"
+fi
+
+# ── Check 9: Strategic Anchor validity ──────────────────────────────
+
+header "Check 9: Strategic Anchor"
+
+strategic_anchor_check() {
+  local root config claude
+  root="$PROJECT_DIR"
+  config="$root/roadmap.config.yaml"
+  claude="$root/CLAUDE.md"
+
+  # Silent pass — not adopted
+  [ ! -f "$config" ] && return 0
+
+  local issues=0
+
+  # 1. Section present
+  if ! grep -q '^## Strategic Anchor' "$claude" 2>/dev/null; then
+    echo "WARN [strategic-anchor]: CLAUDE.md is missing '## Strategic Anchor' (roadmap.config.yaml exists)"
+    issues=$((issues + 1))
+  else
+    # 2. Time horizon date is in the future — only if the horizon itself contains
+    # an ISO date. Strip any (next review: ...) parenthetical first so we don't
+    # accidentally check the review date instead of the horizon end.
+    local horizon_date today_epoch horizon_epoch
+    horizon_date=$(awk '/^## Strategic Anchor/{found=1} found && /\*\*Time horizon:/{print; exit}' "$claude" \
+      | sed 's/(next review:[^)]*)//g' \
+      | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1 || true)
+    if [ -n "$horizon_date" ]; then
+      # macOS date -j -f, Linux date -d
+      horizon_epoch=$(date -j -f '%Y-%m-%d' "$horizon_date" +%s 2>/dev/null \
+        || date -d "$horizon_date" +%s 2>/dev/null \
+        || echo 0)
+      today_epoch=$(date +%s)
+      if [ "$horizon_epoch" -lt "$today_epoch" ]; then
+        echo "WARN [strategic-anchor]: Time horizon date ($horizon_date) is past — run /roadmap revise"
+        issues=$((issues + 1))
+      fi
+    fi
+
+    # 3. In/out scope non-empty (≥1 bullet each)
+    local in_bullets out_bullets
+    in_bullets=$(awk '/^### In scope/{found=1; next} found && /^### /{exit} found{print}' "$claude" \
+      | grep -cE '^- ' 2>/dev/null || echo 0)
+    out_bullets=$(awk '/^### Out of scope/{found=1; next} found && /^### /{exit} found{print}' "$claude" \
+      | grep -cE '^- ' 2>/dev/null || echo 0)
+    [ "$in_bullets" -lt 1 ] && \
+      echo "WARN [strategic-anchor]: '### In scope (this period)' has no bullets" && issues=$((issues + 1))
+    [ "$out_bullets" -lt 1 ] && \
+      echo "WARN [strategic-anchor]: '### Out of scope (this period)' has no bullets" && issues=$((issues + 1))
+  fi
+
+  # 4. Cadence not overdue
+  local last_reviewed cadence_weeks last_epoch due_epoch
+  # Use python3 if yq not available (same pattern as lib.sh)
+  if command -v yq >/dev/null 2>&1; then
+    last_reviewed=$(yq -r '.last_reviewed // ""' "$config")
+    cadence_weeks=$(yq -r '.review_cadence_weeks // ""' "$config")
+  elif command -v python3 >/dev/null 2>&1; then
+    _yaml_scalar() {
+      python3 - "$1" "$2" <<'PYEOF'
+import sys, re
+def parse_scalar(path, key):
+    with open(path) as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            m = re.match(r'^' + re.escape(key) + r'\s*:\s*(.*)', line)
+            if m:
+                val = re.sub(r'\s+#.*$', '', m.group(1)).strip()
+                if val in ('', 'null', '~'):
+                    return ''
+                if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                    val = val[1:-1]
+                return val
+    return ''
+print(parse_scalar(sys.argv[1], sys.argv[2]))
+PYEOF
+    }
+    last_reviewed=$(_yaml_scalar "$config" last_reviewed)
+    cadence_weeks=$(_yaml_scalar "$config" review_cadence_weeks)
+  fi
+  if [ -n "${last_reviewed:-}" ] && [ -n "${cadence_weeks:-}" ]; then
+    last_epoch=$(date -j -f '%Y-%m-%d' "$last_reviewed" +%s 2>/dev/null \
+      || date -d "$last_reviewed" +%s 2>/dev/null \
+      || echo 0)
+    due_epoch=$(( last_epoch + cadence_weeks * 7 * 86400 ))
+    if [ "$(date +%s)" -gt "$due_epoch" ]; then
+      echo "WARN [strategic-anchor]: Strategic review overdue (last=$last_reviewed, cadence=${cadence_weeks}w) — run /roadmap revise"
+      issues=$((issues + 1))
+    fi
+  fi
+
+  [ "$issues" -eq 0 ] && echo "OK [strategic-anchor]: all checks pass"
+  return $issues
+}
+
+# Run the check; harvest any WARN lines into the standard drift machinery
+anchor_output=$(strategic_anchor_check 2>&1) || anchor_exit=$?
+anchor_exit=${anchor_exit:-0}
+
+if [ -z "$anchor_output" ]; then
+  # strategic_anchor_check returned 0 with no output — config absent, silent pass
+  info "Skipped — roadmap.config.yaml not present"
+else
+  while IFS= read -r line; do
+    if [[ "$line" == WARN* ]]; then
+      warn "${line#WARN }"
+    elif [[ -n "$line" ]]; then
+      info "$line"
+    fi
+  done <<< "$anchor_output"
+  if [ "$anchor_exit" -eq 0 ] && ! echo "$anchor_output" | grep -q '^WARN'; then
+    ok "Strategic Anchor looks good"
+  fi
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────

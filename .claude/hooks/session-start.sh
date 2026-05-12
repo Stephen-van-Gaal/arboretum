@@ -405,6 +405,20 @@ if [ -d "$SKILLS_DIR" ]; then
   fi
 fi
 
+# ── Roadmap orientation (issue #152) ─────────────────────────────────
+# Surface the orientation block when roadmap.config.yaml is present.
+# build-orientation.sh exits silent if the file is absent, so this is a
+# no-op on projects that haven't instantiated the roadmap system.
+
+ROADMAP_ORIENTATION="$PROJECT_DIR/scripts/roadmap/build-orientation.sh"
+if [ -x "$ROADMAP_ORIENTATION" ]; then
+  orientation_text="$(bash "$ROADMAP_ORIENTATION" 2>/dev/null || true)"
+  if [ -n "$orientation_text" ]; then
+    [ -n "$output" ] && output+=$'\n'
+    output+="$orientation_text"
+  fi
+fi
+
 # ── Output ───────────────────────────────────────────────────────────
 
 if [ -n "$output" ]; then

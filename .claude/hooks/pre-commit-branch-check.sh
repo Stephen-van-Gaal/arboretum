@@ -28,7 +28,7 @@ fi
 
 # ── Check current branch ─────────────────────────────────────────────
 
-BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 # Protected branches — edit this list to customize
 PROTECTED_BRANCHES=("main" "master")

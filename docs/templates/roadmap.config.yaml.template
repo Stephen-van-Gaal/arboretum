@@ -1,0 +1,37 @@
+# Operational config for the roadmap system. Strategic content (in/out scope)
+# lives in CLAUDE.md's "Strategic Anchor" section, not here.
+
+# Cadence
+time_horizon: "{{TIME_HORIZON}}"
+last_reviewed: {{TODAY_YYYY_MM_DD}}
+review_cadence_weeks: 12
+
+# Adoption profile: minimal | lean | full
+profile: {{PROFILE}}
+
+# WIP gate
+wip_limit: 1
+slack_wip_limit: 1
+slack_types: [docs, chore]
+
+# Type label aliases — adopt existing labels rather than relabeling issues.
+# Edit per project; leave empty when no pre-existing labels overlap.
+type_label_aliases:
+  feature: enhancement
+  bug: bug
+  docs: documentation
+
+# Component values — required, project-defined. The framework provides no
+# defaults; pick 3-7 that describe the actual surfaces of your project.
+component_values:
+{{COMPONENT_VALUES_YAML_LIST}}
+
+# Audience axis — optional. Leave commented out if not in use.
+# audience_values:
+#   - <project-defined>
+
+# Branch prefixes the WIP detector should recognize.
+branch_prefixes: [feat, fix, docs, chore, refactor, spike]
+
+# GitHub native sub-issues — deferred behind a flag until feature is available.
+sub_issues_enabled: false

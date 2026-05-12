@@ -1,0 +1,12 @@
+## Strategic Anchor
+
+**Time horizon:** {{TIME_HORIZON}} (next review: {{NEXT_REVIEW_YYYY_MM_DD}})
+
+### In scope (this period)
+- {{IN_SCOPE_PLACEHOLDER}}
+
+### Out of scope (this period)
+- {{OUT_OF_SCOPE_PLACEHOLDER}}
+
+### Component vocabulary
+See `roadmap.config.yaml` `component_values:` for the canonical list.
