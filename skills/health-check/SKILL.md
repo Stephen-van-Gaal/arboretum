@@ -5,6 +5,7 @@ disable-model-invocation: false
 allowed-tools: Bash(bash scripts/health-check.sh *), Read, Edit
 argument-hint: [project-dir]
 layer: 0
+owner: health-check
 ---
 
 # Project Health Check

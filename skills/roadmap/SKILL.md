@@ -8,6 +8,7 @@ allowed-tools:
   - Edit
   - Write
   - AskUserQuestion
+owner: roadmap
 argument-hint: "[instantiate|run] [args]"
 layer: 0
 ---
