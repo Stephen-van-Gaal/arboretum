@@ -13,10 +13,14 @@
 #   3. Unowned source files
 #   4. contracts.yaml vs. spec Requires tables (are pins in sync?)
 #   5. contracts.yaml vs. definition versions (are pins current?)
-#   6. Spec status consistency (status enum is one of draft/active/stale)
+#   6. Spec status consistency. Canonical enum is draft/active/stale.
+#      Projects using an extended enum (e.g. draft/ready/in-progress/
+#      implemented) get a single info line rather than per-spec warnings.
 #   7. Spec drift detection (auto-flips active → stale when owned files
 #      are modified after the spec's last commit). This is the only
 #      mutation; status is structurally bounded so writing it is safe.
+#      Extended-enum projects: auto-flip is a no-op (no spec is active);
+#      surface that explicitly so the empty result isn't mysterious.
 #   8. Plan files missing Tests section (advisory)
 #   9. Strategic Anchor validity (section present, time horizon future,
 #      in/out scope non-empty, cadence not overdue). Silent pass when
@@ -293,6 +297,18 @@ header "Check 6: Spec status consistency"
 if [ "$register_schema_compatible" = false ]; then
   info "Skipped — REGISTER.md schema not compatible (see Check 2 message)"
 else
+# The plugin's canonical status enum is draft/active/stale. Some projects
+# adopt a richer four-state enum (draft/ready/in-progress/implemented).
+# Unknown statuses do NOT warn — they're reported via a single info line
+# below ("project uses extended status enum") so adopters know Check 7's
+# drift auto-flip is a no-op for them but everything else still works.
+#
+# Collected in an array (not a \n-joined string) so the post-loop format
+# step uses `printf '%s\n'`, which does not interpret backslash escapes.
+# Statuses come from REGISTER, which in turn comes from spec frontmatter
+# — values containing backslashes would otherwise be mangled by printf '%b'.
+extended_enum_states=()
+
 # Read order matches the current schema: | _ | spec | status | owner | owns | _ |
 while IFS='|' read -r _ spec status _ owns _; do
   spec=$(echo "$spec" | xargs)
@@ -317,15 +333,28 @@ while IFS='|' read -r _ spec status _ owns _; do
       warn "$spec: status=stale — drift recorded; run /consolidate to reconcile"
       ;;
     *)
-      warn "$spec: unknown status '$status' — must be one of: draft, active, stale"
+      # Unknown status — could be a richer enum (e.g. ready, in-progress,
+      # implemented) or a typo. Record for the post-loop info summary;
+      # don't warn here, that would fire once per spec for every adopter
+      # using an extended enum and overwhelm the health-check output.
+      [ -n "$status" ] && extended_enum_states+=("$status")
       ;;
   esac
 
-  # Check that the spec file itself exists
+  # Check that the spec file itself exists. This applies regardless of
+  # the status vocabulary in use.
   if [ ! -f "$spec_file" ]; then
     warn "$spec: listed in register but file does not exist"
   fi
 done < <(grep -E '^\|.*\.spec' "$REGISTER" 2>/dev/null || true)
+
+# Surface extended-enum usage as a single info line. Lists the distinct
+# unknown states so the adopter sees their own vocabulary acknowledged
+# rather than getting a generic "unknown status" warning per spec.
+if [ ${#extended_enum_states[@]} -gt 0 ]; then
+  distinct_states=$(printf '%s\n' "${extended_enum_states[@]}" | sort -u | tr '\n' ' ' | xargs)
+  info "Project uses extended status enum (states observed: $distinct_states). Canonical plugin enum is draft/active/stale — Check 7 auto-flip will be a no-op."
+fi
 
 ok "Status consistency check complete"
 fi
@@ -457,7 +486,11 @@ if [ "$drift_flipped" -eq 0 ]; then
   if [ "$no_drift_count" -gt 0 ]; then
     ok "No drift detected across $no_drift_count active spec(s)"
   else
-    info "No active specs to check"
+    # Project either has no specs at all or uses a status vocabulary
+    # outside the canonical draft/active/stale enum. Check 6 already
+    # surfaced the extended-enum case as a single info line; here we
+    # just acknowledge the no-op so the empty result isn't mysterious.
+    info "No specs at status 'active' — drift auto-flip is a no-op (project may use an extended status enum; see Check 6)"
   fi
 fi
 fi  # close: register_schema_compatible guard for Check 7
