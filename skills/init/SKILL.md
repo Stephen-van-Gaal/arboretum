@@ -89,8 +89,10 @@ copy_if_missing() {
   fi
 }
 
-# Principles (project root)
-copy_if_missing "$PLUGIN_ROOT/PRINCIPLES.md" "PRINCIPLES.md"
+# Principles template → project root (per issue #13: PRINCIPLES.md
+# lives under docs/templates/ in the plugin so adopters know to edit
+# the broken cross-refs).
+copy_if_missing "$PLUGIN_ROOT/docs/templates/PRINCIPLES.md" "PRINCIPLES.md"
 
 # Workflows
 for wf in "$PLUGIN_ROOT/workflows/"*.md; do

@@ -55,8 +55,13 @@ PROJECT_NAME="${2:-$(basename "$TARGET_DIR")}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Templates are at ../docs/templates/ relative to this script
 TEMPLATES_DIR="$(realpath "$SCRIPT_DIR/../docs/templates")"
-# Principles are at ../PRINCIPLES.md
-PRINCIPLES_FILE="$(realpath "$SCRIPT_DIR/../PRINCIPLES.md")"
+# Principles template is at ../docs/templates/PRINCIPLES.md (per issue #13).
+# Skip realpath here: under `set -e`, realpath on a missing file aborts
+# immediately and the "Verify source files exist" loop below — which
+# prints the actionable "run this from the arboretum project directory"
+# message — never runs. Simple path construction lets the existence
+# check be the source of the user-facing error.
+PRINCIPLES_FILE="$SCRIPT_DIR/../docs/templates/PRINCIPLES.md"
 # Workflows are at ../workflows/
 WORKFLOWS_DIR="$(realpath "$SCRIPT_DIR/../workflows")"
 # Hooks are at ../.claude/

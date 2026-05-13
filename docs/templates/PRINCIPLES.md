@@ -1,3 +1,22 @@
+<!--
+  PRINCIPLES.md — adopter-editable template.
+
+  This file ships from arboretum's docs/templates/ into the consumer
+  project's repository root via /arboretum:init or scripts/bootstrap-project.sh.
+  Treat it as starting material, not framework infrastructure:
+
+  - The **Practices:** lines reference `docs/ARCHITECTURE.md §3 #N`. Those
+    section anchors exist in *arboretum's* ARCHITECTURE doc, not yours.
+    If your project has its own ARCHITECTURE.md, either replace those
+    refs with anchors that exist there, or strip them entirely.
+  - Add, remove, or reword principles to match your project's stance.
+    The original nine are a starting set, not a fixed contract.
+
+  arboretum-dev itself uses the in-repo copy at this same path
+  (`docs/templates/PRINCIPLES.md`) as its authoritative principles
+  document; the cross-refs resolve correctly within this repo.
+-->
+
 # Principles
 
 Arboretum is an organizational framework for AI-assisted software development. These principles guide how projects are structured when an AI agent writes most of the code and the human is a domain expert steering the work.
