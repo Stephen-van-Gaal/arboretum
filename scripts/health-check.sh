@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: health-check
+# owner: project-infrastructure
 # health-check.sh — Detect drift across the spec-driven workflow
 #
 # Requires bash 4+ (uses process substitution, arrays, [[ ]]).

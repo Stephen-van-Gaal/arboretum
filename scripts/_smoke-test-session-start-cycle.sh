@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# owner: session-start-cycle-state
 # _smoke-test-session-start-cycle.sh — Verify the session-start
 # cycle-state detection (issue #167).
 #

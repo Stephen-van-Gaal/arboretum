@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# owner: project-infrastructure
 # refresh-next-cache.sh — Refresh .arboretum/next-cache.json from GitHub.
 #
 # Reads the open issue carrying the `next-up` label (at most one) via

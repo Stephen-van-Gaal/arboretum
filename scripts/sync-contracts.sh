@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# owner: project-infrastructure
 # sync-contracts.sh — Auto-generate contracts.yaml from spec Requires/Provides tables
 #
 # Requires bash 4+.

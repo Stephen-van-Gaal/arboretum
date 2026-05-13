@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# owner: project-infrastructure
 # _smoke-test-health-check.sh — Fixture round-trip for the
 # generate-register.sh ↔ health-check.sh schema contract.
 #

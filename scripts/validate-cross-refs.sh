@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# owner: project-infrastructure
 # validate-cross-refs.sh — Cross-document consistency checks
 #
 # Requires bash 4+.
