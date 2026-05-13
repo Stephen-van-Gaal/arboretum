@@ -116,7 +116,11 @@ extract_yaml_list() {
     fi
   done <<< "$frontmatter"
 
-  printf '%s\n' "${patterns[@]}"
+  # ${arr[@]+"${arr[@]}"} is the bash idiom for "expand only if set" —
+  # plain "${arr[@]}" on an empty local array trips `set -u` with
+  # "patterns[@]: unbound variable" on bash 4.4+. A spec with no owns:
+  # block (or an inline `owns: []`) leaves patterns empty here.
+  printf '%s\n' "${patterns[@]+"${patterns[@]}"}"
 }
 
 # ── Resolve owns patterns to actual files ────────────────────────────
