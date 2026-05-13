@@ -93,23 +93,24 @@ extract_scalar() {
   echo "$frontmatter" | sed -n "s/^${field}:[[:space:]]*//p" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
-extract_owns_list() {
+extract_yaml_list() {
   local frontmatter="$1"
-  local in_owns=false
+  local field="$2"
+  local in_field=false
   local patterns=()
 
   while IFS= read -r line; do
-    if [[ "$line" =~ ^owns: ]]; then
-      in_owns=true
+    if [[ "$line" =~ ^${field}: ]]; then
+      in_field=true
       continue
     fi
-    if [ "$in_owns" = true ]; then
+    if [ "$in_field" = true ]; then
       if [[ "$line" =~ ^[[:space:]]*-[[:space:]](.+) ]]; then
         local pattern="${BASH_REMATCH[1]}"
         pattern=$(echo "$pattern" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         [ -n "$pattern" ] && patterns+=("$pattern")
       elif [[ "$line" =~ ^[^[:space:]] ]]; then
-        in_owns=false
+        in_field=false
       fi
     fi
   done <<< "$frontmatter"
@@ -151,6 +152,8 @@ spec_statuses=()
 spec_owners=()
 spec_owns_display=()
 spec_filenames=()
+spec_provides_lists=()    # one entry per spec; newline-separated definition names
+spec_requires_lists=()    # one entry per spec; newline-separated definition names
 
 for spec_file in "${spec_files[@]}"; do
   frontmatter=$(extract_frontmatter "$spec_file") || true
@@ -174,7 +177,7 @@ for spec_file in "${spec_files[@]}"; do
   owns_patterns=()
   while IFS= read -r p; do
     [ -n "$p" ] && owns_patterns+=("$p")
-  done < <(extract_owns_list "$frontmatter")
+  done < <(extract_yaml_list "$frontmatter" "owns")
 
   # Build display string for owns column
   owns_display=""
@@ -193,11 +196,20 @@ for spec_file in "${spec_files[@]}"; do
     done
   fi
 
+  # Capture provides/requires for the Definition Index. Each entry is the
+  # raw newline-separated list of definition names declared in frontmatter;
+  # we walk them later when building the per-definition Providers/Requirers
+  # columns. Specs without these fields just contribute empty entries.
+  provides_block=$(extract_yaml_list "$frontmatter" "provides")
+  requires_block=$(extract_yaml_list "$frontmatter" "requires")
+
   spec_names+=("$name")
   spec_statuses+=("${status:-draft}")
   spec_owners+=("${owner:-}")
   spec_owns_display+=("$owns_display")
   spec_filenames+=("$filename")
+  spec_provides_lists+=("$provides_block")
+  spec_requires_lists+=("$requires_block")
 done
 
 if [ ${#spec_names[@]} -eq 0 ]; then
@@ -284,6 +296,50 @@ get_status_count() {
   echo "0"
 }
 
+# ── Parse definitions (Layer 1+: shared contracts) ───────────────────
+
+# Definitions live under docs/definitions/*.md. Each file declares a
+# shared contract (a data shape, an API surface, a config schema) that
+# multiple specs may provide or require by name.
+#
+# We auto-detect the dir and parse frontmatter for `name`, `version`,
+# `status`. If the dir is missing or empty, the Definition Index emits
+# the historical placeholder comment — backwards compatible with
+# projects that have no shared definitions.
+
+definitions_dir="$PROJECT_DIR/docs/definitions"
+definition_names=()
+definition_versions=()
+definition_statuses=()
+
+if [ -d "$definitions_dir" ]; then
+  while IFS= read -r def_file; do
+    [ -z "$def_file" ] && continue
+    def_fm=$(extract_frontmatter "$def_file" || true)
+
+    # Distinct variable names (def_name/def_version/def_status) avoid
+    # shadowing the loop-scope `name/status/owner` from the spec-parsing
+    # loop above — these are top-level script variables, not function-
+    # locals, so a clobber would propagate.
+
+    # Definition name defaults to the filename stem (matches the convention
+    # consumer projects already use — e.g. `docs/definitions/pubmed-record.md`
+    # is the `pubmed-record` definition).
+    def_name=$(extract_scalar "$def_fm" "name")
+    [ -z "$def_name" ] && def_name=$(basename "$def_file" .md)
+
+    def_version=$(extract_scalar "$def_fm" "version")
+    [ -z "$def_version" ] && def_version="v0"
+
+    def_status=$(extract_scalar "$def_fm" "status")
+    [ -z "$def_status" ] && def_status="draft"
+
+    definition_names+=("$def_name")
+    definition_versions+=("$def_version")
+    definition_statuses+=("$def_status")
+  done < <(find "$definitions_dir" -name "*.md" -type f 2>/dev/null | sort)
+fi
+
 # ── Generate REGISTER.md ─────────────────────────────────────────────
 
 output=""
@@ -291,10 +347,58 @@ output+="# Project Register"$'\n'
 output+=$'\n'
 output+="## Definitions Index"$'\n'
 output+=$'\n'
-output+="| Definition | Version | Status | Primary Implementor | Required By |"$'\n'
-output+="|------------|---------|--------|---------------------|-------------|"$'\n'
-output+=$'\n'
-output+="<!-- No shared definitions yet. -->"$'\n'
+
+# Consistent table header in both branches keeps REGISTER.md
+# programmatically parseable and avoids noisy diffs when a project
+# first adds a definition (column names would otherwise change at
+# the same time as the first row appears).
+output+="| Name | Version | Status | Provided By | Required By |"$'\n'
+output+="|------|---------|--------|-------------|-------------|"$'\n'
+
+if [ ${#definition_names[@]} -eq 0 ]; then
+  output+=$'\n'
+  output+="<!-- No shared definitions yet. -->"$'\n'
+else
+
+  for i in "${!definition_names[@]}"; do
+    def_name="${definition_names[$i]}"
+
+    # Walk each spec's provides/requires lists looking for this definition.
+    # Specs without the field contribute nothing. Names that appear in
+    # multiple specs accumulate into a comma-separated list.
+    providers=()
+    requirers=()
+    for j in "${!spec_names[@]}"; do
+      while IFS= read -r p; do
+        [ "$p" = "$def_name" ] && providers+=("${spec_names[$j]}")
+      done <<< "${spec_provides_lists[$j]}"
+      while IFS= read -r r; do
+        [ "$r" = "$def_name" ] && requirers+=("${spec_names[$j]}")
+      done <<< "${spec_requires_lists[$j]}"
+    done
+
+    # Manual ", " join — bash's IFS-based join only uses IFS's first char.
+    providers_str="—"
+    if [ ${#providers[@]} -gt 0 ]; then
+      providers_str=""
+      for p in "${providers[@]}"; do
+        [ -n "$providers_str" ] && providers_str+=", "
+        providers_str+="$p"
+      done
+    fi
+    requirers_str="—"
+    if [ ${#requirers[@]} -gt 0 ]; then
+      requirers_str=""
+      for r in "${requirers[@]}"; do
+        [ -n "$requirers_str" ] && requirers_str+=", "
+        requirers_str+="$r"
+      done
+    fi
+
+    output+="| ${def_name} | ${definition_versions[$i]} | ${definition_statuses[$i]} | ${providers_str} | ${requirers_str} |"$'\n'
+  done
+fi
+
 output+=$'\n'
 output+="## Spec Index"$'\n'
 output+=$'\n'
