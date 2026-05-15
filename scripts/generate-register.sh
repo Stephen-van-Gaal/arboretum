@@ -429,12 +429,23 @@ output+=$'\n'
 output+="| Status | Count |"$'\n'
 output+="|--------|-------|"$'\n'
 
-for status in draft active stale; do
+# Emit canonical states first in lifecycle order, then any other observed
+# states alphabetically. Pre-fix this loop iterated only `draft active stale`
+# and silently dropped extended-enum states (ready, in-progress, implemented,
+# etc.) from the summary — leaving an empty table for projects using a
+# richer vocabulary. Iterating actual observed labels keeps the summary
+# vocabulary-agnostic without needing to read .arboretum.yml here.
+_summary_order=$({
+  for s in draft active stale; do echo "$s"; done
+  printf '%s\n' "${status_labels[@]}" | sort -u | grep -vxE 'draft|active|stale' || true
+})
+while IFS= read -r status; do
+  [ -z "$status" ] && continue
   count=$(get_status_count "$status")
   if [ "$count" -gt 0 ]; then
     output+="| $status | $count |"$'\n'
   fi
-done
+done <<< "$_summary_order"
 
 output+=$'\n'
 output+="## Unowned Code"$'\n'

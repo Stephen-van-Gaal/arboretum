@@ -14,13 +14,17 @@
 #   4. contracts.yaml vs. spec Requires tables (are pins in sync?)
 #   5. contracts.yaml vs. definition versions (are pins current?)
 #   6. Spec status consistency. Canonical enum is draft/active/stale.
-#      Projects using an extended enum (e.g. draft/ready/in-progress/
-#      implemented) get a single info line rather than per-spec warnings.
-#   7. Spec drift detection (auto-flips active → stale when owned files
-#      are modified after the spec's last commit). This is the only
-#      mutation; status is structurally bounded so writing it is safe.
-#      Extended-enum projects: auto-flip is a no-op (no spec is active);
-#      surface that explicitly so the empty result isn't mysterious.
+#      Projects can override via .arboretum.yml status_enum: — typos
+#      then warn against the declared vocabulary. With no config and
+#      richer states observed, a single info line acknowledges the
+#      extended enum rather than flooding per-spec warnings.
+#   7. Spec drift detection (auto-flips configured active_states →
+#      configured stale_state when owned files are modified after the
+#      spec's last commit). This is the only mutation; status is
+#      structurally bounded so writing it is safe. Default canonical
+#      vocabulary maps to active → stale. Unconfigured extended-enum
+#      projects: auto-flip is a no-op; surface that explicitly so the
+#      empty result isn't mysterious.
 #   8. Plan files missing Tests section (advisory)
 #   9. Strategic Anchor validity (section present, time horizon future,
 #      in/out scope non-empty, cadence not overdue). Silent pass when
@@ -68,6 +72,289 @@ warn() {
 info() {
   echo "  · $1"
 }
+
+# O(N) membership test. Kept linear (not an associative array) because
+# macOS ships bash 3.2, which lacks `declare -A`. N is typically <10
+# (status states / active_states), so linear scan is fine.
+_in_array() {
+  local needle="$1"; shift
+  local item
+  for item in "$@"; do
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+# ── Status enum config ───────────────────────────────────────────────
+#
+# Defaults match the plugin's canonical vocabulary. A project can override
+# by adding a status_enum: block to .arboretum.yml:
+#
+#   status_enum:
+#     states: [draft, ready, in-progress, implemented, stale]
+#     active_states: [implemented]   # subset eligible for Check 7 auto-flip
+#     stale_state: stale             # written when flipping; omit to disable
+#
+# When `states:` is non-empty, the project is treated as having explicitly
+# configured its vocabulary: Check 6 emits per-spec warnings for values
+# outside `states:` (the typo-detection signal), and the unconfigured-path
+# "extended enum no-op" info line is suppressed.
+STATUS_STATES=(draft active stale)
+STATUS_ACTIVE_STATES=(active)
+STATUS_STALE_STATE="stale"
+STATUS_ENUM_CONFIGURED=false
+
+_read_status_enum() {
+  local config="$PROJECT_DIR/.arboretum.yml"
+  [ -f "$config" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  # Emit one fixed-prefix line per field, plus an ERROR: line if the
+  # block is malformed. Pipe-joining inside the value is safe because
+  # tokens are validated to [A-Za-z0-9_-]+ — pipes are explicitly
+  # forbidden, so they can't collide with the field separator.
+  #
+  # Token validation happens here (at the parser boundary) rather than
+  # being escaped at each sed/regex site downstream: the Check 7 flip
+  # path edits both REGISTER.md and the spec frontmatter with separate
+  # sed invocations, and any metachar that survived to a later site
+  # could desync the two files. Rejecting bad tokens up front keeps the
+  # downstream sed calls free of escaping logic and makes the failure
+  # mode loud (block rejected, canonical defaults retained) instead of
+  # silent (partial flip).
+  local raw
+  raw=$(python3 - "$config" <<'PYEOF' 2>/dev/null || true
+import sys, re
+path = sys.argv[1]
+TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+
+def _validate_list(name, raw):
+    # raw must be a Python list of stringy scalars; reject scalars (e.g.
+    # `states: draft` which iterates as 'd','r','a','f','t'), mappings,
+    # and any token containing regex/sed metachars or pipe (the bash
+    # reader's field separator).
+    if raw is None:
+        return [], None
+    if not isinstance(raw, list):
+        return None, f"status_enum.{name} must be a YAML list, got {type(raw).__name__}"
+    out = []
+    for x in raw:
+        if isinstance(x, (dict, list)):
+            return None, f"status_enum.{name} contains non-scalar entry: {x!r}"
+        s = str(x).strip()
+        if not s:
+            continue
+        if not TOKEN_RE.match(s):
+            return None, (f"status_enum.{name} contains invalid token {s!r} "
+                          "— allowed characters: [A-Za-z0-9_-]")
+        out.append(s)
+    return out, None
+
+def _validate_scalar(name, raw):
+    if raw is None or raw == '':
+        return '', None
+    if isinstance(raw, (dict, list)):
+        return None, f"status_enum.{name} must be a scalar, got {type(raw).__name__}"
+    s = str(raw).strip()
+    if not s:
+        return '', None
+    if not TOKEN_RE.match(s):
+        return None, (f"status_enum.{name} contains invalid token {s!r} "
+                      "— allowed characters: [A-Za-z0-9_-]")
+    return s, None
+
+def emit(states, active, stale):
+    print('STATES:' + '|'.join(states))
+    print('ACTIVE:' + '|'.join(active))
+    print('STALE:'  + stale)
+
+def _bail(msg):
+    print('ERROR:' + msg)
+    emit([], [], '')
+    sys.exit(0)
+
+# Distinguish PyYAML absent (use fallback parser) from PyYAML present
+# but YAML invalid (reject loudly). Conflating the two — `except
+# Exception` — let a malformed file (e.g. bad indentation under
+# `status_enum`) silently fall through to the permissive regex parser,
+# which could partially accept it and run Check 7 in a half-applied
+# state with no rejection message.
+parsed = None
+yaml_module = None
+try:
+    import yaml as yaml_module
+except ImportError:
+    pass
+
+if yaml_module is not None:
+    # PyYAML loaded — it is the single source of truth. Whatever it
+    # returns (or fails to return) is final; do NOT fall back to the
+    # regex parser, which is more permissive.
+    try:
+        with open(path) as f:
+            cfg = yaml_module.safe_load(f) or {}
+    except yaml_module.YAMLError as e:
+        _bail(f'.arboretum.yml is not valid YAML: {e}')
+    except OSError:
+        emit([], [], '')
+        sys.exit(0)
+    if not isinstance(cfg, dict):
+        emit([], [], '')
+        sys.exit(0)
+    se = cfg.get('status_enum')
+    if se is None:
+        emit([], [], '')
+        sys.exit(0)
+    if not isinstance(se, dict):
+        _bail(f'status_enum must be a YAML mapping, got {type(se).__name__}')
+    parsed = (se.get('states'), se.get('active_states'), se.get('stale_state'))
+else:
+    # PyYAML absent — fall back to a tight regex parser that handles
+    # flow-style lists ([a, b, c]) and a scalar stale_state nested
+    # under a top-level `status_enum:` block. Block-style lists are
+    # not supported on this path; flow style is the documented form.
+    try:
+        with open(path) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        emit([], [], '')
+        sys.exit(0)
+    in_block = False
+    block_indent = None
+    raw_states = raw_active = None
+    raw_stale = None
+    def parse_list(s):
+        s = s.strip()
+        if not (s.startswith('[') and s.endswith(']')):
+            return None
+        return [x.strip().strip('"').strip("'")
+                for x in s[1:-1].split(',') if x.strip()]
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        m = re.match(r'^(\s*)([A-Za-z_][\w_]*)\s*:\s*(.*?)\s*(?:#.*)?$', line)
+        if not m:
+            continue
+        ind, key, val = len(m.group(1)), m.group(2), m.group(3)
+        if not in_block:
+            if ind == 0 and key == 'status_enum' and not val:
+                in_block = True
+            continue
+        if ind == 0:
+            break
+        if block_indent is None:
+            block_indent = ind
+        elif ind < block_indent:
+            break
+        if ind == block_indent:
+            v = val.strip().strip('"').strip("'")
+            # When val is non-empty but doesn't parse as a flow-style
+            # list, propagate the raw scalar (not None). _validate_list
+            # then sees a non-list and rejects it. Returning None here
+            # would silently treat malformed config as "key omitted",
+            # so the PyYAML-absent path would diverge from the PyYAML-
+            # present path which rejects scalars loudly.
+            def _list_or_scalar(value):
+                if not value:
+                    return None
+                lst = parse_list(value)
+                return lst if lst is not None else v
+            if key == 'states':
+                raw_states = _list_or_scalar(val)
+            elif key == 'active_states':
+                raw_active = _list_or_scalar(val)
+            elif key == 'stale_state':
+                raw_stale = v
+    parsed = (raw_states, raw_active, raw_stale)
+
+raw_states, raw_active, raw_stale = parsed
+
+states_v, err = _validate_list('states', raw_states)
+if err:
+    _bail(err)
+active_v, err = _validate_list('active_states', raw_active)
+if err:
+    _bail(err)
+stale_v, err = _validate_scalar('stale_state', raw_stale)
+if err:
+    _bail(err)
+
+# Cross-validate enum internal consistency. Only meaningful when the
+# user has opted in (states non-empty). When states is empty the bash
+# reader discards active_states / stale_state anyway, so internal
+# checks are moot.
+#
+# Without these checks the validator only rejects badly-shaped tokens
+# but lets internally-inconsistent enums through, and Check 6 / Check 7
+# end up disagreeing about the same spec status (Check 6 warns it as
+# unknown; Check 7 happily flips it). That's the same split-brain class
+# the atomic opt-in fix was supposed to close — checking shape without
+# checking membership leaves it open at a different layer.
+if states_v:
+    states_set = set(states_v)
+    extras = [t for t in active_v if t not in states_set]
+    if extras:
+        _bail('status_enum.active_states contains tokens not in states: '
+              + ', '.join(repr(t) for t in extras))
+    if stale_v and stale_v not in states_set:
+        _bail(f'status_enum.stale_state {stale_v!r} is not in states '
+              f'({", ".join(repr(s) for s in states_v)})')
+
+emit(states_v, active_v, stale_v)
+PYEOF
+)
+
+  [ -z "$raw" ] && return 0
+
+  # First pass: surface any ERROR: line and bail without overriding
+  # defaults. A malformed block is treated as "no config" — canonical
+  # draft/active/stale stays in effect — but the user is told why.
+  local line
+  while IFS= read -r line; do
+    if [ "${line%%:*}" = "ERROR" ]; then
+      echo "  · status_enum config rejected: ${line#ERROR:}" >&2
+      return 0
+    fi
+  done <<< "$raw"
+
+  # Second pass: parse the three field lines. Treat `states:` as the
+  # atomic opt-in signal. When it's present:
+  #   - STATUS_ENUM_CONFIGURED flips to true
+  #   - STATUS_ACTIVE_STATES resets to () before applying active_states
+  #     (prevents partial-config: active_states without states leaving
+  #     the canonical default in effect — Check 6 would say "no config"
+  #     but Check 7 would still flip)
+  #   - STATUS_STALE_STATE resets to "" before applying stale_state
+  #     (omitting stale_state means "warn only, do not flip" — must
+  #     not silently inherit the canonical "stale" default)
+  # When `states:` is absent the whole block is ignored and canonical
+  # defaults remain. This makes opt-in an all-or-nothing decision.
+  local states_payload="" active_payload="" stale_payload="" key payload
+  while IFS= read -r line; do
+    key="${line%%:*}"
+    payload="${line#*:}"
+    case "$key" in
+      STATES) states_payload="$payload" ;;
+      ACTIVE) active_payload="$payload" ;;
+      STALE)  stale_payload="$payload"  ;;
+    esac
+  done <<< "$raw"
+
+  if [ -n "$states_payload" ]; then
+    IFS='|' read -ra STATUS_STATES <<< "$states_payload"
+    STATUS_ENUM_CONFIGURED=true
+    STATUS_ACTIVE_STATES=()
+    STATUS_STALE_STATE=""
+    if [ -n "$active_payload" ]; then
+      IFS='|' read -ra STATUS_ACTIVE_STATES <<< "$active_payload"
+    fi
+    if [ -n "$stale_payload" ]; then
+      STATUS_STALE_STATE="$stale_payload"
+    fi
+  fi
+}
+
+_read_status_enum
 
 # ── Check 0: Missing governed documents ──────────────────────────────
 
@@ -297,16 +584,19 @@ header "Check 6: Spec status consistency"
 if [ "$register_schema_compatible" = false ]; then
   info "Skipped — REGISTER.md schema not compatible (see Check 2 message)"
 else
-# The plugin's canonical status enum is draft/active/stale. Some projects
-# adopt a richer four-state enum (draft/ready/in-progress/implemented).
-# Unknown statuses do NOT warn — they're reported via a single info line
-# below ("project uses extended status enum") so adopters know Check 7's
-# drift auto-flip is a no-op for them but everything else still works.
+# Two modes drive this check:
 #
-# Collected in an array (not a \n-joined string) so the post-loop format
-# step uses `printf '%s\n'`, which does not interpret backslash escapes.
-# Statuses come from REGISTER, which in turn comes from spec frontmatter
-# — values containing backslashes would otherwise be mangled by printf '%b'.
+# 1) STATUS_ENUM_CONFIGURED=true (project declared status_enum: in .arboretum.yml):
+#    typos warn per-spec against the declared vocabulary. This is the
+#    signal Option A's graceful no-op (PR #196) had to drop.
+# 2) STATUS_ENUM_CONFIGURED=false (no config, defaults to draft/active/stale):
+#    unknown values aggregate into a single "extended enum" info line so
+#    extended-enum projects don't get per-spec warning floods.
+#
+# extended_enum_states accumulates unknown values only when there is no
+# explicit config — otherwise per-spec WARNs replace this summary line.
+# Array (not \n-joined string) so the post-loop format uses printf '%s\n'
+# which does not interpret backslash escapes from spec frontmatter values.
 extended_enum_states=()
 
 # Read order matches the current schema: | _ | spec | status | owner | owns | _ |
@@ -318,40 +608,41 @@ while IFS='|' read -r _ spec status _ owns _; do
 
   spec_file="$SPECS_DIR/$spec"
 
-  case "$status" in
-    draft)
-      # Draft specs may or may not have code; drift detection doesn't apply
-      ;;
-    active)
-      # Active specs should have owned files that exist. generate-register
-      # emits — for empty Owns, so check both empty and the em-dash sentinel.
+  if [ -z "$status" ]; then
+    : # blank status — generate-register would have defaulted, ignore here
+  elif ! _in_array "$status" "${STATUS_STATES[@]}"; then
+    # Unknown status.
+    if [ "$STATUS_ENUM_CONFIGURED" = true ]; then
+      # Explicit config → this is a typo signal worth surfacing per-spec.
+      warn "$spec: unknown status '$status' — must be one of: ${STATUS_STATES[*]}"
+    else
+      # No config; aggregate for the post-loop extended-enum info line.
+      extended_enum_states+=("$status")
+    fi
+  else
+    # Valid status. Specific WARN classes:
+    # - active-state spec with no owned files (broken claim of ownership)
+    # - stale-state spec (drift previously recorded, awaits /consolidate)
+    if _in_array "$status" "${STATUS_ACTIVE_STATES[@]}"; then
       if [ -z "$owns" ] || [ "$owns" = "(none)" ] || [ "$owns" = "—" ]; then
-        warn "$spec: status=active but owns no files"
+        warn "$spec: status=$status but owns no files"
       fi
-      ;;
-    stale)
-      warn "$spec: status=stale — drift recorded; run /consolidate to reconcile"
-      ;;
-    *)
-      # Unknown status — could be a richer enum (e.g. ready, in-progress,
-      # implemented) or a typo. Record for the post-loop info summary;
-      # don't warn here, that would fire once per spec for every adopter
-      # using an extended enum and overwhelm the health-check output.
-      [ -n "$status" ] && extended_enum_states+=("$status")
-      ;;
-  esac
+    elif [ -n "$STATUS_STALE_STATE" ] && [ "$status" = "$STATUS_STALE_STATE" ]; then
+      warn "$spec: status=$status — drift recorded; run /consolidate to reconcile"
+    fi
+    # Other valid states (e.g. draft, ready, implemented) are silent.
+  fi
 
-  # Check that the spec file itself exists. This applies regardless of
-  # the status vocabulary in use.
+  # Spec file presence check applies regardless of vocabulary.
   if [ ! -f "$spec_file" ]; then
     warn "$spec: listed in register but file does not exist"
   fi
 done < <(grep -E '^\|.*\.spec' "$REGISTER" 2>/dev/null || true)
 
-# Surface extended-enum usage as a single info line. Lists the distinct
-# unknown states so the adopter sees their own vocabulary acknowledged
-# rather than getting a generic "unknown status" warning per spec.
-if [ ${#extended_enum_states[@]} -gt 0 ]; then
+# Surface extended-enum usage as a single info line — only when the
+# project hasn't explicitly configured status_enum. With config present,
+# the per-spec WARNs above are the signal; an info line would be noise.
+if [ "$STATUS_ENUM_CONFIGURED" = false ] && [ ${#extended_enum_states[@]} -gt 0 ]; then
   distinct_states=$(printf '%s\n' "${extended_enum_states[@]}" | sort -u | tr '\n' ' ' | xargs)
   info "Project uses extended status enum (states observed: $distinct_states). Canonical plugin enum is draft/active/stale — Check 7 auto-flip will be a no-op."
 fi
@@ -399,7 +690,7 @@ while IFS='|' read -r _ spec status _ owns _; do
   status=$(echo "$status" | xargs)
   owns=$(echo "$owns" | xargs)
   [ -z "$spec" ] && continue
-  [ "$status" != "active" ] && continue
+  _in_array "$status" "${STATUS_ACTIVE_STATES[@]}" || continue
 
   spec_file="$SPECS_DIR/$spec"
   [ ! -f "$spec_file" ] && continue
@@ -451,31 +742,40 @@ while IFS='|' read -r _ spec status _ owns _; do
   done
 
   if [ "$drift" = true ]; then
+    # No stale_state configured → warn-only, no mutation. This is a
+    # supported configuration for projects that want drift surfaced but
+    # don't want auto-flips (e.g. they manage status manually).
+    if [ -z "$STATUS_STALE_STATE" ]; then
+      warn "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — no stale_state configured, not flipping"
+      ((drift_flipped++)) || true
+      continue
+    fi
+
     # Escape spec name for literal use in sed's regex pattern (spec filenames
     # contain `.` which would match any character without escaping).
     escaped_spec=$(printf '%s' "$spec" | sed 's/[][\\.^$*|/]/\\&/g')
 
-    # Flip REGISTER.md status: "| <spec> | active " → "| <spec> | stale "
-    sed -i.bak -E "s/^\| ${escaped_spec} \| active /| ${spec} | stale /" "$REGISTER"
+    # Flip REGISTER.md status: "| <spec> | <status> " → "| <spec> | <stale_state> "
+    sed -i.bak -E "s/^\| ${escaped_spec} \| ${status} /| ${spec} | ${STATUS_STALE_STATE} /" "$REGISTER"
     rm -f "$REGISTER.bak"
 
-    # Flip spec status to stale in either supported format:
-    # - YAML frontmatter: "status: active" → "status: stale"
+    # Flip spec status in either supported format:
+    # - YAML frontmatter: "status: <status>" → "status: <stale_state>"
     # - Legacy markdown section:
     #     ## Status
-    #     active
-    if grep -q '^status: active$' "$spec_file"; then
-      sed -i.bak "s/^status: active$/status: stale/" "$spec_file"
+    #     <status>
+    if grep -q "^status: ${status}\$" "$spec_file"; then
+      sed -i.bak "s/^status: ${status}\$/status: ${STATUS_STALE_STATE}/" "$spec_file"
     elif grep -q '^## Status$' "$spec_file"; then
-      sed -i.bak '/^## Status$/{
+      sed -i.bak "/^## Status\$/{
 n
-s/^active$/stale/
-}' "$spec_file"
+s/^${status}\$/${STATUS_STALE_STATE}/
+}" "$spec_file"
     fi
     rm -f "$spec_file.bak"
 
     # warn() already increments issue_count and sets drift_found
-    warn "$spec: flipped active → stale (drift: $drift_file modified after spec's last commit $spec_last_commit)"
+    warn "$spec: flipped ${status} → ${STATUS_STALE_STATE} (drift: $drift_file modified after spec's last commit $spec_last_commit)"
     ((drift_flipped++)) || true
   else
     ((no_drift_count++)) || true
@@ -485,11 +785,13 @@ done < <(grep -E '^\|.*\.spec' "$REGISTER" 2>/dev/null || true)
 if [ "$drift_flipped" -eq 0 ]; then
   if [ "$no_drift_count" -gt 0 ]; then
     ok "No drift detected across $no_drift_count active spec(s)"
+  elif [ "$STATUS_ENUM_CONFIGURED" = true ]; then
+    # Configured project with no specs at its declared active_states.
+    # Acknowledge so an empty Check 7 isn't mysterious.
+    info "No specs at active states (${STATUS_ACTIVE_STATES[*]}) — drift auto-flip is a no-op"
   else
-    # Project either has no specs at all or uses a status vocabulary
-    # outside the canonical draft/active/stale enum. Check 6 already
-    # surfaced the extended-enum case as a single info line; here we
-    # just acknowledge the no-op so the empty result isn't mysterious.
+    # Unconfigured project with no specs at canonical `active`. Check 6
+    # may have surfaced an extended-enum acknowledgement already.
     info "No specs at status 'active' — drift auto-flip is a no-op (project may use an extended status enum; see Check 6)"
   fi
 fi
