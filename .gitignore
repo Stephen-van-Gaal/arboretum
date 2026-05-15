@@ -17,3 +17,5 @@ venv/
 .arboretum/next-cache.json
 .arboretum/next-cache.json.tmp
 .arboretum/next-cache.err
+.arboretum/roadmap-pulse.json
+.arboretum/roadmap-pulse.json.tmp

@@ -13,8 +13,13 @@ source "$SCRIPT_DIR/lib.sh"
 CONFIG="$(roadmap_config_path)" || true
 [ -z "$CONFIG" ] && exit 0
 
+# Run nag machinery before the gh guard so strategic-review-due
+# (gh-independent) surfaces even when gh is unavailable.
+NAG_OUTPUT="$(bash "$SCRIPT_DIR/nag.sh" 2>/dev/null || true)"
+
 if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
-  # Fail silent per spec §6d — the hook must never block session start.
+  # No gh: orientation unavailable, but nags still surface.
+  [ -n "$NAG_OUTPUT" ] && printf '%s\n' "$NAG_OUTPUT"
   exit 0
 fi
 
@@ -38,4 +43,9 @@ EOF
 
 if [ -n "$TOP_NEXT" ]; then
   printf '  Top NEXT:\n%s\n' "$TOP_NEXT"
+fi
+
+# Append nags after orientation when gh is available.
+if [ -n "$NAG_OUTPUT" ]; then
+  printf '\n%s\n' "$NAG_OUTPUT"
 fi

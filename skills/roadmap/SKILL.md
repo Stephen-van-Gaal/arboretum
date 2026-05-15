@@ -145,6 +145,29 @@ bash "$ROOT/scripts/roadmap/install-labels.sh"
 
 Show output to the user.
 
+#### Step i.8b: Bootstrap pulse file
+
+Bootstrap the pulse state file so nags have a baseline on day one:
+
+```bash
+ROOT="$(git rev-parse --show-toplevel)"
+source "$ROOT/scripts/roadmap/lib.sh"
+roadmap_pulse_bootstrap
+```
+
+If `.arboretum/roadmap-pulse.json` now exists, confirm:
+> "Pulse state file ready at `.arboretum/roadmap-pulse.json` — nag machinery active."
+
+If `.arboretum/roadmap-pulse.json` is not already in `.gitignore`, add it:
+
+```bash
+ROOT="$(git rev-parse --show-toplevel)"
+grep -qFx '.arboretum/roadmap-pulse.json' "$ROOT/.gitignore" \
+  || printf '\n.arboretum/roadmap-pulse.json\n' >> "$ROOT/.gitignore"
+grep -qFx '.arboretum/roadmap-pulse.json.tmp' "$ROOT/.gitignore" \
+  || printf '.arboretum/roadmap-pulse.json.tmp\n' >> "$ROOT/.gitignore"
+```
+
 #### Step i.9: Surface migration candidates (optional)
 
 Run:

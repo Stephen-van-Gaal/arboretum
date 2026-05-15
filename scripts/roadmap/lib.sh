@@ -143,3 +143,172 @@ roadmap_label_exists() {
   local name="$1"
   gh label list --limit 1000 --json name --jq '.[].name' | grep -Fxq "$name"
 }
+
+# ── Phase 1.5: Pulse file helpers ─────────────────────────────────────
+# Read/write .arboretum/roadmap-pulse.json.
+# All helpers are fail-silent: missing file → empty return, not error.
+
+# Path to the pulse state file. Echoes nothing if project root is unknown.
+roadmap_pulse_path() {
+  local root
+  root="$(roadmap_project_root)"
+  [ -z "$root" ] && return 0
+  printf '%s\n' "$root/.arboretum/roadmap-pulse.json"
+}
+
+# Bootstrap pulse file if it does not exist (idempotent: no-op if present).
+# Seeds last_*_run = now and pre-populates nag_last_fired with now for all
+# known nag names — "bootstrap-as-today" ensures no nag fires on install day.
+roadmap_pulse_bootstrap() {
+  local path
+  path="$(roadmap_pulse_path)"
+  [ -z "$path" ] && return 0
+  [ -f "$path" ] && return 0
+  mkdir -p "$(dirname "$path")"
+  local now tmp
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  tmp="${path}.tmp"
+  rm -f "$tmp" 2>/dev/null || true
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg ts "$now" '{
+      bootstrapped_at: $ts,
+      last_maintain_run: $ts,
+      last_revise_run: $ts,
+      last_retro_completed: null,
+      nag_last_fired: {
+        "strategic-review-due": $ts,
+        "maintain-overdue": $ts,
+        "stale-flagged-today": $ts,
+        "agent-ready-while-WIP-full": $ts,
+        "profile-graduation-lean": $ts
+      },
+      sprint_alerts_fired: {}
+    }' > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$path" || true
+  else
+    python3 - "$now" "$tmp" <<'PYEOF' 2>/dev/null || true
+import json, sys
+ts = sys.argv[1]
+tmp = sys.argv[2]
+nags = ['strategic-review-due','maintain-overdue','stale-flagged-today',
+        'agent-ready-while-WIP-full','profile-graduation-lean']
+with open(tmp, 'w') as f:
+    json.dump({
+        'bootstrapped_at': ts,
+        'last_maintain_run': ts,
+        'last_revise_run': ts,
+        'last_retro_completed': None,
+        'nag_last_fired': {n: ts for n in nags},
+        'sprint_alerts_fired': {}
+    }, f, indent=2)
+    f.write('\n')
+PYEOF
+    [ -f "$tmp" ] && mv "$tmp" "$path" 2>/dev/null || true
+  fi
+}
+
+# Read a top-level scalar field from the pulse JSON.
+# Returns empty string if field is absent, null, or file missing.
+roadmap_pulse_get_field() {
+  local key="$1"
+  local path
+  path="$(roadmap_pulse_path)"
+  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg k "$key" '.[$k] // empty' "$path" 2>/dev/null || true
+  else
+    python3 - "$path" "$key" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    v = d.get(sys.argv[2])
+    if v is not None:
+        print(v)
+except Exception:
+    pass
+PYEOF
+  fi
+}
+
+# Read nag_last_fired[<name>]. Returns empty string if not yet fired.
+roadmap_pulse_get_nag() {
+  local name="$1"
+  local path
+  path="$(roadmap_pulse_path)"
+  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg n "$name" '.nag_last_fired[$n] // empty' "$path" 2>/dev/null || true
+  else
+    python3 - "$path" "$name" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    v = d.get('nag_last_fired', {}).get(sys.argv[2])
+    if v is not None:
+        print(v)
+except Exception:
+    pass
+PYEOF
+  fi
+}
+
+# Record that a nag fired: update nag_last_fired[<name>] to now.
+# Writes atomically via .tmp file; silently skips on any error.
+roadmap_pulse_set_nag_fired() {
+  local name="$1"
+  local path
+  path="$(roadmap_pulse_path)"
+  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  local now tmp
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  tmp="${path}.tmp"
+  rm -f "$tmp" 2>/dev/null || true
+  if command -v jq >/dev/null 2>&1; then
+    jq --arg n "$name" --arg ts "$now" \
+      '.nag_last_fired[$n] = $ts' "$path" > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$path" || true
+  else
+    python3 - "$path" "$name" "$now" "$tmp" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    d.setdefault('nag_last_fired', {})[sys.argv[2]] = sys.argv[3]
+    with open(sys.argv[4], 'w') as f:
+        json.dump(d, f, indent=2)
+        f.write('\n')
+except Exception:
+    pass
+PYEOF
+    [ -f "$tmp" ] && mv "$tmp" "$path" 2>/dev/null || true
+  fi
+}
+
+# Update a top-level scalar field (e.g., last_maintain_run after /roadmap maintain).
+# Usage: roadmap_pulse_update_field last_maintain_run "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+roadmap_pulse_update_field() {
+  local key="$1" value="$2"
+  local path
+  path="$(roadmap_pulse_path)"
+  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  local tmp="${path}.tmp"
+  rm -f "$tmp" 2>/dev/null || true
+  if command -v jq >/dev/null 2>&1; then
+    jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$path" > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$path" || true
+  else
+    python3 - "$path" "$key" "$value" "$tmp" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    d[sys.argv[2]] = sys.argv[3]
+    with open(sys.argv[4], 'w') as f:
+        json.dump(d, f, indent=2)
+        f.write('\n')
+except Exception:
+    pass
+PYEOF
+    [ -f "$tmp" ] && mv "$tmp" "$path" 2>/dev/null || true
+  fi
+}
