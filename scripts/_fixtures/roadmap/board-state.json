@@ -1,0 +1,58 @@
+[
+  {
+    "number": 1,
+    "title": "stale unlabeled issue",
+    "labels": [],
+    "createdAt": "2025-08-01T00:00:00Z",
+    "updatedAt": "2025-08-01T00:00:00Z",
+    "comments": 0,
+    "milestone": null
+  },
+  {
+    "number": 2,
+    "title": "fresh inbox idea",
+    "labels": [],
+    "createdAt": "2026-05-08T00:00:00Z",
+    "updatedAt": "2026-05-08T00:00:00Z",
+    "comments": 0,
+    "milestone": null
+  },
+  {
+    "number": 3,
+    "title": "well-scoped feature",
+    "labels": [
+      {"name": "type:feature"},
+      {"name": "horizon:next"},
+      {"name": "component:editorial"}
+    ],
+    "createdAt": "2026-04-15T00:00:00Z",
+    "updatedAt": "2026-04-30T00:00:00Z",
+    "comments": 1,
+    "milestone": null
+  },
+  {
+    "number": 4,
+    "title": "active in-flight bug",
+    "labels": [
+      {"name": "type:bug"},
+      {"name": "horizon:now"}
+    ],
+    "createdAt": "2026-05-01T00:00:00Z",
+    "updatedAt": "2026-05-08T00:00:00Z",
+    "comments": 3,
+    "milestone": null
+  },
+  {
+    "number": 5,
+    "title": "blocked thing",
+    "labels": [
+      {"name": "type:feature"},
+      {"name": "horizon:next"},
+      {"name": "blocked"}
+    ],
+    "createdAt": "2026-04-01T00:00:00Z",
+    "updatedAt": "2026-05-01T00:00:00Z",
+    "comments": 2,
+    "milestone": null
+  }
+]

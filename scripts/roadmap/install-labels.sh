@@ -1,94 +1,151 @@
 #!/usr/bin/env bash
 # owner: roadmap
-# Idempotently install the framework-fixed label vocabulary plus
-# project-defined component labels. Run from /roadmap instantiate.
+# Idempotent label installer for /roadmap.
 #
-# Usage: install-labels.sh [--dry-run]
+# Installs the framework-fixed label vocabulary (type:*, horizon:*, appetite:*,
+# state markers) and the project-defined component labels from roadmap.config.yaml.
 #
-# Reads component_values (and audience_values if present) from
-# roadmap.config.yaml.
+# Flags:
+#   --dry-run       print TSV (name<TAB>color<TAB>description); no gh calls
+#   --config <path> path to roadmap.config.yaml (default: ./roadmap.config.yaml)
+#   --no-components install only framework-fixed labels; skip components
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "Error: requires bash. Run: bash $0" >&2; exit 1
+fi
 
-DRY_RUN=0
-[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
+dry_run=false
+no_components=false
+config="roadmap.config.yaml"
 
-roadmap_require_gh
-
-# Fetch all existing labels once so upsert_label can check membership without
-# an O(N) round-trip per label. Limit 1000 covers repos with large label sets.
-_EXISTING_LABELS=$(gh label list --limit 1000 --json name --jq '.[].name')
-roadmap_label_exists() { echo "$_EXISTING_LABELS" | grep -Fxq "$1"; }
-
-# label color palette (hex without leading #)
-COLOR_TYPE="1d76db"
-COLOR_HORIZON="0e8a16"
-COLOR_COMPONENT="c5def5"
-COLOR_AUDIENCE="d4c5f9"
-COLOR_APPETITE="fbca04"
-COLOR_STATE="b60205"
-COLOR_SOFT="cccccc"
-
-# (name, color, description) tuples
-declare -a LABELS=(
-  "type:epic|$COLOR_TYPE|Multi-session orchestrator; aggregates sub-issues toward an outcome"
-  "type:feature|$COLOR_TYPE|New behaviour; routes to feature workflow"
-  "type:bug|$COLOR_TYPE|Defect; routes to bug-fix workflow"
-  "type:spike|$COLOR_TYPE|Investigation; routes to explore workflow"
-  "type:refactor|$COLOR_TYPE|Restructure without changing behaviour"
-  "type:docs|$COLOR_TYPE|Docs-only change"
-  "type:chore|$COLOR_TYPE|Trivial maintenance; permitted without spec"
-  "horizon:now|$COLOR_HORIZON|Ready to start; acceptance criteria + approach defined"
-  "horizon:next|$COLOR_HORIZON|Shaped; problem + outcome + spec path defined"
-  "horizon:later|$COLOR_HORIZON|Captured; awaiting triage and shaping"
-  "appetite:small|$COLOR_APPETITE|1-3 sessions of effort (Epic only)"
-  "appetite:medium|$COLOR_APPETITE|1-2 weeks of effort (Epic only)"
-  "appetite:large|$COLOR_APPETITE|1+ month of effort (Epic only)"
-  "blocked|$COLOR_STATE|Cannot proceed until external dependency resolves"
-  "agent-ready|$COLOR_STATE|Issue prepared for autonomous AI agent pickup"
-  "provisionally-resolved|$COLOR_SOFT|Maintain found partial evidence of resolution"
-  "provisionally-stale|$COLOR_SOFT|Open >90d with no activity signal"
-)
-
-upsert_label() {
-  local name="$1" color="$2" desc="$3"
-  if roadmap_label_exists "$name"; then
-    if [ "$DRY_RUN" = "1" ]; then
-      printf '  [dry-run] would update: %s\n' "$name"
-    else
-      gh label edit "$name" --color "$color" --description "$desc" >/dev/null
-      printf '  updated: %s\n' "$name"
-    fi
-  else
-    if [ "$DRY_RUN" = "1" ]; then
-      printf '  [dry-run] would create: %s\n' "$name"
-    else
-      gh label create "$name" --color "$color" --description "$desc" >/dev/null
-      printf '  created: %s\n' "$name"
-    fi
-  fi
-}
-
-echo "Installing framework labels..."
-for tuple in "${LABELS[@]}"; do
-  IFS='|' read -r name color desc <<<"$tuple"
-  upsert_label "$name" "$color" "$desc"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run)       dry_run=true; shift ;;
+    --config)        config="$2"; shift 2 ;;
+    --no-components) no_components=true; shift ;;
+    -h|--help)
+      sed -n '2,/^set/p' "$0" | sed -n 's/^# \?//p'
+      exit 0
+      ;;
+    *) echo "Unknown arg: $1" >&2; exit 2 ;;
+  esac
 done
 
-echo "Installing component labels (from roadmap.config.yaml)..."
-while IFS= read -r val; do
-  [ -z "$val" ] && continue
-  upsert_label "component:$val" "$COLOR_COMPONENT" "Project-defined component"
-done < <(roadmap_config_list component_values)
+# Build label list as TSV: name<TAB>color<TAB>description
+labels=()
+add() { labels+=("$(printf '%s\t%s\t%s' "$1" "$2" "$3")"); }
 
-echo "Installing audience labels (optional)..."
-while IFS= read -r val; do
-  [ -z "$val" ] && continue
-  upsert_label "audience:$val" "$COLOR_AUDIENCE" "Project-defined audience"
-done < <(roadmap_config_list audience_values 2>/dev/null || true)
+# Type labels (framework-fixed; 1:1 workflow mapping per spec §2e)
+add "type:epic"     "8a2be2" "Multi-session arc orchestrator (no workflow; container)"
+add "type:feature"  "a2eeef" "New feature work (workflow: feature)"
+add "type:bug"      "d73a4a" "Bug fix (workflow: bug-fix)"
+add "type:spike"    "fbca04" "Investigation / spike (workflow: explore)"
+add "type:refactor" "c5def5" "Refactor without behaviour change (workflow: refactor)"
+add "type:docs"     "0075ca" "Documentation (workflow: documentation)"
+add "type:chore"    "ededed" "Trivial / chore — no spec required"
 
-echo "Done."
+# Horizon labels (framework-fixed)
+add "horizon:now"   "0e8a16" "In flight or next-up — fully shaped, ready to start"
+add "horizon:next"  "fbca04" "Committed to current outcome — shaped, not yet started"
+add "horizon:later" "c5def5" "Captured but not yet committed — minimal detail OK"
+
+# Appetite labels (Epic-only; framework-fixed)
+add "appetite:small"  "fbca04" "1-3 sessions of effort (Epic only)"
+add "appetite:medium" "fbca04" "1-2 weeks of effort (Epic only)"
+add "appetite:large"  "fbca04" "1+ month of effort (Epic only)"
+
+# State markers (universal boolean flags)
+add "blocked"                 "b60205" "Cannot proceed until dependency resolves"
+add "agent-ready"             "1d76db" "Specced AND timing-ready for autonomous AI agent pickup"
+add "agent-prep:in-progress"  "5319e7" "Spec-quality verified but not yet timing-ready"
+add "provisionally-resolved"  "fbca04" "Soft-state: PR evidence partially supports closing — review"
+add "provisionally-stale"     "fbca04" "Soft-state: open >90d, no activity signal — review or close"
+
+# Component labels — read from config if present and not --no-components
+if ! $no_components; then
+  if [ -f "$config" ]; then
+    # Extract component_values from YAML using grep+sed (avoid yq dep).
+    # Robust enough for the simple list shape we use:
+    #   component_values:
+    #     - foo
+    #     - bar
+    components="$(awk '
+      /^component_values:[[:space:]]*$/ { in_block=1; next }
+      in_block && /^[[:space:]]*-[[:space:]]*/ {
+        sub(/^[[:space:]]*-[[:space:]]*/, "");
+        sub(/[[:space:]]*$/, "");
+        if (NF) print
+        next
+      }
+      in_block && /^[^[:space:]]/ { in_block=0 }
+    ' "$config")"
+
+    if [ -z "$components" ]; then
+      echo "Warning: $config exists but has no component_values:; skipping component labels" >&2
+    else
+      while IFS= read -r c; do
+        [ -z "$c" ] && continue
+        add "component:$c" "ededed" "Component (project-defined): $c"
+      done <<< "$components"
+    fi
+  else
+    echo "Note: $config not found; skipping component labels (run /roadmap instantiate to create config)" >&2
+  fi
+fi
+
+# Audience labels — same pattern as components, optional axis
+if ! $no_components && [ -f "$config" ]; then
+  audiences="$(awk '
+    /^audience_values:[[:space:]]*$/ { in_block=1; next }
+    in_block && /^[[:space:]]*-[[:space:]]*/ {
+      sub(/^[[:space:]]*-[[:space:]]*/, "");
+      sub(/[[:space:]]*$/, "");
+      if (NF) print
+      next
+    }
+    in_block && /^[^[:space:]]/ { in_block=0 }
+  ' "$config")"
+
+  if [ -n "$audiences" ]; then
+    while IFS= read -r a; do
+      [ -z "$a" ] && continue
+      add "audience:$a" "fef2c0" "Audience (project-defined): $a"
+    done <<< "$audiences"
+  fi
+fi
+
+if $dry_run; then
+  printf '%s\n' "${labels[@]}"
+  exit 0
+fi
+
+# Live mode
+command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "gh not authenticated; run: gh auth login" >&2; exit 1; }
+
+existing="$(gh label list --limit 200 --json name --jq '.[].name')"
+
+created=0
+skipped=0
+failed=0
+for entry in "${labels[@]}"; do
+  IFS=$'\t' read -r name color description <<< "$entry"
+  if printf '%s\n' "$existing" | grep -Fxq "$name"; then
+    echo "skip:   $name"
+    skipped=$((skipped + 1))
+  else
+    if gh label create "$name" --color "$color" --description "$description" >/dev/null 2>&1; then
+      echo "create: $name"
+      created=$((created + 1))
+    else
+      echo "FAIL:   $name (gh label create failed)" >&2
+      failed=$((failed + 1))
+    fi
+  fi
+done
+
+echo
+echo "Summary: created=$created  skipped=$skipped  failed=$failed"
+[ "$failed" -eq 0 ] || exit 1

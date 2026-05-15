@@ -1,0 +1,20 @@
+# Sample roadmap.config.yaml for smoke tests.
+profile: lean
+time_horizon: "Through 2026-Q3"
+last_reviewed: 2026-05-09
+review_cadence_weeks: 12
+
+wip_limit: 1
+slack_wip_limit: 1
+slack_types: [docs, chore]
+
+component_values:
+  - pipeline
+  - editorial
+  - infra
+
+audience_values:
+  - csc-pilot
+  - post-pilot
+
+branch_prefixes: [feat, fix, docs]

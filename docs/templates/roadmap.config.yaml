@@ -1,0 +1,50 @@
+# Roadmap operational config — copy to roadmap.config.yaml at your project root.
+#
+# Strategic content (in/out scope, time horizon detail) lives in CLAUDE.md
+# `## Strategic Anchor` section, NOT here. This file is for operational
+# values: WIP gate, label vocabulary, branch detection, profile.
+
+# Profile (chosen at /roadmap instantiate time; reversible)
+#   full    — product with customers, sprint cadence, audience axis active
+#   lean    — internal/exploratory, no fixed cadence, audience axis off
+#   minimal — small repo, just /idea + /roadmap run
+profile: lean
+
+# Cadence
+time_horizon: "Through 2026-Q3"
+last_reviewed: 2026-05-09
+review_cadence_weeks: 12
+
+# WIP gate (default 1; warn-never-block)
+wip_limit: 1
+slack_wip_limit: 1
+slack_types: [docs, chore]
+
+# Type label aliasing — read-only mapping for existing labels.
+# Skills always WRITE the type:* form; aliases are only READ when
+# computing per-issue type from existing labels. Drop entries when
+# the source label has fully drifted off your active issues.
+type_label_aliases:
+  feature: enhancement       # treat existing 'enhancement' as type:feature
+  bug: bug                   # GitHub default, same as type:bug
+  docs: documentation        # treat existing 'documentation' as type:docs
+
+# Component values — REQUIRED, project-defined. Framework provides no defaults.
+# These become `component:<value>` labels.
+component_values:
+  - <your-project-component-1>
+  - <your-project-component-2>
+
+# Audience values — OPTIONAL axis (off by default).
+# Only enable if your project has multiple distinct customer segments.
+# Becomes `audience:<value>` labels (cardinality 0-many per issue).
+# audience_values:
+#   - csc-pilot
+#   - post-pilot
+
+# Branch prefix detection for WIP counting.
+# Skills check `git worktree list` + branches matching these prefixes.
+branch_prefixes: [feat, fix, docs, chore]
+
+# GitHub sub-issues feature (used by Epic concept, opt-in)
+sub_issues_enabled: true
