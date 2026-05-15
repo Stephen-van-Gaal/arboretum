@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/health-check.sh *)",
+      "Bash(bash scripts/generate-register.sh *)",
+      "Bash(bash scripts/validate-cross-refs.sh *)",
+      "Bash(git status *)",
+      "Bash(git rev-parse *)",
+      "Bash(git merge-base *)",
+      "Bash(git branch --merged *)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
