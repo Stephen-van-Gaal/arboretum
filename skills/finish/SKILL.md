@@ -95,6 +95,18 @@ If any match:
 
 If the user agrees, run the security review. If they decline, proceed.
 
+### Step 5.5: Pre-PR local CI gate
+
+If `scripts/ci-checks.sh` exists, run it:
+
+```bash
+bash scripts/ci-checks.sh
+```
+
+If it exits non-zero, present the failures and fix them before proceeding —
+the PR should be green from its first push. If `ci-checks.sh` does not exist,
+note "no local check entrypoint — skipping pre-PR gate" and continue.
+
 ### Step 6: Create PR
 
 Invoke the `/pr` skill to create the pull request. It handles:
@@ -104,6 +116,12 @@ Invoke the `/pr` skill to create the pull request. It handles:
 - Creating the PR via `gh pr create`
 
 Present the PR URL when done.
+
+### Step 6.3: Hand off to `/land`
+
+After the PR is created, invoke `/land <pr-number>` to drive it to merge-ready
+(poll CI + reviewers, triage and action feedback, tiered merge handoff). `/land`
+runs its own asynchronous loop; `/finish` does not block on it.
 
 ### Step 6.5: Capture session handoff
 
@@ -126,7 +144,7 @@ After the PR is created:
 
 ## Important
 
-- This skill orchestrates existing skills (`/consolidate`, `/security-review`, `/pr`, `/handoff`). It doesn't duplicate their internals — it calls them in the right order.
+- This skill orchestrates existing skills (`/consolidate`, `/security-review`, `/pr`, `/land`, `/handoff`). It doesn't duplicate their internals — it calls them in the right order.
 - Steps are sequential and each depends on the previous one. Don't skip ahead.
 - If the user wants to create a PR without reconciling spec status via `/consolidate` or running health checks, let them — this is guidance, not a gate. But note what was skipped.
 - For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; skip security review and go straight to health check and PR.
