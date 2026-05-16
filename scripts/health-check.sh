@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# uses: definitions/register-schema.md @v1
+# uses: definitions/contracts-yaml-schema.md @v1
+# uses: definitions/spec-status-state-machine.md @v1
 # health-check.sh — Detect drift across the spec-driven workflow
 #
 # Requires bash 4+ (uses process substitution, arrays, [[ ]]).
@@ -10,7 +13,11 @@
 # Runs nine checks:
 #   1. Governed documents exist (ARCHITECTURE, REGISTER, contracts, etc.)
 #   2. Register vs. disk (do owned files exist?)
-#   3. Unowned source files
+#   3. Unowned source files. Half A — framework owner-marker scan
+#      (.sh/bin/ line-2 # owner:, SKILL.md owner: frontmatter), runs
+#      register-independent. Half B — general source-ownership scan of
+#      project source roots (*.py vs. spec owns: coverage), gated on a
+#      compatible REGISTER.md schema.
 #   4. contracts.yaml vs. spec Requires tables (are pins in sync?)
 #   5. contracts.yaml vs. definition versions (are pins current?)
 #   6. Spec status consistency. Canonical enum is draft/active/stale.
@@ -356,6 +363,166 @@ PYEOF
 
 _read_status_enum
 
+# ── Source-roots config ──────────────────────────────────────────────
+#
+# Check 3's general source-ownership scan (Half B) walks a set of source
+# roots for *.py files. The default roots are `src`, the lowercased
+# project directory name, and `tests`. A project with a non-standard
+# layout can override the list via a `source_paths:` YAML list in
+# .arboretum.yml:
+#
+#   source_paths:
+#     - app
+#     - lib
+#     - tests
+#
+# The default three roots are used when .arboretum.yml, python3, or the
+# `source_paths:` key is absent. Modelled on _read_status_enum() above.
+SOURCE_PATHS=(src "$( basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' )" tests)
+
+_read_source_paths() {
+  local config="$PROJECT_DIR/.arboretum.yml"
+  [ -f "$config" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  # Emit one pipe-joined PATHS: line. Tokens are validated to a safe
+  # path-fragment charset — pipes (the field separator) and other
+  # shell/glob metachars are rejected so a malformed list can't desync
+  # the find roots downstream. A malformed block emits ERROR: and the
+  # bash reader keeps the canonical defaults.
+  local raw
+  raw=$(python3 - "$config" <<'PYEOF' 2>/dev/null || true
+import sys, re
+path = sys.argv[1]
+TOKEN_RE = re.compile(r'^[A-Za-z0-9_./-]+$')
+
+def emit(paths):
+    print('PATHS:' + '|'.join(paths))
+
+def _bail(msg):
+    print('ERROR:' + msg)
+    emit([])
+    sys.exit(0)
+
+def _validate_list(raw):
+    if raw is None:
+        return [], None
+    if not isinstance(raw, list):
+        return None, f"source_paths must be a YAML list, got {type(raw).__name__}"
+    out = []
+    for x in raw:
+        if isinstance(x, (dict, list)):
+            return None, f"source_paths contains non-scalar entry: {x!r}"
+        s = str(x).strip()
+        if not s:
+            continue
+        if not TOKEN_RE.match(s):
+            return None, (f"source_paths contains invalid token {s!r} "
+                          "— allowed characters: [A-Za-z0-9_./-]")
+        out.append(s)
+    return out, None
+
+# PyYAML when available is the single source of truth; otherwise fall
+# back to a tight flow-style-list parser. Mirrors _read_status_enum().
+parsed = None
+yaml_module = None
+try:
+    import yaml as yaml_module
+except ImportError:
+    pass
+
+if yaml_module is not None:
+    try:
+        with open(path) as f:
+            cfg = yaml_module.safe_load(f) or {}
+    except yaml_module.YAMLError as e:
+        _bail(f'.arboretum.yml is not valid YAML: {e}')
+    except OSError:
+        emit([])
+        sys.exit(0)
+    if not isinstance(cfg, dict):
+        emit([])
+        sys.exit(0)
+    parsed = cfg.get('source_paths')
+else:
+    # PyYAML absent — parse a top-level `source_paths:` flow-style list
+    # ([a, b, c]) or block-style list (- a / - b) by hand.
+    try:
+        with open(path) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        emit([])
+        sys.exit(0)
+    def parse_flow(s):
+        s = s.strip()
+        if not (s.startswith('[') and s.endswith(']')):
+            return None
+        return [x.strip().strip('"').strip("'")
+                for x in s[1:-1].split(',') if x.strip()]
+    in_block = False
+    items = None
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        m = re.match(r'^(\s*)([A-Za-z_][\w_-]*)\s*:\s*(.*?)\s*(?:#.*)?$', line)
+        bullet = re.match(r'^(\s*)-\s+(.*?)\s*(?:#.*)?$', line)
+        if not in_block:
+            if m and len(m.group(1)) == 0 and m.group(2) == 'source_paths':
+                val = m.group(3).strip()
+                flow = parse_flow(val)
+                if flow is not None:
+                    parsed = flow
+                    break
+                if val:
+                    # Non-list scalar — propagate so the validator
+                    # rejects it loudly (mirrors the status_enum path).
+                    parsed = val
+                    break
+                in_block = True
+                items = []
+            continue
+        # Inside the block: collect bullets until a non-indented line.
+        if bullet and len(bullet.group(1)) > 0:
+            items.append(bullet.group(2).strip().strip('"').strip("'"))
+            continue
+        if m and len(m.group(1)) == 0:
+            break
+    if in_block:
+        parsed = items
+
+paths_v, err = _validate_list(parsed)
+if err:
+    _bail(err)
+emit(paths_v)
+PYEOF
+)
+
+  [ -z "$raw" ] && return 0
+
+  # First pass: surface any ERROR: line and keep the canonical defaults.
+  local line
+  while IFS= read -r line; do
+    if [ "${line%%:*}" = "ERROR" ]; then
+      echo "  · source_paths config rejected: ${line#ERROR:}" >&2
+      return 0
+    fi
+  done <<< "$raw"
+
+  # Second pass: apply the PATHS: line when non-empty.
+  local paths_payload=""
+  while IFS= read -r line; do
+    case "${line%%:*}" in
+      PATHS) paths_payload="${line#*:}" ;;
+    esac
+  done <<< "$raw"
+
+  if [ -n "$paths_payload" ]; then
+    IFS='|' read -ra SOURCE_PATHS <<< "$paths_payload"
+  fi
+}
+
+_read_source_paths
+
 # ── Check 0: Missing governed documents ──────────────────────────────
 
 header "Check 1: Governed documents exist"
@@ -377,14 +544,17 @@ if [ ! -f "$REGISTER" ]; then
   exit 1
 fi
 
-# ── Check 2/3: Register schema detection ─────────────────────────────
+# ── Register schema detection (gates Check 2 and Check 3 Half B) ─────
 #
 # Detect REGISTER.md's Spec Index schema by inspecting the header row.
 # Current schema (emitted by generate-register.sh): | Spec | Status | Owner | Owns |
 # Legacy schema (older arboretum bootstraps):       | Spec | Status | Owns | Depends On |
 # Parsing the wrong schema produces silent garbage (Owner values read as
-# paths, etc.). When the schema isn't current, skip Check 2/3 with a
-# clear instruction to regenerate rather than emit false-positive findings.
+# paths, etc.). When the schema isn't current, skip the register-derived
+# checks — Check 2, and Check 3's source-ownership scan (Half B) — with a
+# clear instruction to regenerate rather than emit false-positive
+# findings. Check 3's owner-marker scan (Half A) reads markers straight
+# off files and never touches REGISTER.md, so it still runs.
 
 register_header=$(grep -E '^\| Spec \| Status \|' "$REGISTER" 2>/dev/null | head -1 || true)
 register_schema_compatible=false
@@ -448,50 +618,99 @@ while IFS='|' read -r _ spec _ _ owns _; do
 done < <(grep -E '^\|.*\.spec' "$REGISTER" 2>/dev/null || true)
 fi
 
-# Check for unowned source files
+# Check 3: every source file carries a resolvable owner marker.
+#   .sh under scripts/ (excl _archived/, _fixtures/) and .claude/hooks/,
+#   and bin/* executables: line 2 must be `# owner: <spec-name>`.
+#   skills/*/SKILL.md: YAML frontmatter must carry an `owner:` key.
+#   The named spec must exist at docs/specs/<name>.spec.md.
+# Scan roots are fixed: scripts/, .claude/hooks/, bin/, skills/.
 header "Check 3: Unowned source files"
 
-if [ "$register_schema_compatible" = false ]; then
-  info "Skipped — REGISTER.md schema not compatible (see Check 2 message)"
-else
 unowned_count=0
-# Look for Python files in likely implementation directories
-for src_dir in src "$( basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' )" tests; do
-  [ ! -d "$PROJECT_DIR/$src_dir" ] && continue
+owner_re='^# owner: ([a-z][a-z0-9-]+)$'
+skill_owner_re='^owner:[[:space:]]*([a-z][a-z0-9-]+)[[:space:]]*$'
 
-  while IFS= read -r file; do
-    rel_path="${file#$PROJECT_DIR/}"
-    # Skip __pycache__, .pyc files
-    [[ "$rel_path" == *"__pycache__"* ]] && continue
-    [[ "$rel_path" == *.pyc ]] && continue
-
-    # Check if this file is covered by any ownership pattern
-    owned=false
-    while IFS=: read -r pattern _; do
-      [ -z "$pattern" ] && continue
-      if [[ "$pattern" == *"**"* ]]; then
-        dir="${pattern%%\*\*}"
-        if [[ "$rel_path" == "$dir"* ]]; then
-          owned=true
-          break
-        fi
-      elif [ "$rel_path" = "$pattern" ]; then
-        owned=true
-        break
-      fi
-    done <<< "$spec_owns_map"
-
-    if [ "$owned" = false ]; then
-      warn "Unowned: $rel_path"
+# .sh files under scripts/ (excl _archived, _fixtures) and .claude/hooks/,
+# plus bin/* — all use the line-2 `# owner:` convention.
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  rel="${f#$PROJECT_DIR/}"
+  line2=$(sed -n '2p' "$f")
+  if [[ "$line2" =~ $owner_re ]]; then
+    if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
+      warn "Unowned: $rel — owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
       ((unowned_count++)) || true
     fi
-  done < <(find "$PROJECT_DIR/$src_dir" -name '*.py' -type f 2>/dev/null)
-done
+  else
+    warn "Unowned: $rel — no '# owner:' header on line 2"
+    ((unowned_count++)) || true
+  fi
+done < <(
+  find "$PROJECT_DIR/scripts" \
+       -type d \( -name _archived -o -name _fixtures \) -prune -o \
+       -type f -name '*.sh' -print 2>/dev/null
+  [ -d "$PROJECT_DIR/.claude/hooks" ] && \
+    find "$PROJECT_DIR/.claude/hooks" -type f -name '*.sh' -print 2>/dev/null
+  [ -d "$PROJECT_DIR/bin" ] && \
+    find "$PROJECT_DIR/bin" -type f -print 2>/dev/null
+)
 
-[ "$unowned_count" -eq 0 ] && ok "No unowned source files found"
+# skills/*/SKILL.md — YAML frontmatter `owner:` key.
+if [ -d "$PROJECT_DIR/skills" ]; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    rel="${f#$PROJECT_DIR/}"
+    owner_line=$(awk '/^---[[:space:]]*$/{n++; next} n>=2{exit} n==1 && /^owner:/{print; exit}' "$f")
+    if [[ "$owner_line" =~ $skill_owner_re ]]; then
+      if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
+        warn "Unowned: $rel — owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
+        ((unowned_count++)) || true
+      fi
+    else
+      warn "Unowned: $rel — no 'owner:' key in YAML frontmatter"
+      ((unowned_count++)) || true
+    fi
+  done < <(find "$PROJECT_DIR/skills" -type f -name 'SKILL.md' -print 2>/dev/null)
 fi
 
-# ── Check 3: contracts.yaml vs. spec Requires tables ─────────────────
+# ── Check 3 Half B: general source-ownership scan ────────────────────
+#
+# Half A above is arboretum-framework-specific (owner markers on .sh/
+# bin/SKILL.md). Half B is the general source-ownership scan that
+# downstream adopter projects depend on: walk the project source roots
+# for *.py files and flag any not covered by a spec's owns: patterns.
+# It reuses the spec_owns_map built for Check 2, so — like Check 2 — it
+# is gated on register_schema_compatible: an incompatible REGISTER.md
+# schema means spec_owns_map is empty and every file would mis-flag.
+if [ "$register_schema_compatible" = false ]; then
+  info "Source-ownership scan skipped — REGISTER.md schema not compatible (see Check 2 message)"
+else
+  for src_dir in "${SOURCE_PATHS[@]}"; do
+    [ -z "$src_dir" ] && continue
+    [ ! -d "$PROJECT_DIR/$src_dir" ] && continue
+    while IFS= read -r file; do
+      rel_path="${file#$PROJECT_DIR/}"
+      [[ "$rel_path" == *"__pycache__"* ]] && continue
+      [[ "$rel_path" == *.pyc ]] && continue
+      owned=false
+      while IFS=: read -r pattern _; do
+        [ -z "$pattern" ] && continue
+        if [[ "$pattern" == *"**"* ]]; then
+          dir="${pattern%%\*\*}"
+          if [[ "$rel_path" == "$dir"* ]]; then owned=true; break; fi
+        elif [ "$rel_path" = "$pattern" ]; then owned=true; break; fi
+      done <<< "$spec_owns_map"
+      if [ "$owned" = false ]; then
+        warn "Unowned: $rel_path"
+        ((unowned_count++)) || true
+      fi
+    done < <(find "$PROJECT_DIR/$src_dir" -name '*.py' -type f 2>/dev/null)
+  done
+fi
+
+[ "$unowned_count" -eq 0 ] && ok "All source files carry a resolvable owner"
+
+# ── Check 4: contracts.yaml vs. spec Requires tables ─────────────────
 
 header "Check 4: contracts.yaml vs. spec Requires tables"
 
@@ -543,7 +762,7 @@ else
   stale_count=0
 
   # Extract all definition references and pinned versions from contracts.yaml
-  pins=$(grep -E '^\s+definitions/' "$CONTRACTS" 2>/dev/null | sed 's/#.*//' || true)
+  pins=$(grep -E '^[[:space:]]+definitions/' "$CONTRACTS" 2>/dev/null | sed 's/#.*//' || true)
 
   while IFS=: read -r def_path pinned_version; do
     [ -z "$def_path" ] && continue
@@ -619,12 +838,16 @@ while IFS='|' read -r _ spec status _ owns _; do
       extended_enum_states+=("$status")
     fi
   else
-    # Valid status. Specific WARN classes:
-    # - active-state spec with no owned files (broken claim of ownership)
+    # Valid status. Specific classes:
+    # - active-state spec with no owned files: info, not drift. A spec
+    #   can legitimately be active with owns: [] when its deliverable is
+    #   a section inside another spec's file (e.g. an ARCHITECTURE.md
+    #   section). A perpetual ✗ here would erode signal, so surface it
+    #   as a non-failing · line.
     # - stale-state spec (drift previously recorded, awaits /consolidate)
     if _in_array "$status" "${STATUS_ACTIVE_STATES[@]}"; then
       if [ -z "$owns" ] || [ "$owns" = "(none)" ] || [ "$owns" = "—" ]; then
-        warn "$spec: status=$status but owns no files"
+        info "$spec: status=$status but owns no files"
       fi
     elif [ -n "$STATUS_STALE_STATE" ] && [ "$status" = "$STATUS_STALE_STATE" ]; then
       warn "$spec: status=$status — drift recorded; run /consolidate to reconcile"

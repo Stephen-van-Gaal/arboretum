@@ -1,5 +1,6 @@
 ---
 name: publish
+owner: arboretum-as-plugin
 description: Prepare and sync your project to a public GitHub repo — review what's included, strip process artifacts via .publishignore, and push. Use when your project is ready for others to see.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, AskUserQuestion

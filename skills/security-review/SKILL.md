@@ -1,5 +1,6 @@
 ---
 name: security-review
+owner: git-workflow-tooling
 description: Analyze AI-facing code for prompt injection and instruction hijacking risks. Use before PRs that modify hooks, skills, scripts, or agent instruction files.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob

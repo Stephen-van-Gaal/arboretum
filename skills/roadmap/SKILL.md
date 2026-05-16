@@ -1,5 +1,6 @@
 ---
 name: roadmap
+owner: roadmap
 description: Strategic + tactical project direction. Phase 1 MVP — `run` (default; cheap daily orientation) and `instantiate` (one-time setup). Other methods (`maintain`, `shape`, `ready`, `agent-prep`, `sprint open/close`, `revise`) are stubbed and surface "not yet implemented" if invoked. See docs/superpowers/specs/2026-05-09-roadmap-system-design.md.
 disable-model-invocation: false
 allowed-tools: Bash, Read, AskUserQuestion, Write, Edit

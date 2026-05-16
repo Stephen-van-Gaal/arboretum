@@ -1,5 +1,6 @@
 ---
 name: reflect
+owner: workflow-management
 description: "Lightweight learning interview at natural stopping points — post-merge, post-spike, or post-incident. Captures lessons while context is fresh. Suggested by /cleanup but never bundled into it."
 allowed-tools:
   - Read

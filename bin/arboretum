@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# owner: arboretum-as-plugin
 # arboretum — CLI entry point for the arboretum framework
 #
 # Usage:

@@ -1,5 +1,6 @@
 ---
 name: init-project
+owner: arboretum-as-plugin
 description: Initialize a new project with spec-driven development infrastructure — creates directory structure, copies templates, sets up hooks. Use when starting a new project or adding spec governance to an existing one.
 disable-model-invocation: false
 allowed-tools: Bash(bash scripts/bootstrap-project.sh *), Read, Write

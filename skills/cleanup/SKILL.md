@@ -1,5 +1,6 @@
 ---
 name: cleanup
+owner: workflow-management
 description: Post-merge cleanup — switch to main, pull latest, delete the merged feature branch, and verify spec status. Use after a PR has been merged.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob

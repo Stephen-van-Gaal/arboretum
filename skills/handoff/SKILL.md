@@ -1,5 +1,6 @@
 ---
 name: handoff
+owner: session-start-cycle-state
 description: "Queue a GitHub issue as `next-up` so the next session boots oriented on it. Single canonical writer for the session-handoff label — /finish, /cleanup, and /reflect delegate here. Use directly when leaving mid-session ('I'm wrapping up; #154 is next')."
 disable-model-invocation: false
 allowed-tools:

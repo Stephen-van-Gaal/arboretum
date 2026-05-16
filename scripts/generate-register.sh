@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# produces: definitions/register-schema.md
 # generate-register.sh — Auto-generate REGISTER.md from spec frontmatter.
 #
 # Reads all docs/specs/*.spec.md files, extracts YAML frontmatter

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# uses: definitions/register-schema.md @v1
+# uses: definitions/contracts-yaml-schema.md @v1
 # validate-cross-refs.sh — Cross-document consistency checks
 #
 # Requires bash 4+.
@@ -61,7 +63,12 @@ else
     # markdown-wrapped reference like `definitions/foo` is not consumed into
     # the captured reference (would otherwise produce a false positive
     # missing-file error of the shape "definitions/foo`.md does not exist").
-    def_refs=$(grep -oE 'definitions/[^@|[:space:],)`]+' "$spec_file" 2>/dev/null \
+    # Angle brackets are excluded for the same reason: a prose placeholder
+    # like `definitions/<name>.md` describing the reference *format* is not
+    # a real reference, and `<name>.md` will never resolve on disk. With
+    # `<` excluded the regex simply fails to match at `definitions/<…`,
+    # so the placeholder contributes no reference at all.
+    def_refs=$(grep -oE 'definitions/[^@|<>[:space:],)`]+' "$spec_file" 2>/dev/null \
       | sort -u || true)
 
     while IFS= read -r ref; do

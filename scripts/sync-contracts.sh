@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# produces: definitions/contracts-yaml-schema.md
+# uses: definitions/register-schema.md @v1
 # sync-contracts.sh — Auto-generate contracts.yaml from spec Requires/Provides tables
 #
 # Requires bash 4+.

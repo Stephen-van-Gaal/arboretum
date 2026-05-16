@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
-# _smoke-test-script-owners.sh — Assert every shipped framework script
-# declares a valid spec owner on line 2.
+# _smoke-test-script-owners.sh — Assert every shipped framework source
+# file declares a valid spec owner.
 #
-# Walks scripts/ (excluding _archived/ and _fixtures/) and .claude/hooks/.
-# For each *.sh file, asserts:
+# Walks scripts/ (excluding _archived/ and _fixtures/), .claude/hooks/,
+# bin/, and skills/*/SKILL.md.
+# For each *.sh file and each bin/* executable, asserts:
 #   1. Line 2 is exactly `# owner: <name>` where <name> matches
 #      [a-z][a-z0-9-]+ (kebab-case spec name).
 #   2. `docs/specs/<name>.spec.md` exists in the host project.
+# For each skills/*/SKILL.md, asserts the same against the YAML
+# frontmatter `owner:` key instead of a line-2 comment.
 #
 # Catches the failure mode from issue #9: shipped scripts without
 # owner headers cause consumer projects to fail "Unowned source
@@ -73,10 +76,43 @@ for f in "${scripts_to_check[@]}"; do
   fi
 done
 
+# bin/* executables — line-2 `# owner:` header (same convention as .sh).
+if [ -d "$PROJECT_ROOT/bin" ]; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    rel="${f#$PROJECT_ROOT/}"
+    line2=$(sed -n '2p' "$f")
+    if ! [[ "$line2" =~ $owner_re ]]; then
+      fail "$rel: line 2 is not '# owner: <spec-name>' (got: $line2)"
+      continue
+    fi
+    if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
+      fail "$rel: declared owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
+    fi
+  done < <(find "$PROJECT_ROOT/bin" -type f -print)
+fi
+
+# skills/*/SKILL.md — YAML frontmatter `owner:` key.
+skill_owner_re='^owner:[[:space:]]*([a-z][a-z0-9-]+)[[:space:]]*$'
+if [ -d "$PROJECT_ROOT/skills" ]; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    rel="${f#$PROJECT_ROOT/}"
+    owner_line=$(awk '/^---[[:space:]]*$/{n++; next} n>=2{exit} n==1 && /^owner:/{print; exit}' "$f")
+    if ! [[ "$owner_line" =~ $skill_owner_re ]]; then
+      fail "$rel: no 'owner: <spec-name>' key in YAML frontmatter (got: ${owner_line:-<none>})"
+      continue
+    fi
+    if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
+      fail "$rel: declared owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
+    fi
+  done < <(find "$PROJECT_ROOT/skills" -type f -name 'SKILL.md' -print)
+fi
+
 if [ "$fail_count" -gt 0 ]; then
   echo "" >&2
   echo "FAIL: $fail_count script(s) failed owner-header validation" >&2
   exit 1
 fi
 
-echo "PASS: ${#scripts_to_check[@]} scripts validated (all have # owner: headers resolving to specs)"
+echo "PASS: all source files validated (.sh, bin/, SKILL.md owner markers resolve to specs)"

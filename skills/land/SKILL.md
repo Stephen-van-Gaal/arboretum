@@ -1,5 +1,6 @@
 ---
 name: land
+owner: git-workflow-tooling
 description: Drive an open pull request to merge-ready — poll CI and AI reviewers, triage and action feedback per thread, loop until CI is green with no substantive comments, then hand off by change tier. Chained from /finish; also runnable standalone on any open PR.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob, ScheduleWakeup

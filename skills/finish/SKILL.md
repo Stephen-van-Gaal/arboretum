@@ -1,5 +1,6 @@
 ---
 name: finish
+owner: git-workflow-tooling
 description: Complete implementation work — verify, reconcile spec status to active via /consolidate if needed, and create a pull request. Use when implementation is done and you're ready to ship.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob

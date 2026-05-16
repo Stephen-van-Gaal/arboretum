@@ -165,4 +165,44 @@ echo "$HEALTH_OUT" | grep -q 'schema not compatible' \
   && fail "consumer rejected freshly-generated REGISTER.md as incompatible" \
           "$(echo "$HEALTH_OUT" | grep -A1 'schema not compatible')"
 
+# ── Check 3 Half B: general source-ownership scan ────────────────────
+#
+# Half A (owner-marker scan of .sh/bin/SKILL.md) is exercised by the
+# round-trip above. Half B is the general source-ownership scan: it
+# walks the project's source roots (src/, tests/, project dir) for
+# *.py files and flags any not covered by a spec's owns: patterns —
+# the pre-rewrite behaviour that downstream adopter projects depend on.
+#
+# Drop an orphan .py file into src/ that no spec owns, regenerate, and
+# assert Check 3 flags exactly it — while the owned src/foo.py,
+# src/bar.py and tests/test_foo.py are NOT flagged.
+
+echo "# stray file with no owning spec" > "$FIXTURE/src/orphan.py"
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "add orphan"
+
+# Regenerate REGISTER.md so generate-register.sh's view is current
+# (orphan.py is owned by no spec, so REGISTER.md is unchanged — but
+# regenerating keeps producer/consumer in lockstep).
+bash "$GEN" "$FIXTURE" >/dev/null \
+  || fail "generate-register.sh exited non-zero (Half B case)"
+
+set +e
+HALFB_OUT=$(bash "$CHECK" "$FIXTURE" 2>&1)
+HALFB_RC=$?
+set -e
+
+# The orphan .py must be flagged by Check 3's source-ownership scan.
+echo "$HALFB_OUT" | grep -q '✗ Unowned: src/orphan.py' \
+  || fail "Check 3 Half B did not flag the unowned src/orphan.py" "$HALFB_OUT"
+
+# An owned source file must NOT be flagged — owns: coverage is honoured.
+echo "$HALFB_OUT" | grep -q 'Unowned: src/foo.py' \
+  && fail "Check 3 Half B flagged the owned src/foo.py" "$HALFB_OUT"
+
+# An unowned source file means drift — health-check must exit non-zero.
+[ "$HALFB_RC" -ne 0 ] \
+  || fail "health-check.sh exit 0 despite an unowned source file" "$HALFB_OUT"
+
 echo "PASS: fixture round-trip healthy (rc=$HEALTH_RC; schema OK; no missing/unowned)"
+echo "PASS: Check 3 Half B flags unowned src/*.py, leaves owned files clean"

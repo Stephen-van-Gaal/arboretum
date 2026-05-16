@@ -1,5 +1,6 @@
 ---
 name: design
+owner: workflow-management
 description: Wrapper skill that orchestrates the design phase — runs external brainstorming to produce a design spec. On Path A, also consolidates into a governed spec at status `draft`; on Path B, exits to planning with the design spec as in-flight authority (governed spec is born later at `/finish`). Use at the start of planned work.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion

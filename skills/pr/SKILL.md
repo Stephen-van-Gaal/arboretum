@@ -1,5 +1,6 @@
 ---
 name: pr
+owner: git-workflow-tooling
 description: Create a pull request with spec-aware body, health-check summary, and security review suggestion. Use when ready to open a PR for the current branch.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, AskUserQuestion
