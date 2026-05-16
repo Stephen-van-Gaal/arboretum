@@ -417,60 +417,45 @@ if [ "$LAYER" -lt 2 ]; then
 fi
 
 # ── Active skills by layer ───────────────────────────────────────────
-# Scan plugin skills first, then project-local — project-local wins on
-# name collision (colon-delimited seen_skills string tracks precedence).
 
-layer0_skills=""
-layer1_skills=""
-layer2_skills=""
-seen_skills=""  # colon-delimited: :name1:name2: — prevents duplicates
+SKILLS_DIR="$PROJECT_DIR/.claude/skills"
+if [ -d "$SKILLS_DIR" ]; then
+  # Build skill lists per layer
+  layer0_skills=""
+  layer1_skills=""
+  layer2_skills=""
 
-_add_skill() {
-  local skill_dir="$1"
-  [ ! -d "$skill_dir" ] && return
-  local skill_file="$skill_dir/SKILL.md"
-  [ ! -f "$skill_file" ] && return
-  local skill_name; skill_name="$(basename "$skill_dir" | tr -cd '[:alnum:]_-')"
-  [ -z "$skill_name" ] && return
-  # project-local wins: skip if already registered
-  case ":${seen_skills}:" in *":${skill_name}:"*) return ;; esac
-  local skill_layer; skill_layer=$(sed -n '/^---$/,/^---$/{ s/^layer:[[:space:]]*\([0-9]\).*/\1/p; }' "$skill_file")
-  [ -z "$skill_layer" ] && return
-  seen_skills="${seen_skills}:${skill_name}"
-  case "$skill_layer" in
-    0) layer0_skills+="/$skill_name, " ;;
-    1) layer1_skills+="/$skill_name, " ;;
-    2) layer2_skills+="/$skill_name, " ;;
-  esac
-}
+  for skill_dir in "$SKILLS_DIR"/*/; do
+    [ ! -d "$skill_dir" ] && continue
+    skill_file="$skill_dir/SKILL.md"
+    [ ! -f "$skill_file" ] && continue
+    skill_name="$(basename "$skill_dir")"
 
-# Collect project-local skills first so they take priority in dedup
-if [ -d "$PROJECT_DIR/.claude/skills" ]; then
-  for skill_dir in "$PROJECT_DIR/.claude/skills"/*/; do
-    _add_skill "$skill_dir"
+    # Extract layer from YAML frontmatter (between --- markers)
+    skill_layer=$(sed -n '/^---$/,/^---$/{ s/^layer:[[:space:]]*\([0-9]\).*/\1/p; }' "$skill_file")
+    [ -z "$skill_layer" ] && continue
+
+    case "$skill_layer" in
+      0) layer0_skills+="/$skill_name, " ;;
+      1) layer1_skills+="/$skill_name, " ;;
+      2) layer2_skills+="/$skill_name, " ;;
+    esac
   done
-fi
 
-# Then add plugin skills (any name already in seen_skills is skipped)
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -d "${CLAUDE_PLUGIN_ROOT}/skills" ]; then
-  for skill_dir in "${CLAUDE_PLUGIN_ROOT}/skills"/*/; do
-    _add_skill "$skill_dir"
-  done
-fi
+  active_output=""
+  if [ -n "$layer0_skills" ] && [ "$LAYER" -ge 0 ]; then
+    active_output+="Layer 0: ${layer0_skills%, }"
+  fi
+  if [ -n "$layer1_skills" ] && [ "$LAYER" -ge 1 ]; then
+    active_output+="; Layer 1: ${layer1_skills%, }"
+  fi
+  if [ -n "$layer2_skills" ] && [ "$LAYER" -ge 2 ]; then
+    active_output+="; Layer 2: ${layer2_skills%, }"
+  fi
 
-active_output=""
-if [ -n "$layer0_skills" ] && [ "$LAYER" -ge 0 ]; then
-  active_output+="Layer 0: ${layer0_skills%, }"
-fi
-if [ -n "$layer1_skills" ] && [ "$LAYER" -ge 1 ]; then
-  active_output+="; Layer 1: ${layer1_skills%, }"
-fi
-if [ -n "$layer2_skills" ] && [ "$LAYER" -ge 2 ]; then
-  active_output+="; Layer 2: ${layer2_skills%, }"
-fi
-
-if [ -n "$active_output" ]; then
-  output+=$'\n'"[Active Skills] $active_output"
+  if [ -n "$active_output" ]; then
+    output+=$'\n'"[Active Skills] $active_output"
+  fi
 fi
 
 # ── Roadmap orientation (issue #152) ─────────────────────────────────
