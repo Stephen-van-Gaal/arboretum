@@ -288,7 +288,7 @@ This substep never adds new comments. The bias is toward removing stale ones.
 
 ### Step 6: Verify
 
-1. Run `scripts/health-check.sh`.
+1. Run `scripts/health-check.sh --reconcile`.
 2. Present results.
 3. Summarise what was done:
 

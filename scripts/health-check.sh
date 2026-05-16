@@ -8,7 +8,12 @@
 # Requires bash 4+ (uses process substitution, arrays, [[ ]]).
 #
 # Usage:
-#   ./scripts/health-check.sh [project-dir]
+#   ./scripts/health-check.sh [--reconcile] [project-dir]
+#
+# Flags:
+#   --reconcile   Write drift findings (flip active → stale in spec files and
+#                 REGISTER.md). Without this flag the run is read-only: drift
+#                 is reported but no files are modified.
 #
 # Runs nine checks:
 #   1. Governed documents exist (ARCHITECTURE, REGISTER, contracts, etc.)
@@ -37,7 +42,7 @@
 #      in/out scope non-empty, cadence not overdue). Silent pass when
 #      roadmap.config.yaml is absent.
 #
-# Produces a drift report. Mutates only spec status (Check 7).
+# Produces a drift report. With --reconcile, also flips spec status (Check 7).
 # Exit code: 0 if healthy, 1 if drift detected.
 
 set -euo pipefail
@@ -46,6 +51,12 @@ set -euo pipefail
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "Error: this script requires bash. Run with: bash $0" >&2
   exit 1
+fi
+
+RECONCILE=false
+if [ "${1:-}" = "--reconcile" ]; then
+  RECONCILE=true
+  shift
 fi
 
 PROJECT_DIR="${1:-$(pwd)}"
@@ -973,31 +984,34 @@ while IFS='|' read -r _ spec status _ owns _; do
       continue
     fi
 
-    # Escape spec name for literal use in sed's regex pattern (spec filenames
-    # contain `.` which would match any character without escaping).
-    escaped_spec=$(printf '%s' "$spec" | sed 's/[][\\.^$*|/]/\\&/g')
+    if [ "$RECONCILE" = true ]; then
+      # Escape spec name for literal use in sed's regex pattern (spec filenames
+      # contain `.` which would match any character without escaping).
+      escaped_spec=$(printf '%s' "$spec" | sed 's/[][\\.^$*|/]/\\&/g')
 
-    # Flip REGISTER.md status: "| <spec> | <status> " → "| <spec> | <stale_state> "
-    sed -i.bak -E "s/^\| ${escaped_spec} \| ${status} /| ${spec} | ${STATUS_STALE_STATE} /" "$REGISTER"
-    rm -f "$REGISTER.bak"
+      # Flip REGISTER.md status: "| <spec> | <status> " → "| <spec> | <stale_state> "
+      sed -i.bak -E "s/^\| ${escaped_spec} \| ${status} /| ${spec} | ${STATUS_STALE_STATE} /" "$REGISTER"
+      rm -f "$REGISTER.bak"
 
-    # Flip spec status in either supported format:
-    # - YAML frontmatter: "status: <status>" → "status: <stale_state>"
-    # - Legacy markdown section:
-    #     ## Status
-    #     <status>
-    if grep -q "^status: ${status}\$" "$spec_file"; then
-      sed -i.bak "s/^status: ${status}\$/status: ${STATUS_STALE_STATE}/" "$spec_file"
-    elif grep -q '^## Status$' "$spec_file"; then
-      sed -i.bak "/^## Status\$/{
+      # Flip spec status in either supported format:
+      # - YAML frontmatter: "status: <status>" → "status: <stale_state>"
+      # - Legacy markdown section:
+      #     ## Status
+      #     <status>
+      if grep -q "^status: ${status}\$" "$spec_file"; then
+        sed -i.bak "s/^status: ${status}\$/status: ${STATUS_STALE_STATE}/" "$spec_file"
+      elif grep -q '^## Status$' "$spec_file"; then
+        sed -i.bak "/^## Status\$/{
 n
 s/^${status}\$/${STATUS_STALE_STATE}/
 }" "$spec_file"
-    fi
-    rm -f "$spec_file.bak"
+      fi
+      rm -f "$spec_file.bak"
 
-    # warn() already increments issue_count and sets drift_found
-    warn "$spec: flipped ${status} → ${STATUS_STALE_STATE} (drift: $drift_file modified after spec's last commit $spec_last_commit)"
+      warn "$spec: flipped ${status} → ${STATUS_STALE_STATE} (drift: $drift_file modified after spec's last commit $spec_last_commit)"
+    else
+      warn "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — run with --reconcile to update"
+    fi
     ((drift_flipped++)) || true
   else
     ((no_drift_count++)) || true
