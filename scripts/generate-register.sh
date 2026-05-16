@@ -244,7 +244,8 @@ if [ -f "$REGISTER" ]; then
       section_content+="$line"$'\n'
     fi
   done < "$REGISTER"
-  existing_unowned="$section_content"
+  # Strip trailing blank lines so each regeneration doesn't accumulate them
+  existing_unowned=$(printf '%s' "$section_content")
 
   # Extract "## Dependency Resolution Order" section
   in_section=false
@@ -262,7 +263,8 @@ if [ -f "$REGISTER" ]; then
       section_content+="$line"$'\n'
     fi
   done < "$REGISTER"
-  existing_dep_order="$section_content"
+  # Strip trailing blank lines so each regeneration doesn't accumulate them
+  existing_dep_order=$(printf '%s' "$section_content")
 fi
 
 # ── Count statuses for status summary ────────────────────────────────
