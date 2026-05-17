@@ -1,0 +1,66 @@
+[
+  {
+    "number": 1,
+    "title": "Fix stale-register detection",
+    "body": "Register parsing drops the owner column on malformed rows.",
+    "labels": [{ "name": "type:bug" }, { "name": "horizon:now" }],
+    "createdAt": "2026-05-01T00:00:00Z",
+    "updatedAt": "2026-05-10T00:00:00Z"
+  },
+  {
+    "number": 2,
+    "title": "Document the triage threshold config",
+    "body": "## Acceptance\n- [x] config/triage.yaml ships with thresholds\n- [x] docs/triage-thresholds.md created\n",
+    "labels": [{ "name": "type:docs" }, { "name": "horizon:now" }],
+    "createdAt": "2026-05-02T00:00:00Z",
+    "updatedAt": "2026-05-11T00:00:00Z"
+  },
+  {
+    "number": 3,
+    "title": "Refactor the PubMed XML parser",
+    "body": "Split the monolithic parser into per-element handlers.",
+    "labels": [{ "name": "type:refactor" }, { "name": "horizon:next" }],
+    "createdAt": "2026-05-03T00:00:00Z",
+    "updatedAt": "2026-05-12T00:00:00Z"
+  },
+  {
+    "number": 4,
+    "title": "In-flight retention/pruning policy",
+    "body": "Old idea about pruning the in-flight queue.",
+    "labels": [],
+    "createdAt": "2025-12-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  {
+    "number": 5,
+    "title": "New idea captured from a session",
+    "body": "Captured via /idea — needs triage.",
+    "labels": [{ "name": "type:chore" }],
+    "createdAt": "2026-05-14T00:00:00Z",
+    "updatedAt": "2026-05-14T00:00:00Z"
+  },
+  {
+    "number": 6,
+    "title": "Improve error messages",
+    "body": "Make errors clearer.",
+    "labels": [{ "name": "type:feature" }, { "name": "horizon:next" }],
+    "createdAt": "2026-05-13T00:00:00Z",
+    "updatedAt": "2026-05-13T00:00:00Z"
+  },
+  {
+    "number": 7,
+    "title": "Add structured logging to the dispatch path",
+    "body": "## Problem\nThe dispatch path emits only unstructured print statements, so debugging a production incident means grepping free text with no request correlation.\n\n## Outcome\nEvery dispatch emits one structured log line carrying request id, recipient, and latency.\n\nSpec: docs/specs/logging.spec.md\n\n- [ ] structured logger module\n- [ ] wire the logger into the dispatch path",
+    "labels": [{ "name": "type:feature" }, { "name": "horizon:next" }],
+    "createdAt": "2026-05-12T00:00:00Z",
+    "updatedAt": "2026-05-15T00:00:00Z"
+  },
+  {
+    "number": 8,
+    "title": "Patch the config loader",
+    "body": "The config loader mishandles empty files.",
+    "labels": [{ "name": "type:bug" }, { "name": "horizon:now" }],
+    "createdAt": "2026-05-05T00:00:00Z",
+    "updatedAt": "2026-05-13T00:00:00Z"
+  }
+]

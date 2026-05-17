@@ -1,0 +1,26 @@
+[
+  {
+    "number": 101,
+    "title": "Fix stale-register detection",
+    "body": "Closes #1 — guards the owner column against malformed rows.",
+    "mergedAt": "2026-05-10T00:00:00Z"
+  },
+  {
+    "number": 102,
+    "title": "Parser refactor groundwork",
+    "body": "Partial progress on #3, more handlers still to extract.",
+    "mergedAt": "2026-05-12T00:00:00Z"
+  },
+  {
+    "number": 103,
+    "title": "Old retention work",
+    "body": "Closes #4 — historical, merged long ago.",
+    "mergedAt": "2026-01-01T00:00:00Z"
+  },
+  {
+    "number": 104,
+    "title": "Resolves #8 — guard empty config files",
+    "body": "Routine fix for the loader.",
+    "mergedAt": "2026-05-13T00:00:00Z"
+  }
+]
