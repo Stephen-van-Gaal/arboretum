@@ -44,7 +44,8 @@ git_fixture() {
   # $1 = dir; a git repo with manifests at 1.0.0 plus: a shippable file
   # (skills/demo/SKILL.md), a dev-only file (docs/specs/demo.spec.md), a
   # public-mirror source (CLAUDE.public.md — shippable), a root README.md
-  # (dev-only), and a prefix-collision path (bin/arboretum-graduate-helper).
+  # (dev-only), a prefix-collision path (CLAUDE.md.bak), a dev-only skill
+  # (.claude/skills/dev-demo) and a shippable one (.claude/skills/shipped).
   # Base commit captured on branch `base-ref`.
   local d="$1"
   mkdir -p "$d"
@@ -52,12 +53,15 @@ git_fixture() {
   git -C "$d" config user.email "test@example.com"
   git -C "$d" config user.name "test"
   make_manifests "$d" "1.0.0"
-  mkdir -p "$d/skills/demo" "$d/docs/specs" "$d/bin"
+  mkdir -p "$d/skills/demo" "$d/docs/specs" \
+    "$d/.claude/skills/dev-demo" "$d/.claude/skills/shipped"
   echo "demo skill" > "$d/skills/demo/SKILL.md"
   echo "demo spec" > "$d/docs/specs/demo.spec.md"
   echo "public claude source" > "$d/CLAUDE.public.md"
   echo "dev readme" > "$d/README.md"
-  echo "graduate helper" > "$d/bin/arboretum-graduate-helper"
+  echo "stray backup" > "$d/CLAUDE.md.bak"
+  echo "dev skill" > "$d/.claude/skills/dev-demo/SKILL.md"
+  echo "shipped skill" > "$d/.claude/skills/shipped/SKILL.md"
   git -C "$d" add -A
   git -C "$d" commit -qm "base"
   git -C "$d" branch -q base-ref
@@ -163,10 +167,25 @@ REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null \
 
 echo "=== check-version-bump.sh: a prefix-collision path is not exempt ==="
 D="$TMP/check-anchor"; git_fixture "$D"
-echo "more" >> "$D/bin/arboretum-graduate-helper"
-git -C "$D" add -A; git -C "$D" commit -qm "edit graduate-helper"
+echo "more" >> "$D/CLAUDE.md.bak"
+git -C "$D" add -A; git -C "$D" commit -qm "edit CLAUDE.md.bak"
 if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
-  fail "bin/arboretum-graduate-helper change without a bump should fail — only bin/arboretum-graduate is exempt"
+  fail "CLAUDE.md.bak change without a bump should fail — the CLAUDE.md pattern is \$-anchored"
+fi
+
+echo "=== check-version-bump.sh: .claude/skills/dev-* is dev-only ==="
+D="$TMP/check-skills-dev"; git_fixture "$D"
+echo "more" >> "$D/.claude/skills/dev-demo/SKILL.md"
+git -C "$D" add -A; git -C "$D" commit -qm "edit dev skill"
+REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null \
+  || fail ".claude/skills/dev-* change should pass without a bump"
+
+echo "=== check-version-bump.sh: non-dev .claude/skills/ paths are shippable ==="
+D="$TMP/check-skills-shipped"; git_fixture "$D"
+echo "more" >> "$D/.claude/skills/shipped/SKILL.md"
+git -C "$D" add -A; git -C "$D" commit -qm "edit shipped skill"
+if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+  fail ".claude/skills/shipped change without a bump should fail — sync-public.yml excludes only dev-*/_archived/"
 fi
 
 echo "ALL PASS"
