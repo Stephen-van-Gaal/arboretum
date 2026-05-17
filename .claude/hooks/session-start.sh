@@ -52,6 +52,31 @@ NEXT_CACHE="$PROJECT_DIR/.arboretum/next-cache.json"
 NEXT_REFRESH="$PROJECT_DIR/scripts/refresh-next-cache.sh"
 NEXT_TTL_SECONDS=3600
 
+# Per-session markers (design §4.7–§4.8): handoff-done / handoff-nudged
+# are scoped to one session — clear them at every boot. Surface and
+# clear the SessionEnd safety-net flag if the previous session left one.
+HANDOFF_MARK_DIR="$PROJECT_DIR/.arboretum"
+rm -f "$HANDOFF_MARK_DIR/handoff-done" "$HANDOFF_MARK_DIR/handoff-nudged"
+HANDOFF_PENDING="$HANDOFF_MARK_DIR/handoff-pending.json"
+if [ -f "$HANDOFF_PENDING" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    pending_branch=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('branch',''))
+except Exception:
+    pass
+" "$HANDOFF_PENDING")
+  else
+    pending_branch=$(sed -n 's/.*\"branch\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p' \
+                     "$HANDOFF_PENDING" | head -1)
+  fi
+  [ -n "$output" ] && output+=$'\n'
+  output+="⚠ Last session left uncommitted work on ${pending_branch:-a feature branch} with no handoff — run /handoff to capture it"
+  rm -f "$HANDOFF_PENDING"
+fi
+
 if [ -f "$NEXT_REFRESH" ]; then
   # First-session synchronous refresh if no cache exists.
   if [ ! -f "$NEXT_CACHE" ]; then
@@ -111,6 +136,14 @@ else:
         lines.append("  (body empty — readiness check would fail)")
     for ln in issue.get("body_first_lines", [])[:5]:
         lines.append(f"  {scrub(ln)}")
+    handoff = cache.get("handoff")
+    if handoff:
+        na = scrub(handoff.get("next_action", ""))
+        if na:
+            lines.append(f"  → Next action: {na}")
+        prose = scrub(handoff.get("body", ""))
+        if prose:
+            lines.append(f"  {prose}")
     url = issue.get("url", "")
     if url:
         lines.append(f"  → {scrub(url)}")

@@ -19,3 +19,8 @@ venv/
 .arboretum/next-cache.err
 .arboretum/roadmap-pulse.json
 .arboretum/roadmap-pulse.json.tmp
+
+# Session-handoff transient markers (issue #251).
+.arboretum/handoff-done
+.arboretum/handoff-nudged
+.arboretum/handoff-pending.json

@@ -17,6 +17,12 @@
 #       "labels": ["<string>", ...],
 #       "updated_at": "<ISO-8601 UTC>"
 #     },
+#     "handoff": null | {
+#       "posted_at": "<ISO-8601 UTC | branch-marker timestamp>",
+#       "branch": "<branch name, control-char-stripped>",
+#       "next_action": "<string, control-char-stripped>",
+#       "body": "<prose lines joined with spaces, control-char-stripped>"
+#     },
 #     "no_gh_remote": true | false,
 #     "error": null | "gh-unavailable" | "gh-call-failed"
 #                  | "python3 unavailable; issue details omitted in fallback cache"
@@ -178,6 +184,18 @@ if [ -z "$issues_json" ] || [ "$issues_json" = "[]" ]; then
   exit 0
 fi
 
+# ── Fetch handoff comments for the next-up issue ─────────────────────
+# A second gh call: the latest `arbo-handoff`-marked comment on the
+# next-up issue is the current session-handoff note (design §4.6).
+issue_number=$(printf '%s' "$issues_json" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if d else "")' 2>/dev/null || true)
+comments_file=$(mktemp "$CACHE_DIR/gh.comments.XXXXXX")
+echo '{"comments":[]}' > "$comments_file"
+if [ -n "$issue_number" ]; then
+  ( cd "$PROJECT_DIR" && gh issue view "$issue_number" --json comments ) \
+    > "$comments_file" 2>/dev/null || echo '{"comments":[]}' > "$comments_file"
+fi
+
 # ── Truncate body and emit cache ─────────────────────────────────────
 
 # Use python3 if available for robust JSON shaping; otherwise fall back
@@ -189,7 +207,7 @@ if command -v python3 >/dev/null 2>&1; then
   # arg-length limits on issues with very long bodies.
   issues_file=$(mktemp "$CACHE_DIR/gh.issues.XXXXXX")
   printf '%s' "$issues_json" > "$issues_file"
-  cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$issues_file" <<'PY'
+  cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$issues_file" "$comments_file" <<'PY'
 import json, os, re, sys
 
 with open(sys.argv[1], encoding="utf-8") as fh:
@@ -239,10 +257,61 @@ def truncate(body):
             break
     return out
 
+def latest_handoff(comments_path):
+    """The newest comment whose body starts with the arbo-handoff
+    marker. Returns a {posted_at, branch, next_action, body} dict or
+    None. design §4.1/§4.6."""
+    try:
+        with open(comments_path, encoding="utf-8") as fh:
+            comments = (json.load(fh) or {}).get("comments", []) or []
+    except Exception:
+        return None
+    marked = [c for c in comments
+              if isinstance(c, dict)
+              and isinstance(c.get("body"), str)
+              and c["body"].lstrip().startswith("<!-- arbo-handoff:")]
+    if not marked:
+        return None
+    marked.sort(key=lambda c: c.get("createdAt", ""))
+    c = marked[-1]
+    body = c["body"]
+    m = re.search(r"<!--\s*arbo-handoff:\s*(\S+)\s+(\S+)\s*-->", body)
+    branch = scrub(m.group(1)) if m else ""
+    posted = scrub(m.group(2)) if m else c.get("createdAt", "")
+    note_lines = [ln for ln in body.splitlines()
+                  if not ln.lstrip().startswith("<!-- arbo-handoff:")
+                  and not ln.startswith("**Session handoff**")]
+    note = "\n".join(note_lines).strip()
+    next_action = ""
+    for ln in note.splitlines():
+        if ln.strip().startswith("→ Next action:"):
+            next_action = scrub(ln.strip()[len("→ Next action:"):].strip())
+            break
+    prose, started = [], False
+    for ln in note.splitlines():
+        if ln.strip().startswith("→ Next action:"):
+            started = True
+            continue
+        if not started:
+            continue
+        if ln.strip() == "" and prose:
+            break
+        if ln.strip():
+            prose.append(scrub(ln.rstrip()))
+    return {
+        "posted_at": posted,
+        "branch": branch,
+        "next_action": next_action,
+        "body": " ".join(prose),
+    }
+
+handoff = latest_handoff(sys.argv[2])
+
 if issue is None:
     cache = {
         "fetched_at": os.environ["FETCHED_AT"],
         "issue": None,
+        "handoff": None,
         "no_gh_remote": False,
         "error": None,
     }
@@ -259,13 +328,14 @@ else:
             "labels": [l["name"] for l in issue.get("labels", [])],
             "updated_at": issue.get("updatedAt", ""),
         },
+        "handoff": handoff,
         "no_gh_remote": False,
         "error": None,
     }
 print(json.dumps(cache, indent=2))
 PY
 )
-  rm -f "$issues_file"
+  rm -f "$issues_file" "$comments_file"
 else
   # Minimal fallback without python3 — do NOT attempt to hand-build
   # JSON from issue fields, because shell string interpolation will
@@ -278,9 +348,11 @@ else
   cache_json=$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": false,
   "error": "python3 unavailable; issue details omitted in fallback cache"
 }' "$(now_iso)")
+  rm -f "$comments_file"
   write_err "python3 not found — issue details omitted from cache. Install python3 to surface next-up details in the boot banner."
 fi
 
