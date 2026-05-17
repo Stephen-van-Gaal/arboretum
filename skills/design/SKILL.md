@@ -132,6 +132,7 @@ Hand the plan capability the project context it needs:
 - **Workflow stage map** — read `workflows/feature.md` (or the active workflow). The plan must respect Build → `/finish` → `/consolidate` → `/cleanup`, not assume the spec is `active` before code is written. Path B plans in particular must understand that the governed spec is *born* at `/finish`, not pre-build.
 - **Test taxonomy** — `CLAUDE.md ## Testing` defines the project's tiers (unit, contract, integration, domain). Plan steps should pair code work with the appropriate test tier.
 - **Consolidate-last lifecycle** — the plan should not include a "promote spec to active" step; that flips automatically.
+- **Plan location** — arboretum plans live in `docs/plans/YYYY-MM-DD-<topic>.md` (per `CLAUDE.md` package structure). State this explicitly when invoking the plan capability: `superpowers:writing-plans` otherwise defaults to `docs/superpowers/plans/`, which is not arboretum's convention.
 
 #### 4b. Capture user contributions
 
@@ -154,6 +155,7 @@ After the plan returns:
 - **Tier match** — each plan step has test expectations naming the appropriate tier from the project's taxonomy.
 - **Checkpoint match** — if the user supplied review checkpoints in 4b, the plan includes them as explicit pause points.
 - **Lifecycle match** — the plan ends at "create PR via `/finish`" and does not pre-flip spec status.
+- **Location match** — the plan was written to `docs/plans/`, not the `superpowers:writing-plans` default `docs/superpowers/plans/`. If it landed in the wrong place, move it.
 
 If any check fails, ask the plan capability to amend (or amend directly).
 
