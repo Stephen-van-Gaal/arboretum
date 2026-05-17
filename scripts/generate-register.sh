@@ -114,7 +114,11 @@ extract_owns_list() {
     fi
   done <<< "$frontmatter"
 
-  printf '%s\n' "${patterns[@]}"
+  # Guard the expansion: on bash < 4.4, "${patterns[@]}" on an empty
+  # declared array trips `set -u`. Mirrors the guard in resolve_owns below.
+  if [ ${#patterns[@]} -gt 0 ]; then
+    printf '%s\n' "${patterns[@]}"
+  fi
 }
 
 # ── Resolve owns patterns to actual files ────────────────────────────
