@@ -136,18 +136,32 @@ echo "$out" | grep -q 'Stopped after wiring the cache' \
   || fail "case 3 — handoff prose not rendered" "$out"
 ok "case 3 — session-start.sh renders the handoff note"
 
-# ── Case 4: Stop nudge fires once, then stays silent ─────────────────
+# ── Case 4: Stop nudge — valid output, once per session ──────────────
 c4=$(new_repo case4)
 printf 'dirty\n' > "$c4/scratch.txt"
 hook="$REPO_ROOT/hooks/stop-handoff-nudge.sh"
-in='{"session_id":"s1"}'
+in='{"session_id":"s1","transcript_path":"/t/x.jsonl","cwd":"/t"}'
 out1=$(echo "$in" | CLAUDE_PROJECT_DIR="$c4" bash "$hook")
-echo "$out1" | grep -q 'additionalContext' \
-  || fail "case 4 — first Stop call should emit a nudge" "$out1"
+# A `Stop` hook has no `additionalContext` / `hookSpecificOutput`
+# channel — Claude Code rejects it. The advisory nudge must ride on
+# the `systemMessage` common field and be valid JSON.
+echo "$out1" | grep -q 'systemMessage' \
+  || fail "case 4 — first Stop call should emit a systemMessage nudge" "$out1"
+if echo "$out1" | grep -Eq 'additionalContext|hookSpecificOutput'; then
+  fail "case 4 — Stop output must not use additionalContext/hookSpecificOutput" "$out1"
+fi
+echo "$out1" | python3 -c 'import json,sys; json.loads(sys.stdin.read())' \
+  || fail "case 4 — Stop output is not valid JSON" "$out1"
 [ -f "$c4/.arboretum/handoff-nudged" ] \
   || fail "case 4 — nudge marker not written"
+# Second call, same session id → silent.
 out2=$(echo "$in" | CLAUDE_PROJECT_DIR="$c4" bash "$hook")
-[ -z "$out2" ] || fail "case 4 — second Stop call should be silent" "$out2"
+[ -z "$out2" ] || fail "case 4 — second Stop call (same session) should be silent" "$out2"
+# A new session id re-triggers the nudge: the marker is session-scoped,
+# not "once ever" — nothing clears it between these two calls.
+out2b=$(echo '{"session_id":"s2"}' | CLAUDE_PROJECT_DIR="$c4" bash "$hook")
+echo "$out2b" | grep -q 'systemMessage' \
+  || fail "case 4 — a new session id should re-trigger the nudge" "$out2b"
 # done-marker also suppresses the nudge
 c4b=$(new_repo case4b)
 printf 'dirty\n' > "$c4b/scratch.txt"
@@ -164,7 +178,7 @@ git -C "$c4d" checkout -q -B main
 printf 'dirty\n' > "$c4d/scratch.txt"
 out5=$(echo "$in" | CLAUDE_PROJECT_DIR="$c4d" bash "$hook")
 [ -z "$out5" ] || fail "case 4 — main branch should produce no nudge" "$out5"
-ok "case 4 — Stop nudge fires once per session, suppressed by markers"
+ok "case 4 — Stop nudge: valid systemMessage output, once per session"
 
 # ── Case 5: SessionEnd flags un-handed-off uncommitted work ──────────
 ehook="$REPO_ROOT/hooks/session-end-handoff-flag.sh"
