@@ -136,6 +136,16 @@ for script in "$PLUGIN_ROOT/scripts/"*.sh; do
   copy_if_missing "$script" "scripts/$name"
 done
 chmod +x scripts/*.sh 2>/dev/null || true
+
+# Roadmap scripts live in a subdirectory; the glob above is non-recursive
+# and would otherwise miss them (lib.sh, render-run.sh, maintain-*.sh, …),
+# leaving /roadmap broken in the new project.
+mkdir -p scripts/roadmap
+for script in "$PLUGIN_ROOT/scripts/roadmap/"*.sh; do
+  [ -f "$script" ] || continue
+  copy_if_missing "$script" "scripts/roadmap/$(basename "$script")"
+done
+chmod +x scripts/roadmap/*.sh 2>/dev/null || true
 ```
 
 ### Step 5: Generate CLAUDE.md from template
@@ -162,27 +172,13 @@ fi
 Generate `.claude/settings.json`, `contracts.yaml`, `.publishignore`, and `.arboretum.yml`.
 
 ```bash
-# settings.json — session-start hook
-if [ ! -f .claude/settings.json ]; then
-  cat > .claude/settings.json <<'JSON'
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-JSON
-  echo "  created: .claude/settings.json"
-fi
+# settings.json — SessionStart hook + governance allow list.
+# seed-settings.sh copies the template when settings.json is absent, and
+# merges the allow list (preserving existing hooks and entries) when it
+# already exists.
+bash "$PLUGIN_ROOT/scripts/seed-settings.sh" \
+  ".claude/settings.json" \
+  "$PLUGIN_ROOT/docs/templates/settings.json.template"
 
 # contracts.yaml + .publishignore from templates
 copy_if_missing "$PLUGIN_ROOT/docs/templates/contracts.yaml" "contracts.yaml"
@@ -238,6 +234,10 @@ project/
     ├── definitions/         Shared types and contracts (Layer 1+)
     └── reference/           Domain knowledge, runbooks
 ```
+
+Then tell the user:
+
+> `.claude/settings.json` is seeded with arboretum's governance allow list, so `/health-check`, `/consolidate`, and `/finish` run without a permission prompt per script. For your project's *own* scripts (test runners, dev servers, lint commands), run `/fewer-permission-prompts` after a few working sessions — it scans transcript history and suggests commands that are safe to pre-approve.
 
 ### Step 9: Hand off to /architect
 

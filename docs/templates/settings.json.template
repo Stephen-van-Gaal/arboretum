@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/health-check.sh *)",
+      "Bash(bash scripts/generate-register.sh *)",
+      "Bash(bash scripts/validate-cross-refs.sh *)",
+      "Bash(bash scripts/ci-checks.sh *)",
+      "Bash(bash scripts/roadmap/render-run.sh *)",
+      "Bash(git status *)",
+      "Bash(git rev-parse *)",
+      "Bash(git merge-base *)",
+      "Bash(git branch --merged *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git symbolic-ref refs/remotes/origin/HEAD)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh run view *)",
+      "Bash(gh label list *)",
+      "Bash(gh auth status *)",
+      "Bash(grep *)",
+      "Bash(command -v *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
