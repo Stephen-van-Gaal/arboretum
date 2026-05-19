@@ -1,6 +1,6 @@
 {
   "name": "arboretum",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Choreography for AI-assisted software development. Defers heavy lifting to specialists like superpowers; provides governance, workflows, and templates that produce maintainable projects.",
   "author": {
     "name": "Stephen van Gaal",
@@ -15,6 +15,5 @@
     "spec-driven-development",
     "choreography",
     "ai-assisted-development"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }
