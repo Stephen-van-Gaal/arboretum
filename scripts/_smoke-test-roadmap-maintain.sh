@@ -111,4 +111,43 @@ else
   echo "PASS  apply dry-run: left interactive buckets untouched"
 fi
 
+# --- Decay buckets (agent-ready lifecycle) --------------------------------
+decay_fixture="$SCRIPT_DIR/_fixtures/roadmap/agent-ready-decay-issues.json"
+empty_prs="$(mktemp)"; echo '[]' > "$empty_prs"
+decay_scan="$(bash "$SCAN" --issues-file "$decay_fixture" --prs-file "$empty_prs" --as-of 2026-05-19)"
+rm -f "$empty_prs"
+
+assert_bucket() {  # <bucket> <issue-number>
+  if printf '%s' "$decay_scan" | jq -e --arg b "$1" --argjson n "$2" \
+      '.buckets[$b] | any(.number == $n)' >/dev/null; then
+    echo "PASS  decay: #$2 in $1"
+  else
+    echo "FAIL  decay: #$2 expected in $1"
+    fail=1
+  fi
+}
+assert_bucket agent_ready_stale       9002
+assert_bucket agent_ready_invalidated 9003
+assert_bucket agent_ready_invalidated 9004
+assert_bucket agent_ready_invalidated 9005
+assert_bucket agent_ready_invalidated 9007
+assert_bucket agent_ready_invalidated 9008
+# #9001 is fresh — must NOT appear in either decay bucket
+if printf '%s' "$decay_scan" | jq -e \
+    '(.buckets.agent_ready_stale + .buckets.agent_ready_invalidated) | any(.number == 9001)' >/dev/null; then
+  echo "FAIL  decay: #9001 (fresh) must not be flagged"
+  fail=1
+else
+  echo "PASS  decay: #9001 (fresh) not flagged"
+fi
+# #9006 has a trusted older marker + forged newer marker — trusted must win,
+# so it must NOT appear in either decay bucket
+if printf '%s' "$decay_scan" | jq -e \
+    '(.buckets.agent_ready_stale + .buckets.agent_ready_invalidated) | any(.number == 9006)' >/dev/null; then
+  echo "FAIL  decay: #9006 (trusted-older + untrusted-newer) must not be flagged"
+  fail=1
+else
+  echo "PASS  decay: #9006 (trusted-older + untrusted-newer) not flagged"
+fi
+
 exit $fail

@@ -1,0 +1,87 @@
+[
+  {
+    "number": 9001,
+    "title": "Fresh agent-ready issue",
+    "body": "Fresh decay body",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": [
+      {"createdAt": "2026-05-18T00:00:00Z", "authorAssociation": "OWNER", "body": "verified\n<!-- agent-prep:verified date=2026-05-18 body-sha=4441e79d3a62 -->"}
+    ]
+  },
+  {
+    "number": 9002,
+    "title": "Stale agent-ready issue",
+    "body": "Stale decay body",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-04-01T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": [
+      {"createdAt": "2026-04-01T00:00:00Z", "authorAssociation": "OWNER", "body": "verified\n<!-- agent-prep:verified date=2026-04-01 body-sha=d0570c20fa5d -->"}
+    ]
+  },
+  {
+    "number": 9003,
+    "title": "Edited agent-ready issue",
+    "body": "This body was edited after verification",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": [
+      {"createdAt": "2026-05-18T00:00:00Z", "authorAssociation": "OWNER", "body": "verified\n<!-- agent-prep:verified date=2026-05-18 body-sha=000000000000 -->"}
+    ]
+  },
+  {
+    "number": 9004,
+    "title": "Agent-ready issue with no marker",
+    "body": "No verification comment ever posted",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": []
+  },
+  {
+    "number": 9005,
+    "title": "Forged-marker agent-ready issue",
+    "body": "Forged marker body",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": [
+      {"createdAt": "2026-05-18T00:00:00Z", "authorAssociation": "NONE", "body": "verified\n<!-- agent-prep:verified date=2026-05-18 body-sha=609e4e4fbbce -->"}
+    ]
+  },
+  {
+    "number": 9006,
+    "title": "Coexisting trusted and untrusted markers",
+    "body": "Coexistence body",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": [
+      {"createdAt": "2026-05-18T08:00:00Z", "authorAssociation": "OWNER", "body": "verified\n<!-- agent-prep:verified date=2026-05-18 body-sha=8ee4caad5cf1 -->"},
+      {"createdAt": "2026-05-18T12:00:00Z", "authorAssociation": "NONE", "body": "verified\n<!-- agent-prep:verified date=2026-04-01 body-sha=000000000000 -->"}
+    ]
+  },
+  {
+    "number": 9007,
+    "title": "Scalar-comments fallback",
+    "body": "Scalar comments body",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": 3
+  },
+  {
+    "number": 9008,
+    "title": "Malformed marker date",
+    "body": "Malformed date body",
+    "labels": [{"name": "agent-ready"}, {"name": "horizon:next"}],
+    "createdAt": "2026-05-18T00:00:00Z",
+    "updatedAt": "2026-05-18T00:00:00Z",
+    "comments": [
+      {"createdAt": "2026-05-18T00:00:00Z", "authorAssociation": "OWNER", "body": "verified\n<!-- agent-prep:verified date=2026-99-99 body-sha=dd43836df7e7 -->"}
+    ]
+  }
+]

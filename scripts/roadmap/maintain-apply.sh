@@ -6,6 +6,8 @@
 # high-confidence, reversible actions — auto-close, provisionally-resolved,
 # provisionally-stale — each with an evidence comment. The untriaged and
 # unshaped_next buckets are left for the interactive skill flow.
+# It also reverts decayed agent-ready labels — agent_ready_invalidated
+# (remove agent-ready) and agent_ready_stale (agent-ready -> agent-prep:in-progress).
 #
 #   --scan-file <path|->   scan JSON ('-' reads stdin)
 #   --dry-run              print intended actions; mutate nothing
@@ -76,6 +78,28 @@ apply_label() {
   echo "✓ labelled #$n $label — $ev"
 }
 
+apply_relabel() {
+  # Remove one label, optionally add another, then comment. Used for the
+  # decay buckets. Reports label and comment outcomes independently.
+  # Labels passed in must not contain spaces.
+  local n="$1" remove="$2" add="$3" ev="$4" note="$5"
+  if $dry_run; then
+    echo "[dry-run] relabel #$n -$remove${add:+ +$add} — $ev"
+    return
+  fi
+  local args=(--remove-label "$remove")
+  [ -n "$add" ] && args+=(--add-label "$add")
+  if ! gh issue edit "$n" "${args[@]}" >/dev/null 2>&1; then
+    echo "⚠ could not relabel #$n (-$remove${add:+ +$add}) (skipped)" >&2
+    return
+  fi
+  if ! gh issue comment "$n" --body "$note" >/dev/null 2>&1; then
+    echo "⚠ relabelled #$n but could not post comment" >&2
+    return
+  fi
+  echo "✓ relabelled #$n -$remove${add:+ +$add} — $ev"
+}
+
 while IFS=$'\t' read -r n ev; do
   [ -z "$n" ] && continue
   apply_close "$n" "$ev"
@@ -92,3 +116,15 @@ while IFS=$'\t' read -r n ev; do
   apply_label "$n" "provisionally-stale" "$ev" \
     "$ev. Flagged provisionally-stale by /roadmap maintain — remove the label to keep this open, or close if no longer relevant."
 done < <(bucket_rows orphan)
+
+while IFS=$'\t' read -r n ev; do
+  [ -z "$n" ] && continue
+  apply_relabel "$n" "agent-ready" "" "$ev" \
+    "$ev. **agent-ready removed** by /roadmap maintain — the agent-ready verification no longer holds. Re-run \`/roadmap agent-prep $n\` to re-verify."
+done < <(bucket_rows agent_ready_invalidated)
+
+while IFS=$'\t' read -r n ev; do
+  [ -z "$n" ] && continue
+  apply_relabel "$n" "agent-ready" "agent-prep:in-progress" "$ev" \
+    "$ev. Reverted agent-ready → agent-prep:in-progress by /roadmap maintain — re-confirm timing with \`/roadmap agent-prep $n\` to restore it."
+done < <(bucket_rows agent_ready_stale)

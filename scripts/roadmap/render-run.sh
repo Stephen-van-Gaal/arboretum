@@ -180,7 +180,7 @@ fi
 # AGENT-READY (called out separately because they're delegation-ready)
 if [ -n "$agent_ready_list" ]; then
   echo
-  echo 'AGENT-READY (parallel pickup via /start --agent <n>)'
+  echo 'AGENT-READY (parallel pickup via /start <n>)'
   printf '%s\n' "$agent_ready_list" | while IFS=$'\t' read -r n t; do
     [ -z "$n" ] && continue
     printf '  ★ #%s  %s\n' "$n" "$t"

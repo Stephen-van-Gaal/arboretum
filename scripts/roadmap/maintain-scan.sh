@@ -14,6 +14,11 @@
 # Buckets (precedence — first match wins):
 #   auto_close     closing-keyword PR (<=60d) OR all body checkboxes ticked
 #   soft_resolved  PR (<=60d) mentions the issue without a closing keyword
+#   agent_ready_invalidated  agent-ready label whose body changed since
+#                            verification, which has no marker, or whose
+#                            only marker comment is from an untrusted author
+#                            (authorAssociation not OWNER/MEMBER/COLLABORATOR)
+#   agent_ready_stale        agent-ready verified >7d ago, still unused
 #   orphan         updated >90d ago
 #   untriaged      no horizon:* label
 #   unshaped_next  horizon:next but body lacks a ## heading or is <200 chars
@@ -51,7 +56,7 @@ else
   command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 1; }
   gh auth status >/dev/null 2>&1 || { echo "gh not authenticated" >&2; exit 1; }
   issues="$(gh issue list --state open --limit 200 \
-    --json number,title,body,labels,createdAt,updatedAt)"
+    --json number,title,body,labels,createdAt,updatedAt,comments)"
 fi
 
 # Load merged PRs (live: most recent 200; jq filters to the 60-day window)
@@ -63,10 +68,47 @@ else
     --json number,title,body,mergedAt)"
 fi
 
+# --- Decay pre-pass (design D5) -------------------------------------------
+# jq cannot compute SHA-256. For each open issue carrying `agent-ready` we
+# hash the current body and extract the latest `agent-prep:verified` marker
+# here, in bash, from the already-fetched $issues JSON (no extra gh calls).
+# The classifier consumes the result as $agent_ready.
+agent_ready='{}'
+while IFS= read -r n; do
+  [ -z "$n" ] && continue
+  body="$(printf '%s' "$issues" | jq -r --argjson n "$n" \
+    '.[] | select(.number == $n) | .body // ""')"
+  current_sha="$(printf '%s' "$body" | shasum -a 256 | cut -c1-12)"
+  marker="$(printf '%s' "$issues" | jq -r --argjson n "$n" \
+    '.[] | select(.number == $n)
+     | (if (.comments | type) == "array" then .comments else [] end)
+     | map(select(
+         ((.body // "") | test("agent-prep:verified")) and
+         (.authorAssociation // "" | IN("OWNER","MEMBER","COLLABORATOR"))
+       ))
+     | sort_by(.createdAt) | last | (.body // "")')"
+  m_date="$(printf '%s' "$marker" | sed -nE \
+    's/.*agent-prep:verified[[:space:]]+date=([0-9]{4}-[0-9]{2}-[0-9]{2}).*/\1/p')"
+  # Reject impossible calendar dates so the jq classifier never calls
+  # fromdate on garbage and crashes the whole scan (Codex P2).
+  if [ -n "$m_date" ] && ! [[ "$m_date" =~ ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$ ]]; then
+    m_date=""
+  fi
+  m_sha="$(printf '%s' "$marker" | sed -nE \
+    's/.*body-sha=([0-9a-f]{12}).*/\1/p')"
+  agent_ready="$(printf '%s' "$agent_ready" | jq \
+    --argjson n "$n" --arg cs "$current_sha" --arg md "$m_date" --arg ms "$m_sha" \
+    '. + { ($n | tostring): { currentSha: $cs, markerDate: $md, markerSha: $ms,
+                              hasMarker: (($md | length) > 0) } }')"
+done < <(printf '%s' "$issues" | jq -r \
+  '.[] | select([.labels[].name] | index("agent-ready")) | .number')
+# --------------------------------------------------------------------------
+
 jq -n \
   --argjson issues "$issues" \
   --argjson prs "$prs" \
-  --arg asof "$as_of" '
+  --arg asof "$as_of" \
+  --argjson agent_ready "$agent_ready" '
   def days_since(d):
     (($asof + "T00:00:00Z" | fromdate) - (d | fromdate)) / 86400 | floor;
 
@@ -93,21 +135,41 @@ jq -n \
       | (any($labels[]; startswith("horizon:"))) as $has_horizon
       | (any($labels[]; . == "horizon:next")) as $has_next
       | (($body | test("(?m)^##[[:space:]]")) and (($body | length) >= 200)) as $shaped
+      | (([$iss.labels[].name] | index("agent-ready")) != null) as $is_ar
+      | ($agent_ready[($n | tostring)]) as $ar
+      | (
+          if $is_ar and ($ar != null) then
+            if   ($ar.hasMarker | not)             then "invalidated"
+            elif ($ar.markerSha != $ar.currentSha) then "invalidated"
+            elif (days_since($ar.markerDate + "T00:00:00Z") > 7) then "stale"
+            else "fresh" end
+          else "none" end
+        ) as $ar_state
       | {
           number: $n,
           title: $iss.title,
           bucket: (
             if   ($closing_ref or $all_checked)   then "auto_close"
             elif $partial_ref                     then "soft_resolved"
+            elif ($ar_state == "invalidated")     then "agent_ready_invalidated"
+            elif ($ar_state == "stale")           then "agent_ready_stale"
             elif ($updated_d > 90)                then "orphan"
             elif ($has_horizon | not)             then "untriaged"
             elif ($has_next and ($shaped | not))  then "unshaped_next"
             else "healthy" end
           ),
+          # Evidence strings must use only controlled fields (issue/PR numbers, dates, day counts).
+          # Never embed untrusted .title or .body content — evidence flows verbatim into gh issue comment bodies in maintain-apply.sh.
           evidence: (
             if   $closing_ref then "Merged PR #\($closing_prs[0].number) references this with a closing keyword"
             elif $all_checked then "All \($done_boxes) acceptance checkbox(es) ticked, none left open"
             elif $partial_ref then "Merged PR #\($mention_prs[0].number) mentions this without a closing keyword"
+            elif ($ar_state == "invalidated") then (
+              if ($ar.hasMarker | not)
+              then "agent-ready label present but no agent-prep verification comment from a trusted author found"
+              else "Issue body edited since agent-ready was verified on \($ar.markerDate) (body-sha mismatch)" end)
+            elif ($ar_state == "stale") then
+              "agent-ready verified \(days_since($ar.markerDate + "T00:00:00Z")) days ago, unused — past the 7-day window"
             elif ($updated_d > 90) then "Open \($updated_d) days; no merged-PR reference, no recent activity"
             elif ($has_horizon | not) then "No horizon:* label — needs triage"
             elif ($has_next and ($shaped | not)) then "horizon:next but body lacks shape (needs a ## heading and >=200 chars)"
@@ -118,11 +180,11 @@ jq -n \
 
   | {
       buckets: (
-        reduce ["auto_close","soft_resolved","orphan","untriaged","unshaped_next"][] as $b
+        reduce ["auto_close","soft_resolved","agent_ready_invalidated","agent_ready_stale","orphan","untriaged","unshaped_next"][] as $b
           ({}; . + { ($b): [ $classified[] | select(.bucket == $b) | {number,title,evidence} ] })
       ),
       counts: (
-        reduce ["auto_close","soft_resolved","orphan","untriaged","unshaped_next","healthy"][] as $b
+        reduce ["auto_close","soft_resolved","agent_ready_invalidated","agent_ready_stale","orphan","untriaged","unshaped_next","healthy"][] as $b
           ({}; . + { ($b): ([ $classified[] | select(.bucket == $b) ] | length) })
       )
     }
