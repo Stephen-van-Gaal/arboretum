@@ -32,5 +32,7 @@ component_values:
 # Branch prefixes the WIP detector should recognize.
 branch_prefixes: [feat, fix, docs, chore, refactor, spike]
 
-# GitHub native sub-issues — deferred behind a flag until feature is available.
-sub_issues_enabled: false
+# GitHub native sub-issues — feature-flagged; enabled in v0.8.0 (WS0 of
+# pipeline-overhaul mega-epic). Arboretum tooling treats issues as having
+# native sub-issues; downstream projects can opt out by overriding to false.
+sub_issues_enabled: true
