@@ -37,8 +37,27 @@ Poll three sources, then schedule a wake-up rather than blocking:
    config fact — see the design spec).
 3. PR state — a `MERGED`/`CLOSED` PR short-circuits the loop.
 
-Use `ScheduleWakeup` at ~900s. Cap at 3 consecutive empty polls (~45 min), then
-surface the absence and stop.
+**Self-pacing requires `/loop` mode.** `ScheduleWakeup` is the polling
+mechanism — but it only fires inside a `/loop` parent. Invoked standalone
+(`/land <N>`), `ScheduleWakeup` queues a wake-up the runtime cannot act on, so
+the loop never advances beyond the first pass. Behave accordingly:
+
+- **If invoked as `/loop /land <N>`** (or any other `/loop` wrapper):
+  perform one full pass (poll → triage → fix-if-needed → respond → resolve
+  threads), then call `ScheduleWakeup` at ~900s with the same `/loop /land <N>`
+  prompt. Cap at 3 consecutive empty polls (~45 min), then surface the absence
+  and stop.
+- **If invoked standalone (`/land <N>` with no `/loop` parent):**
+  do not call `ScheduleWakeup` — it would silently no-op. Perform one full
+  pass, then surface the remaining state to the human with three options:
+  (a) re-invoke `/land <N>` manually after re-reviews land,
+  (b) wrap in `/loop` for autonomous polling (`/loop /land <N>`),
+  (c) stop here and merge manually when ready.
+
+Detecting `/loop` context from inside the skill is not currently possible —
+inferring intent from the user-facing invocation form is the only signal.
+When `/finish` chains into `/land` automatically, treat that chain as
+standalone unless `/finish` itself was invoked under `/loop`.
 
 ### 3. Triage
 
