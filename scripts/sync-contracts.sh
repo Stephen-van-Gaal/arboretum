@@ -56,6 +56,12 @@ output="# contracts.yaml — version pins for contract test enforcement
 #   1. Each spec's Requires/Provides tables
 #   2. Each definition's ## Version header
 
+# Live per-file seam contracts (added by WS3b per WS3a OQ2 — issue #301).
+# Each .contract.md file under this directory has its own \`version:\` field.
+# Emitted as a literal top-level key to preserve it across regenerations
+# (this generator only derives the \`specs:\` tree from spec frontmatter).
+seam-contracts: docs/contracts/
+
 specs:"
 
 found_any=false
