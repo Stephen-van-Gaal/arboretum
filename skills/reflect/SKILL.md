@@ -1,18 +1,19 @@
 ---
 name: reflect
 owner: workflow-management
-description: "Lightweight learning interview at natural stopping points — post-merge, post-spike, or post-incident. Captures lessons while context is fresh. Suggested by /cleanup but never bundled into it."
+description: "Post-cycle reflection — surfaces agent observations on workflow, process, and capability patterns; captures follow-ups and next-up. Replaces the prior user-interview format."
 allowed-tools:
   - Read
   - Write
   - Edit
+  - Bash
   - AskUserQuestion
 layer: 0
 ---
 
 # Reflect
 
-A short, prompted interview to extract lessons at natural stopping points. The value isn't the log — it's building the habit of pausing to reflect while the context is fresh.
+The end of a ship cycle, with the agent's freshly-fired build context still available. The agent surfaces observations the user wouldn't have time to reconstruct; the user reacts. The asymmetry of attention is the central design — see WS1 design D7 (`docs/superpowers/specs/2026-05-22-pipeline-overhaul-ws1-build-orchestrator-design.md`).
 
 ## When to use
 
@@ -39,17 +40,39 @@ Summarize briefly: "You just merged PR #N: <title>. Let's capture what you learn
 
 If there's no recent merge (user invoked manually), ask: "What were you just working on?"
 
-### Step 2: Interview
+### Step 2: Surface agent observations + abbreviated reaction
 
-Ask these questions **one at a time**. Keep it conversational, not formal. Skip any that don't apply.
+The *agent* has the build-cycle context the user doesn't have time to reconstruct. The agent surfaces; the user reacts.
 
-1. **What surprised you?** — anything that didn't work the way you expected, or was easier/harder than anticipated. Surprises are the highest-value lessons because they reveal gaps between your mental model and reality.
+#### Step 2a — Agent-surfaced observation report (primary, always present)
 
-2. **What would you do differently?** — not regret, but informed hindsight. If you started this task over with what you know now, what would change? This might be a different approach, a different sequence, or a different scope.
+Produce a structured report grouped under three categories. Aim for **3–5 observations total** across all three categories — not 3–5 per category. Empty categories are stated as such ("Workflow: nothing notable this cycle"), never padded.
 
-3. **What should you remember for next time?** — a concrete takeaway. This could be a technique, a gotcha, a pattern, or a decision rationale that would help future-you (or someone like you) working on a similar problem.
+- **Workflow** — what was friction-y this cycle (skill/tool round-trips, repeated workarounds, places the agent had to guess at convention).
+- **Process** — patterns worth a durable update (skill behavior worth changing, a missing convention, a CLAUDE.md rule that fired or should have fired).
+- **Capability** — patterns in the user's work — strengths to lean into, gaps to consider. Honest, non-performative; the agent is the one place a critical observation lands without social cost.
 
-4. **Which issue should be queued as `next-up` for the next session?** — ask for an issue number (or 'skip'). If the user gives a number, invoke `/handoff <N> --completed`. The `/handoff` skill is the canonical writer — it manages the GitHub `next-up` label and refreshes the local cache; the `--completed` flag keeps it in completion mode (label only — no note draft, no unchecked-box enforcement). This skill does not call `gh` directly for next-up label or cache writes (Step 1 still uses `gh pr list` for read-only context). If the user skips, move on silently.
+Source material: the conversation history (especially the user's redirects and corrections), the commits on this branch, the PR review comments, any explicit signals in `/handoff` summaries.
+
+Render as a single Markdown block under the heading `## Observations`. Save to the same destinations Step 3 lists (memory or learning log) once the user has reacted.
+
+#### Step 2b — Abbreviated reaction prompt (secondary, skippable)
+
+After the observations, ask one consolidated question via `AskUserQuestion`:
+
+> *"Anything to add, push back on, or want me to capture as a follow-up?"*
+
+Free-text response. The user can skip with no consequence — the observation report stands on its own as the durable output of this skill.
+
+#### Step 2c — Follow-up capture (conditional)
+
+If the user names follow-ups in their reaction, **or** if the agent's own observations include a follow-up candidate (a workflow-friction or process pattern worth filing), offer to invoke `/roadmap agent-prep` for each. Single-pass — propose all candidates at once, capture the user's yes/no per item, file the ones they accept. No nagging on declines.
+
+#### Step 2d — Q5: next-up (preserved, mandatory)
+
+Ask exactly as before: "Which issue should be queued as `next-up` for the next session?" — request an issue number (or 'skip'). If the user gives a number, invoke `/handoff <N> --completed`. The `/handoff` skill is the canonical writer — it manages the GitHub `next-up` label and refreshes the local cache; the `--completed` flag keeps it in completion mode (label only — no note draft, no unchecked-box enforcement). This skill does not call `gh` directly for next-up label or cache writes (Step 1 still uses `gh pr list` for read-only context).
+
+If the user skips, **no `next-up` is queued** — declining the reflection is a signal the session is *done*, not that another one is queued. This is also the canonical handoff invocation in the ship tail (D8) — `/finish` and `/cleanup` no longer prompt for next-up separately.
 
 ### Step 3: Save insights
 
@@ -83,9 +106,10 @@ Keep it brief:
 
 ## Important
 
-- **This is not a gate.** It's a prompt. If the user doesn't want to reflect, respect that immediately.
-- **Keep it lightweight.** Four questions max. No forms, no required fields, no ceremony.
-- **The habit matters more than the log.** Even if nothing gets written down, the pause to think has value.
-- **SRP:** This skill handles reflection only. `/cleanup` handles housekeeping. `/handoff` manages the GitHub `next-up` label. They are separate responsibilities, and the fourth interview question delegates to `/handoff` rather than duplicating the GH-write logic.
+- **This is not a gate.** It's a prompt. If the user doesn't want to reflect, respect that immediately — but the observation report (Step 2a) is the agent's contribution and lands regardless of whether the user reacts.
+- **Keep it lightweight.** 3–5 observations total across all three categories, one reaction prompt, optional follow-up capture, the mandatory Q5. No forms, no required fields, no ceremony.
+- **The agent surfaces; the user reacts.** The asymmetry of attention (D7) is the design — the agent has the build-cycle context the user does not, so the burden of noticing lands with the agent, not the user.
+- **SRP:** This skill handles reflection only. `/cleanup` handles housekeeping. `/handoff` manages the GitHub `next-up` label. They are separate responsibilities — Q5 delegates to `/handoff` rather than duplicating the GH-write logic, and `/reflect` is the single canonical handoff invocation in the ship tail (D8).
+- **Complementary to `explanatory-output-style`.** That plugin surfaces inline insights during every response (per-response cadence); this skill is the per-cycle aggregate surface (post-ship cadence). The two are complementary; no code reuse between them.
 
 $ARGUMENTS

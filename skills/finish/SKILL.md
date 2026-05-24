@@ -124,28 +124,17 @@ After the PR is created, invoke `/land <pr-number>` to drive it to merge-ready
 (poll CI + reviewers, triage and action feedback, tiered merge handoff). `/land`
 runs its own asynchronous loop; `/finish` does not block on it.
 
-### Step 6.5: Capture session handoff
-
-After the PR is created, prompt once:
-
-> "Which issue should be queued as `next-up` for the next session? (Issue number, or 'skip')"
-
-If the user gives a number, invoke `/handoff <N> --completed`. The `/handoff` skill is the canonical writer — it manages the `next-up` GitHub label, enforces exclusivity, and refreshes the local cache. The `--completed` flag keeps it in completion mode (label only — no note draft, no unchecked-box enforcement). Do not call `gh` directly here.
-
-If the user declines or skips, move on silently. This step is **advisory**: never block the rest of the flow.
-
-If `gh` is missing or unauthenticated, `/handoff` will surface its own install/auth instructions and refuse — surface that error to the user and continue.
-
 ### Step 7: Suggest next steps
 
 After the PR is created:
 > "PR created: <url>
 >
-> After it's approved and merged, run `/cleanup` to switch to main, pull, and delete this branch."
+> After it's approved and merged, run `/cleanup` to switch to main, pull, and delete this branch. The ship tail is `/cleanup` → `/reflect` → `/handoff`; `/reflect` Q5 is the canonical handoff invocation (queues `next-up` against an issue that is actually-open post-merge)."
 
 ## Important
 
-- This skill orchestrates existing skills (`/consolidate`, `/security-review`, `/pr`, `/land`, `/handoff`). It doesn't duplicate their internals — it calls them in the right order.
+- This skill orchestrates existing skills (`/consolidate`, `/security-review`, `/pr`, `/land`). It doesn't duplicate their internals — it calls them in the right order.
+- **`/handoff` is no longer invoked here** (WS1 D8). The pre-merge handoff in the prior Step 6.5 queued `next-up` against the issue the PR was about to close — a race that resolved incoherently. Handoff now fires post-merge from `/reflect` Q5, which is the single canonical handoff invocation in the ship tail.
 - Steps are sequential and each depends on the previous one. Don't skip ahead.
 - If the user wants to create a PR without reconciling spec status via `/consolidate` or running health checks, let them — this is guidance, not a gate. But note what was skipped.
 - For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; skip security review and go straight to health check and PR.
