@@ -172,6 +172,115 @@ PY
   fi
 fi
 
+# ── Pipeline state (WS9 D7) ──────────────────────────────────────────
+# Three lines: Stage (from active-stage-cache); Last action (most recent
+# stage-transition log comment); Last session (most recent `summary`
+# action log comment). All three are independent — each shows only if
+# its data is available.
+STAGE_CACHE="$PROJECT_DIR/.arboretum/active-stage-cache.json"
+LOG_CACHE="$PROJECT_DIR/.arboretum/log-comments-cache.json"
+
+if [ -f "$STAGE_CACHE" ] && command -v python3 >/dev/null 2>&1; then
+  pipeline_block=$(python3 - "$STAGE_CACHE" "$LOG_CACHE" <<'PY'
+import json, os, re, sys
+# Defense in depth: the cache writer (refresh-stage-cache.sh) already
+# scrubs ASCII control characters from author-controlled strings, but
+# if the cache was hand-edited or written by an older script version,
+# scrub again here so the boot banner can never render terminal-escape
+# sequences from remote input. Same pattern as session-start.sh's
+# next-up block (which scrubs next-cache.json's content for the same
+# reason).
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+def scrub(s):
+    return _CTRL.sub("", s) if isinstance(s, str) else s
+try:
+    sc = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+lines = []
+if sc.get("stage"):
+    lines.append(f"Stage: {scrub(sc['stage'])}")
+# Log-comments cache may be absent (first session before any logging happened).
+try:
+    lc = json.load(open(sys.argv[2]))
+except Exception:
+    lc = []
+
+# `dispatched` and `repair` are NOT in the transition set — see WS9 D7:
+# Last action surfaces stage lifecycle, not mid-stage handoffs or repair audit events.
+transition_actions = {"entered", "exited", "skipped", "re-entered"}
+
+def parse(c):
+    """Extract (ts, stage, action, rest) from a log comment, or None."""
+    return re.search(r"^- (\S+) — (\S+) (\S+)(?:, (.+))?$", c.get("body",""), re.M)
+
+last_transition = None
+last_summary = None
+for c in lc:
+    m = parse(c)
+    if not m: continue
+    ts, stage, action, rest = m.group(1), m.group(2), m.group(3), m.group(4) or ""
+    if action in transition_actions:
+        last_transition = (ts, stage, action, rest)
+    elif action == "summary":
+        last_summary = (ts, stage, action, rest)
+if last_transition:
+    ts, stage, action, rest = last_transition
+    extra = f", {scrub(rest)}" if rest else ""
+    lines.append(f"Last action: {scrub(stage)} {scrub(action)}{extra} ({scrub(ts)})")
+if last_summary:
+    ts, _, _, rest = last_summary
+    # D5 reader contract: summary may be quoted (when it contains `, `,
+    # `"`, `\`, or `\n`) or unquoted (when it's a plain string). The
+    # writer only quotes when forced — typical summaries with spaces but
+    # no comma render unquoted. Try quoted first; fall back to unquoted.
+    text = None
+    m = re.search(r'summary:\s*"((?:[^"\\]|\\.)*)"', rest)
+    if m:
+        # Stateful left-to-right unescape — sequential `.replace()` calls
+        # cannot correctly decode `C:\\new` (literal backslash + `n`)
+        # because they can't distinguish `\n` (escape sequence) from `\`
+        # + literal `n` after the writer has doubled the backslash.
+        # Walk once and consume escape pairs atomically. (Codex R2-3.)
+        raw = m.group(1)
+        out = []
+        i = 0
+        while i < len(raw):
+            if raw[i] == '\\' and i + 1 < len(raw):
+                c = raw[i+1]
+                if c == 'n':
+                    out.append(' ')   # D5: collapse to space (single-sentence summary)
+                elif c == '\\':
+                    out.append('\\')
+                elif c == '"':
+                    out.append('"')
+                else:
+                    out.append(raw[i:i+2])  # unknown escape — preserve verbatim
+                i += 2
+            else:
+                out.append(raw[i])
+                i += 1
+        text = ''.join(out)
+    else:
+        # Unquoted: split rest on `, ` (safe because the writer only
+        # quotes when value contains `, `, so unquoted values never
+        # contain the delimiter).
+        for pair in rest.split(", "):
+            if pair.startswith("summary:"):
+                text = pair[len("summary:"):].strip()
+                break
+    if text is None:
+        text = rest
+    lines.append(f"Last session: {scrub(text)} ({scrub(ts)})")
+print("\n".join(lines))
+PY
+)
+  if [ -n "$pipeline_block" ]; then
+    [ -n "$output" ] && output+=$'\n'
+    output+="$pipeline_block"
+  fi
+fi
+
 # ── Arboretum update check ───────────────────────────────────────────
 # Surface a one-line notice if the installed plugin is behind the latest
 # published release. Cache at .arboretum/update-cache.json; refreshed by

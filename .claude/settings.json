@@ -4,11 +4,17 @@
       "Bash(bash scripts/health-check.sh *)",
       "Bash(bash scripts/generate-register.sh *)",
       "Bash(bash scripts/validate-cross-refs.sh *)",
+      "Bash(bash scripts/log-stage.sh *)",
+      "Bash(bash scripts/refresh-stage-cache.sh *)",
       "Bash(git status *)",
       "Bash(git rev-parse *)",
       "Bash(git merge-base *)",
       "Bash(git branch --merged *)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/statusline.sh"
   },
   "hooks": {
     "SessionStart": [

@@ -212,6 +212,27 @@ The `handoff-done` marker tells the Stop and SessionEnd hooks a handoff was capt
 
 When `DRY_RUN=1`: print the `gh issue comment` command and the full comment body that would be posted (including the HTML marker and header the script prepends), but do not run the script, do not post the comment, and do not write the marker file.
 
+### Step 5c: Post the pipeline-state `summary` log entry (D8)
+
+After Step 5b (pause mode) — and also in completion mode immediately after Step 5 — post a journey-log comment carrying a one-sentence narrative of what this session accomplished. The action is `summary` (per WS9 D5 vocab — distinct from the `entered`/`exited` lifecycle that the `/handoff` skill itself logs).
+
+The summary text is:
+- **Pause mode:** the first non-blank line of `$NOTE_FILE` content (after the `→ Next action:` line). Trim to ≤ 200 chars, single line.
+- **Completion mode:** a one-sentence narrative the agent writes from session context (no user approval needed — single sentence, easy to overwrite next session).
+
+Invocation:
+
+```bash
+bash "$PROJECT_DIR/scripts/log-stage.sh" "$N" /handoff summary \
+  "completion-mode=$([ "$COMPLETED" = "1" ] && echo true || echo false)" \
+  "queued-next-up=$N" \
+  "summary=$SUMMARY_TEXT"
+```
+
+If `DRY_RUN=1`: print the `log-stage.sh` command and the rendered log line, do not invoke the script.
+
+**Why this matters:** WS9 D7's boot banner reads the most-recent `summary` log entry to answer "what did the last session accomplish?". Without this step, the banner's "Last session" line falls back to whatever last `summary` log entry exists (potentially weeks stale or missing).
+
 ### Step 6: Refresh the local cache
 
 So the next session boot picks up the change immediately:
@@ -241,5 +262,6 @@ For example: *"Queued #155 (Session handoff…) as next-up and posted the sessio
 - **Dry-run.** `/handoff 155 --dry-run` prints the GH calls, the drafted note, the files that would be `wip:`-committed, the commit message, and the push target — and mutates nothing. No commit, no push, no comment, no label, no marker file.
 - **No stash, ever.** The only outcomes for a dirty tree in pause mode are: commit+push (on confirmation) or abort (on decline). A stash is never offered because it is machine-local and cannot survive a machine switch.
 - **Completion mode bypasses the note and tree steps.** When invoked with `--completed` (by `/finish`, `/cleanup`, `/reflect`), or when the tree is clean and the plan has no unchecked boxes, Steps 3b–3d and 5b are skipped entirely. No note is drafted, no tree enforcement runs.
+- **Two writes per handoff.** `/handoff` writes both the human-readable handoff comment (Step 5b) AND a machine-parseable `summary` log entry (Step 5c). The two surfaces are intentional: humans read the handoff thread; the boot banner reads the `summary` log entry. Both must succeed for the next session's orientation to be complete.
 
 $ARGUMENTS
