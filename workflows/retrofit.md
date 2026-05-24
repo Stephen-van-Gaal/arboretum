@@ -100,5 +100,4 @@ Return to step 3 and pick the next highest-pain area. Repeat until governance co
 
 ## Hands off to
 
-- [Feature workflow](feature.md) — to add new behaviour to the governed codebase
-- [Bug-fix workflow](bug-fix.md) — to fix bugs with spec awareness
+- [Build workflow](build.md) — to add behaviour, fix bugs, refactor, or update docs in the governed codebase. The build workflow's `/design` Branch 1 mode dispatch picks the right pre-build understanding step for each kind of change.

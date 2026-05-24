@@ -20,13 +20,12 @@ This project uses arboretum workflows. See `workflows/README.md` for details.
 
 | Workflow | When to use |
 |---|---|
-| **feature** | Adding or changing behaviour |
-| **bug-fix** | Something doesn't work as specified |
-| **explore** | Need to learn before you can write a spec |
+| **build** | Adding, changing, fixing, refactoring, or documenting |
+| **explore** | Need to learn before you can write a design spec |
 
 ### Development rules
 
-- **Spec-first gate:** Code modification is allowed when files' `# owner:` headers point to a topic with either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md` (Path B; the governed spec will be created by `/consolidate` before PR). The state machine has three states (`draft / active / stale`); transitions are automatic via `/consolidate` and `/health-check`.
+- **Spec-first gate:** Code modification is allowed when files' `# owner:` headers point to a topic with either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md`. Under v2 (unified workflow), governed specs are written **only** by `/consolidate` — no workflow step hand-authors one. The state machine has three states (`draft / active / stale`); transitions are automatic via `/consolidate` and `/health-check`.
 - **Ownership:** Every source file includes `# owner: <spec-name>` as its first comment line.
 - **Permitted without spec change:** implementation-detail refactoring (preserves behaviour, tests pass), patch fixes (code didn't match spec), supplementary test additions.
 - **Draft mode:** During early development when documents are `draft`, note ambiguities and continue rather than stopping. Stop only for contradictions or infeasibility.

@@ -531,7 +531,7 @@ if [ "$LAYER" -lt 1 ]; then
   # Count specs to suggest Layer 1
   spec_count=0
   if [ -d "$PROJECT_DIR/docs/specs" ]; then
-    spec_count=$(find "$PROJECT_DIR/docs/specs" -name "*.spec.md" 2>/dev/null | wc -l | tr -d ' ')
+    spec_count=$(find "$PROJECT_DIR/docs/specs" -type d -name '_*' -prune -o -name "*.spec.md" -type f -print 2>/dev/null | wc -l | tr -d ' ')
   fi
   if [ "$spec_count" -ge 3 ]; then
     output+=$'\n'"[Layer Suggestion] $spec_count specs detected at Layer 0."

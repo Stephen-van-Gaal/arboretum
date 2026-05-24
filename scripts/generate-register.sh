@@ -52,7 +52,7 @@ fi
 spec_files=()
 while IFS= read -r f; do
   [ -n "$f" ] && spec_files+=("$f")
-done < <(find "$SPECS_DIR" -name "*.spec.md" -type f 2>/dev/null | sort)
+done < <(find "$SPECS_DIR" -type d -name '_*' -prune -o -name "*.spec.md" -type f -print 2>/dev/null | sort)
 
 if [ ${#spec_files[@]} -eq 0 ]; then
   echo "No *.spec.md files found in $SPECS_DIR" >&2

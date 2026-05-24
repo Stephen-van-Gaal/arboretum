@@ -56,16 +56,14 @@ bin/arboretum bootstrap ~/Projects/my-project
 
 ### Workflows
 
-Seven workflows cover the full development lifecycle. See `workflows/README.md` for details.
+Five workflows cover the full development lifecycle. See `workflows/README.md` for details.
 
 ```
-new-project      /init-project → /architect → [spike → /consolidate]* → build
-feature          /start → survey → /design → plan → build → /finish → /cleanup → /reflect
-bug-fix          /start → investigate → classify → fix → /finish → /cleanup → /reflect
-explore          /start → spike → document → decide (→ feature or → another spike)
+new-project      /arboretum:init → /architect → [spike → /consolidate]* → build
+build            /start → [/design] → /build → /finish → /security-review → /pr → /land → /cleanup → /reflect
+explore          /start → spike → document → decide (→ build or → another spike)
 publish          /publish (review → strip → sync)
-refactor         /start → orient → scope → test coverage → restructure → verify → /finish → /cleanup
-documentation    /start → branch → edit → verify refs → /pr → /cleanup
+retrofit         assess → bootstrap → triage → govern-one → [expand]*
 ```
 
 ### Skills
@@ -93,18 +91,17 @@ Arboretum defines abstract capabilities that workflows need. Each has a current 
 | Build (parallel) | `superpowers:subagent-driven-development` | Build (alternative) |
 | Debug | `superpowers:systematic-debugging` | Investigation |
 
-## Two-Path Governance
+## The Unified Workflow
 
-Arboretum supports two paths to a governed spec:
+Arboretum v2 has one development workflow — `build` — covering features, bug fixes, refactors, and documentation changes. The only structural fork is `/start`'s triage: agent-target (fast lane, no design spec) vs. everything-else (design spec via `/design` → plan → build → `/consolidate`).
 
-- **Path A (spec-first):** governed spec (status `draft` → `active`) → tests + code → PR.
-- **Path B (design-first):** brainstorm → design spec (`docs/superpowers/specs/`) → plan → tests → code → `/consolidate` → governed spec (status `draft` → `active`) → PR.
+Governed specs at `docs/specs/` are written **only** by `/consolidate`, which runs inside `/finish` after the build is complete. The legacy spec-first-vs-design-first selector is gone — under v2 there's just one consistent flow with mode dispatch inside `/design` for different change kinds.
 
-Both paths land at the same end state: every PR has an owning governed spec at status `active`. The cross-path invariants are stated centrally in `workflows/README.md ## Cross-path invariants` — those rules hold regardless of which path is taken.
+The workflow invariants are stated centrally in `workflows/README.md ## Workflow invariants` — five rules that hold regardless of triage classification.
 
 ## Development Rules
 
-- **Spec-first gate:** Code modification is allowed when the changed files' `# owner:` headers point to a recognized topic — either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md` (Path B). On Path A the governed spec exists before the code; on Path B the design spec is the in-flight authority and `/consolidate` materializes the governed spec at the same topic name before PR.
+- **Spec-first gate:** Code modification is allowed when the changed files' `# owner:` headers point to a topic that has either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md` (the governed spec will be created by `/consolidate` at `/finish` time). Under v2, `/consolidate` is the sole writer of governed specs — no workflow step hand-authors one.
 - **Ownership:** Every source file includes `# owner: <spec-name>` as its first comment line.
 - **Permitted without spec change:** implementation-detail refactoring (preserves behaviour, tests pass), patch fixes (code didn't match spec), supplementary test additions.
 

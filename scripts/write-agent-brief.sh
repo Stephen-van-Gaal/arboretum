@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: workflow-management
+# owner: workflow-unification
 # write-agent-brief.sh — Write a minimal agent-target task brief to
 # .arboretum/agent-briefs/<issue>.md with the S2 frontmatter shape /build
 # enforces. The brief replaces the design spec for agent-target work.

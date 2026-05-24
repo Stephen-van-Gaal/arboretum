@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: workflow-management
+# owner: workflow-unification
 # _smoke-test-skill-prose-v2.sh — Prose-regression checks for the v2-only
 # sections of /start and /design. These are structural invariants —
 # accidental edits that break the v2 routing will be caught here.
@@ -158,5 +158,66 @@ SECTION_V2_CONS=$(awk '
 echo "$SECTION_V2_CONS" | grep -q "always \`active\`" \
   || fail "case 22 — /consolidate v2.1 does not state status is always \`active\`"
 ok "case 22 — /consolidate v2.1 collapses status to always-active"
+
+# === PR4 cutover invariants ===
+
+# Case 23: workflows/build.md exists with the right frontmatter
+[ -f "workflows/build.md" ] || fail "case 23 — workflows/build.md missing"
+grep -q "^name: build$" workflows/build.md \
+  || fail "case 23 — workflows/build.md frontmatter missing 'name: build'"
+ok "case 23 — workflows/build.md present"
+
+# Case 24: workflows/build.md declares the unified stage sequence
+grep -q "^### 1\. Triage" workflows/build.md \
+  || fail "case 24 — workflows/build.md missing triage section"
+grep -q "^### 2\. Design" workflows/build.md \
+  || fail "case 24 — workflows/build.md missing design section"
+grep -q "^### 5\. Security review" workflows/build.md \
+  || fail "case 24 — workflows/build.md missing security-review section"
+ok "case 24 — workflows/build.md has unified stage sequence"
+
+# Case 25: the 4 legacy workflow docs are absent
+for legacy in feature bug-fix refactor documentation; do
+  [ ! -f "workflows/$legacy.md" ] || fail "case 25 — legacy workflow doc still present: workflows/$legacy.md"
+done
+ok "case 25 — 4 legacy workflow docs absent"
+
+# Case 26: pipeline.workflow default is v2
+[ "$(bash scripts/read-pipeline-flag.sh)" = "v2" ] \
+  || fail "case 26 — pipeline.workflow is not v2"
+ok "case 26 — pipeline.workflow default is v2"
+
+# Case 27: two-path-governance.spec.md is no longer a live spec
+[ ! -f "docs/specs/two-path-governance.spec.md" ] \
+  || fail "case 27 — two-path-governance.spec.md is still in docs/specs/ (should be in _deprecated/)"
+[ -f "docs/specs/_deprecated/two-path-governance.spec.md" ] \
+  || fail "case 27 — _deprecated/two-path-governance.spec.md missing"
+ok "case 27 — two-path-governance deprecated via relocation"
+
+# Case 28: workflow-unification.spec.md exists with status active
+[ -f "docs/specs/workflow-unification.spec.md" ] \
+  || fail "case 28 — workflow-unification.spec.md missing"
+grep -q "^status: active$" docs/specs/workflow-unification.spec.md \
+  || fail "case 28 — workflow-unification.spec.md status is not active"
+ok "case 28 — workflow-unification.spec.md present and active"
+
+# Case 29: workflow-management.spec.md is gone (merged into workflow-unification)
+[ ! -f "docs/specs/workflow-management.spec.md" ] \
+  || fail "case 29 — workflow-management.spec.md still present (should be merged into workflow-unification)"
+ok "case 29 — workflow-management.spec.md merged into workflow-unification"
+
+# Case 30: no # owner: workflow-management headers remain in live source
+if grep -rln "^# owner: workflow-management" --include="*.md" --include="*.sh" --include="*.yaml" workflows/ skills/ scripts/ .claude/skills/ 2>/dev/null | head -1; then
+  fail "case 30 — at least one source file still has '# owner: workflow-management'"
+fi
+ok "case 30 — no orphan workflow-management owner headers"
+
+# Case 31: governance/architecture docs no longer reference Path A/B
+for f in CLAUDE.md CLAUDE.public.md docs/templates/CLAUDE.md docs/templates/PRINCIPLES.md docs/ARCHITECTURE.md; do
+  if grep -q "Path A\|Path B" "$f"; then
+    fail "case 31 — $f still references Path A or Path B"
+  fi
+done
+ok "case 31 — no Path A/B references in project memory or architecture docs"
 
 echo "ALL PASS: skill-prose v2 invariants"

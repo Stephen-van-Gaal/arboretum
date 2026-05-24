@@ -1,6 +1,6 @@
 ---
 name: design
-owner: workflow-management
+owner: workflow-unification
 description: Wrapper skill that orchestrates the design phase — runs external brainstorming to produce a design spec. On Path A, also consolidates into a governed spec at status `draft`; on Path B, exits to planning with the design spec as in-flight authority (governed spec is born later at `/finish`). Use at the start of planned work.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
@@ -143,7 +143,7 @@ Once the governed spec exists (Path A) or the design spec is approved (Path B), 
 
 Hand the plan capability the project context it needs:
 
-- **Workflow stage map** — read `workflows/feature.md` (or the active workflow). The plan must respect Build → `/finish` → `/consolidate` → `/cleanup`, not assume the spec is `active` before code is written. Path B plans in particular must understand that the governed spec is *born* at `/finish`, not pre-build.
+- **Workflow stage map** — read the active workflow doc (under v2, `workflows/build.md`; under v1, the workflow matching the change kind). The plan must respect Build → `/finish` → `/consolidate` → `/cleanup`, not assume the spec is `active` before code is written. Path B plans in particular must understand that the governed spec is *born* at `/finish`, not pre-build.
 - **Test taxonomy** — `CLAUDE.md ## Testing` defines the project's tiers (unit, contract, integration, domain). Plan steps should pair code work with the appropriate test tier.
 - **Consolidate-last lifecycle** — the plan should not include a "promote spec to active" step; that flips automatically.
 - **Plan location** — arboretum plans live in `docs/plans/YYYY-MM-DD-<topic>.md` (per `CLAUDE.md` package structure). State this explicitly when invoking the plan capability: `superpowers:writing-plans` otherwise defaults to `docs/superpowers/plans/`, which is not arboretum's convention.

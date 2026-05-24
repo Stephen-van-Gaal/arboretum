@@ -40,8 +40,12 @@ sub_issues_enabled: true
 # Pipeline overhaul flags — WS2 of the pipeline-overhaul mega-epic
 # (#295 / docs/superpowers/specs/2026-05-20-pipeline-overhaul-design.md).
 #
-# `workflow: v1` — current behaviour (Path A/B routing in /start).
-# `workflow: v2` — unified workflow with agent-target triage fork.
-# Default stays v1 throughout the WS2 build; flip to v2 per-surface at cutover.
+# `workflow: v2` — unified workflow with agent-target triage fork (the
+#                  default under arboretum v0.14+; sole writer of governed
+#                  specs is /consolidate per design D3).
+# `workflow: v1` — legacy Path A/B routing in /start (historical fallback;
+#                  the v1 prose remains in each skill's SKILL.md under
+#                  conditional sections for projects that explicitly opt
+#                  back to v1).
 pipeline:
-  workflow: v1
+  workflow: v2

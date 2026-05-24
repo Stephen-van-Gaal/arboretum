@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: workflow-management
+# owner: workflow-unification
 # _smoke-test-agent-target-e2e.sh — End-to-end smoke test of the agent-target
 # pipeline at the shell-seam layer: flag is v2, brief is written, /build's
 # S2 helper accepts the brief, all five required S2 fields parse correctly.

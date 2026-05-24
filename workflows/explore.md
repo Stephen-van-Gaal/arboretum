@@ -15,14 +15,14 @@ You don't know enough to write a spec yet. Spike, learn, and either produce a sp
 - You're not sure how to decompose a problem into specs
 - You want to prototype before committing to a design
 
-## Spike vs. Path B — what are you producing?
+## Spike vs. build — what are you producing?
 
-The explore workflow accommodates both *spikes* (output is knowledge) and the early stages of *Path B* (output will eventually be shipped code). The decision rule is **"what artifact emerges at the end?"**
+The explore workflow accommodates both *spikes* (output is knowledge) and the early stages of a build that will eventually ship. The decision rule is **"what artifact emerges at the end?"**
 
 - **Spike:** the deliverable is a *findings document*. Code (if any) is reference-only and never owned by a spec. Branch is `spike/*` and gets deleted after the findings are captured.
-- **Path B:** the deliverable is *shipped code* with an owning governed spec. Branch is `feat/*` and merges.
+- **Pre-build exploration:** the deliverable will eventually become *shipped code* with an owning governed spec. Branch is `feat/*` and merges via the build workflow.
 
-If you don't know yet, start as a spike — it's easier to graduate to Path B later than to retroactively delete code that turned out to be exploratory.
+If you don't know yet, start as a spike — it's easier to graduate to a build later than to retroactively delete code that turned out to be exploratory.
 
 ## Stages
 
@@ -37,7 +37,7 @@ If you don't know yet, start as a spike — it's easier to graduate to Path B la
 | 1. `/start` | the question, codebase | issue framed as a question (not a deliverable) | GitHub issue | — |
 | 2a. Spike | code, docs, library / API surface | throwaway working code | `spikes/` or `spike/*` branch | (throwaway — never owned) |
 | 2b. Document | spike outcome | findings (what tried / what worked / what now known / next question) | issue body or markdown file | ephemeral |
-| 3. Decide | findings | exit choice (continue / Path A / Path B / file / close) | issue + branch state | — |
+| 3. Decide | findings | exit choice (continue / build / file / close) | issue + branch state | — |
 
 ### 1. Start — `/start`
 
@@ -70,24 +70,23 @@ Write down what you learned. This doesn't need to be formal — a few sentences 
 
 ### 3. Decide
 
-Document your findings, then choose one of five options:
+Document your findings, then choose one of four options:
 
 1. **Continue exploring** — more knowledge needed. Keep spiking on the same branch or start a new spike.
-2. **Transition to Path B** — enough knowledge to start code, but design still emerging. Document, then start a `feat/*` branch via `/design`.
-3. **Transition to Path A** — enough knowledge to write the governed spec upfront. Document, then start with `/design` → governed spec → plan → build.
-4. **File for later** — worth doing, but not now. Capture findings as a tracked GitHub issue, close the spike branch.
-5. **Close (no action)** — the spike answered "no, not worth doing" or "no change needed." Close the branch with the findings retained as a record.
+2. **Transition to the build workflow** — enough knowledge to start code. Document, then start a `feat/*` branch via `/start` → `/design`. `/design`'s Branch 1 dispatch picks the appropriate mode (brainstorm / investigate / coverage-baseline / none) based on what the spike taught you.
+3. **File for later** — worth doing, but not now. Capture findings as a tracked GitHub issue, close the spike branch.
+4. **Close (no action)** — the spike answered "no, not worth doing" or "no change needed." Close the branch with the findings retained as a record.
 
 Re-invoke `/start` with the chosen next step. The findings document remains as historical record regardless of the choice.
 
 ## Exit criteria
 
 One of:
-- A governed spec in `docs/specs/` ready for the feature workflow
+- A design spec at `docs/superpowers/specs/` ready to enter the build workflow at `/design`
 - A documented decision not to proceed (in the GitHub issue)
 - A clear next question for another spike cycle
 
 ## Transitions
 
-- **→ feature:** When a spike produces enough understanding, `/consolidate` findings and enter the feature workflow at the design step.
-- **← feature:** If during a feature's survey/design you discover unknowns, enter this workflow to spike. Return to the feature workflow via `/consolidate`.
+- **→ build:** When a spike produces enough understanding, `/consolidate` findings into a design spec and enter the build workflow at `/design`.
+- **← build:** If during `/design` you discover the question is too open to specify, enter this workflow to spike. Return to `build` via `/consolidate`.

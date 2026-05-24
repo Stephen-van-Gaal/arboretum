@@ -1,6 +1,6 @@
 ---
 name: build
-owner: workflow-management
+owner: workflow-unification
 description: "Thin orchestrator for the build stage. Reads S2 input frontmatter from the design spec; dispatches Branch 2 (TDD assessment) and Branch 3 (implementation mode) by reading frontmatter values; writes pipeline-state via WS9's helper; exits with explicit success/escape-hatch status. Use as the build-stage entry point after /design exits."
 allowed-tools:
   - Read

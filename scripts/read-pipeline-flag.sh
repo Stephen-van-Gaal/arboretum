@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: workflow-management
+# owner: workflow-unification
 # read-pipeline-flag.sh — Print the active pipeline.workflow value (v1 or v2).
 # Reads ./roadmap.config.yaml in the current working directory.
 # Exits 0 with "v1" if the pipeline block or workflow key is absent.

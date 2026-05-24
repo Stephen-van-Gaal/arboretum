@@ -79,6 +79,6 @@ Arboretum has two customers: the domain expert and the LLM that helps them. Ever
 
 ---
 
-## Two-path governance
+## The unified workflow
 
-Arboretum supports two paths to a governed spec: **Path A (spec-first)** writes the governed spec before the code; **Path B (design-first)** writes a design spec, builds the code, then runs `/consolidate` to produce the governed spec from built state. Both paths land at the same end state — every PR has an owning governed spec at status `active`. The cross-path invariants are stated centrally in `workflows/README.md ## Cross-path invariants`; this principle does not duplicate them.
+Arboretum v2 has one development workflow — `build` — covering all changes to existing projects (features, bug fixes, refactors, documentation). The only structural fork is `/start`'s triage between agent-target (fast lane) and everything-else (design-spec lane). Governed specs are written only by `/consolidate` at `/finish` time, born from built state. The workflow invariants are stated centrally in `workflows/README.md ## Workflow invariants`; this principle does not duplicate them.

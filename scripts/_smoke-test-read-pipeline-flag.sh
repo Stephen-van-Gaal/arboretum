@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: workflow-management
+# owner: workflow-unification
 # _smoke-test-read-pipeline-flag.sh — Verify the pipeline.workflow flag reader.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "run with bash" >&2; exit 1; }

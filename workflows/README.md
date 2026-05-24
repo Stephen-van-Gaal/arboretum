@@ -10,20 +10,11 @@ What are you doing?
 ├── Starting from scratch?
 │   └── new-project
 │
-├── Project exists, you know what to build?
-│   └── feature
-│
-├── Something is broken?
-│   └── bug-fix
+├── Adding, changing, fixing, refactoring, or documenting in an existing project?
+│   └── build
 │
 ├── Not sure what to build, need to learn?
 │   └── explore
-│
-├── Restructuring without changing behaviour?
-│   └── refactor
-│
-├── Updating documentation only?
-│   └── documentation
 │
 ├── Have an existing project you want to govern?
 │   └── retrofit
@@ -35,26 +26,26 @@ What are you doing?
 ## Workflow overview
 
 ```
-new-project      /init-project → /architect → [spike → /consolidate]* → build
-feature          /start → survey → /design → plan → build → /finish → /cleanup → /reflect
-bug-fix          /start → investigate → classify → fix → /finish → /cleanup → /reflect
-explore          /start → spike → document → decide (→ feature or → another spike)
+new-project      /arboretum:init → /architect → [spike → /consolidate]* → build
+build            /start → [/design] → /build → /finish → /security-review → /pr → /land → /cleanup → /reflect
+explore          /start → spike → document → decide (→ build or → another spike)
 publish          /publish (review → strip → sync)
-refactor         /start → orient → scope → test coverage → restructure → verify → /finish → /cleanup
-documentation    /start → branch → edit → verify refs → /pr → /cleanup
 retrofit         assess → bootstrap → triage → govern-one → [expand]*
 ```
 
-## Cross-path invariants
+The `/design` step in `build` is skipped for agent-target work (the triage's fast lane); everything-else flows through `/design`. Branch 1 mode dispatch inside `/design` (brainstorm / investigate / coverage-baseline / none) covers what the four legacy workflows used to handle as separate documents.
 
-These rules hold regardless of which path you take. The paths differ in *governance timing*, not in *delivery rigour*.
+## Workflow invariants
+
+These rules hold regardless of which workflow you use. They describe arboretum's contract with the agent, not optional discipline.
 
 1. Every source file has `# owner: <spec-name>` from its first commit (not retrofitted at PR time).
-2. Every PR has an owning governed spec at status `active` (or `draft` for WIP, with the spec activated as part of the PR).
-3. Tests land before or alongside implementation (TDD discipline, both paths).
-4. The Behaviour section of the governed spec is human-authored regardless of path.
+2. Every PR has an owning governed spec at status `active` (or `draft` for WIP, with the spec activated by `/consolidate` as part of the PR).
+3. Tests land before or alongside implementation (TDD discipline, all Branch 2 paths).
+4. The Behaviour section of the governed spec is human-authored.
 5. PRs scope by intent, not "everything in the tree" — hunk-staging when needed.
-6. Pick one path per slice — don't mix Path A and Path B within a single PR. If exploration mid-Path-B reveals shared definitions or contract locks are needed, pause and author the governed spec before continuing.
+
+Invariant #6 of the legacy two-path model ("pick one governance path per slice — don't mix them") has no analogue under v2. Governed specs are written only by `/consolidate` (design D3), so there is no governance-path selector to mix.
 
 ## Skill legend
 
@@ -113,21 +104,19 @@ The user reviews, selects an approach, and updates the spec. The spec stays at `
 
 ## Workflow transitions
 
-Real development is non-linear. These transitions define when and how to pivot between workflows mid-stream.
+Most cross-workflow pivots from the legacy four-workflow model are now mode dispatches inside `/design` (Branch 1) — switching from a `brainstorm` mode to an `investigate` mode is not a workflow transition, just a re-classification. The remaining transitions are between top-level workflows.
 
 | From | To | When |
 |------|-----|------|
-| feature → | explore | During survey/design you discover unknowns that need spiking. Pause the feature workflow, enter explore. Return via `/consolidate`. |
-| bug-fix → | feature | Classification reveals a spec gap (not just wrong code). The fix becomes a feature. Branch the feature workflow from the current point. |
-| refactor → | bug-fix | Restructuring surfaces a bug. Pause the refactor, capture the bug as a separate issue. Fix inline if trivial, or start a bug-fix branch. |
-| explore → | feature | A spike produces enough understanding. `/consolidate` findings and enter the feature workflow at the design step. |
-| any → | documentation | You discover docs-only issues during any workflow. Note them for a separate documentation pass after the current workflow completes. |
+| build → | explore | During `/design` you discover the question is too open to specify. Pause `build`, enter `explore`. Return via `/consolidate` of spike findings into a design spec. |
+| explore → | build | A spike produces enough understanding. `/consolidate` findings into a design spec and enter `build` at `/design`. |
+| build (agent-target) → | build (everything-else) | The escape hatch — a real design decision surfaces during agent-target prep or implementation. Code already written is treated as reference-only; the work re-enters at `/design`. |
 
 **Transition protocol:**
-1. Note where you are in the current workflow (so you can return)
+1. Note where you are (so you can return)
 2. Commit or stash in-progress work
 3. Enter the target workflow at its natural entry point
-4. When the target workflow completes, return to the original workflow where you left off (if applicable)
+4. Return to the original workflow when complete
 
 ## Signs governance is working
 
@@ -173,10 +162,7 @@ Run `/health-check` before every PR. The `/finish` skill already suggests this.
 ## Detailed workflows
 
 - [new-project](new-project.md)
-- [feature](feature.md)
-- [bug-fix](bug-fix.md)
+- [build](build.md)
 - [explore](explore.md)
 - [publish](publish.md)
-- [refactor](refactor.md)
-- [documentation](documentation.md)
 - [retrofit](retrofit.md)
