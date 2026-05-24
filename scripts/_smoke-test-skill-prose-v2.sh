@@ -85,4 +85,78 @@ grep -q "/build docs/superpowers/specs" "$DESIGN" \
   || fail "case 11 — /design Section v2 does not exit to /build with design spec path"
 ok "case 11 — /design Section v2 exits to /build correctly"
 
+# PR3: /finish, /consolidate, /health-check invariants
+
+FINISH="skills/finish/SKILL.md"
+CONSOLIDATE="skills/consolidate/SKILL.md"
+HEALTH="skills/health-check/SKILL.md"
+
+# Case 12: /finish has Step 0 (flag read)
+grep -q "^### Step 0: Read the pipeline\.workflow flag" "$FINISH" \
+  || fail "case 12 — /finish Step 0 (flag read) missing"
+ok "case 12 — /finish Step 0 present"
+
+# Case 13: /finish has Section v2 note
+grep -q "^## Section v2: Ship-tail under the unified workflow" "$FINISH" \
+  || fail "case 13 — /finish Section v2 missing"
+ok "case 13 — /finish Section v2 present"
+
+# Case 14: /health-check has Step 0 (flag read)
+grep -q "^### Step 0: Read the pipeline\.workflow flag" "$HEALTH" \
+  || fail "case 14 — /health-check Step 0 (flag read) missing"
+ok "case 14 — /health-check Step 0 present"
+
+# Case 15: /health-check has Section v2 note
+grep -q "^## Section v2: Health-check under the unified workflow" "$HEALTH" \
+  || fail "case 15 — /health-check Section v2 missing"
+ok "case 15 — /health-check Section v2 present"
+
+# Case 16: /consolidate has Step 0 (flag read)
+grep -q "^### Step 0: Read the pipeline\.workflow flag" "$CONSOLIDATE" \
+  || fail "case 16 — /consolidate Step 0 (flag read) missing"
+ok "case 16 — /consolidate Step 0 present"
+
+# Case 17: /consolidate has Section v2
+grep -q "^## Section v2: Unified-workflow reconciliation" "$CONSOLIDATE" \
+  || fail "case 17 — /consolidate Section v2 missing"
+ok "case 17 — /consolidate Section v2 present"
+
+# Case 18: /consolidate Section v2 has all 5 sub-sections (v2.1 through v2.5).
+# Scope the count to the Section v2 block only — a future unrelated `### v2.`
+# heading elsewhere in the file would otherwise let this case pass/fail
+# spuriously. Mirrors the pattern used by cases 9 and 22.
+CONS_SECTION_V2_BLOCK=$(awk '
+  /^## Section v2:/ { flag = 1; next }
+  /^## / && flag { flag = 0 }
+  flag { print }
+' "$CONSOLIDATE")
+CONS_SUBS=$(echo "$CONS_SECTION_V2_BLOCK" | grep -c "^### v2\.")
+[ "$CONS_SUBS" = "5" ] || fail "case 18 — /consolidate Section v2 expected 5 sub-sections (scoped to v2 block), found $CONS_SUBS"
+ok "case 18 — /consolidate Section v2 has 5 sub-sections (scoped to v2 block)"
+
+# Case 19: /consolidate v2.2 D3 hybrid supersession exists
+grep -q "D3 hybrid behaviour-supersession detection" "$CONSOLIDATE" \
+  || fail "case 19 — /consolidate v2.2 D3 supersession heading missing"
+ok "case 19 — /consolidate v2.2 D3 supersession present"
+
+# Case 20: /consolidate v2.3 D5 refactor handling exists
+grep -q "D5 refactor-spec handling" "$CONSOLIDATE" \
+  || fail "case 20 — /consolidate v2.3 D5 refactor handling missing"
+ok "case 20 — /consolidate v2.3 D5 refactor handling present"
+
+# Case 21: /consolidate Step 5b status-determination prose carries v1-only annotation
+grep -q "Determine status (v1 only — skip under v2" "$CONSOLIDATE" \
+  || fail "case 21 — /consolidate Step 5b status prose missing v1-only annotation"
+ok "case 21 — /consolidate v1-only annotation present on Step 5b status determination"
+
+# Case 22: /consolidate v2.1 collapses new-spec status to always-active
+SECTION_V2_CONS=$(awk '
+  /^## Section v2:/ { flag = 1; next }
+  /^## / && flag { flag = 0 }
+  flag { print }
+' "$CONSOLIDATE")
+echo "$SECTION_V2_CONS" | grep -q "always \`active\`" \
+  || fail "case 22 — /consolidate v2.1 does not state status is always \`active\`"
+ok "case 22 — /consolidate v2.1 collapses status to always-active"
+
 echo "ALL PASS: skill-prose v2 invariants"

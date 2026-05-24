@@ -19,6 +19,17 @@ Guides the transition from "code is done" to "PR is created." Orchestrates verif
 
 ## Procedure
 
+### Step 0: Read the pipeline.workflow flag
+
+Before any other step, read the active pipeline version:
+
+```bash
+PIPELINE=$(bash scripts/read-pipeline-flag.sh)
+```
+
+- **`v1` (default)** — continue with Steps 1–7 below as written.
+- **`v2`** — **read Section v2: Ship-tail under the unified workflow FIRST**, then run Steps 1–7 with the v2 amendments it specifies (most importantly: Step 5 `/security-review` is **mandatory** under v2, not optional). The procedural shape is identical to v1 — there is no Path A vs B branching to suppress — but the v2 amendments must be applied at the moment each step runs, not retroactively.
+
 ### Step 1: Verify implementation state
 
 Check the current state:
@@ -85,16 +96,15 @@ If all affected specs are already at `active`, this step is a no-op (skip silent
 
 Skip this step entirely for documentation-only changes (no source files in the diff).
 
-### Step 5: Security review (if applicable)
+### Step 5: Security review
 
 Check if any changed files are agent-facing:
 - `.claude/hooks/**`, `.claude/skills/**`, `skills/**`, `.githooks/**`, `scripts/**`
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`
 
-If any match:
-> "This branch modifies agent-facing code. Run `/security-review` before creating the PR? (Recommended but not required)"
+**Under `PIPELINE=v1`** — if any match, prompt: "This branch modifies agent-facing code. Run `/security-review` before creating the PR? (Recommended but not required)". If the user agrees, run the security review. If they decline, proceed.
 
-If the user agrees, run the security review. If they decline, proceed.
+**Under `PIPELINE=v2`** — `/security-review` is **mandatory** per WS2 D7 (B4 ship-tail step). Always invoke it, regardless of whether agent-facing files appear in the diff. The skill self-gates and exits fast when no injection surface is present, so the cost is near zero on changes that genuinely need nothing.
 
 ### Step 5.5: Pre-PR local CI gate
 
@@ -130,6 +140,18 @@ After the PR is created:
 > "PR created: <url>
 >
 > After it's approved and merged, run `/cleanup` to switch to main, pull, and delete this branch. The ship tail is `/cleanup` → `/reflect` → `/handoff`; `/reflect` Q5 is the canonical handoff invocation (queues `next-up` against an issue that is actually-open post-merge)."
+
+## Section v2: Ship-tail under the unified workflow (when `PIPELINE=v2`)
+
+Under v2 (`pipeline.workflow: v2` in `roadmap.config.yaml`), the procedure above is **unchanged** — `/finish` never branched on Path A vs Path B in v1, so there is no Path A/B prose to suppress. The v2 ship tail is the same sequence: verify → identify affected specs → health-check → `/consolidate` → `/security-review` → `ci-checks` → `/pr` → `/land`.
+
+The model-level differences that v2 introduces (governed specs are written **only** by `/consolidate` per WS2 D3; the everything-else pre-build **always** produces an ephemeral design spec per D4) are upstream of `/finish` — they change what `/consolidate` does in Step 4, not what `/finish` orchestrates. Under v2:
+
+- Step 2's "specs affected by this branch" list will, for everything-else changes, always include the design spec at `docs/superpowers/specs/`; that spec drives `/consolidate`'s behaviour but is not itself a governed spec.
+- Step 4's `/consolidate` invocation is the **sole writer** of `docs/specs/*.spec.md` under v2 (per D3). The "If any affected spec is at `draft` or `stale`" check still applies — `/consolidate` flips `draft → active` when reconciliation succeeds.
+- Step 5's security review is **mandatory** under the unified workflow (WS2 D7, B4) — invoke `/security-review` rather than offering it optionally. The skill self-gates and exits fast when no injection surface is present.
+
+These adjustments are documented here for the v2 reader; the procedure steps above remain authoritative and require no edit.
 
 ## Important
 
