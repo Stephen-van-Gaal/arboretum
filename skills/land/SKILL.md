@@ -3,7 +3,7 @@ name: land
 owner: git-workflow-tooling
 description: Drive an open pull request to merge-ready — poll CI and AI reviewers, triage and action feedback per thread, loop until CI is green with no substantive comments, then hand off by change tier. Chained from /finish; also runnable standalone on any open PR.
 disable-model-invocation: false
-allowed-tools: Bash, Read, Edit, Grep, Glob, ScheduleWakeup
+allowed-tools: Bash, Read, Edit, Grep, Glob, ScheduleWakeup, Skill
 argument-hint: "[<pr-number>]"
 layer: 0
 ---
@@ -61,6 +61,8 @@ standalone unless `/finish` itself was invoked under `/loop`.
 
 ### 3. Triage
 
+Before classifying, invoke `Skill arboretum:receive-review` so per-comment evaluation discipline (verify before implement, no performative agreement) governs the triage decisions.
+
 Classify each substantive comment:
 
 - **Clear-cut** — real bug, encoding error, unhandled input, dead code, security
@@ -90,31 +92,7 @@ For **every** review comment, reply on its own thread:
 
 Reply via `gh api repos/{owner}/{repo}/pulls/{N}/comments -f body=... -F in_reply_to=<comment-id>`.
 
-To resolve addressed threads, first fetch thread node IDs — the REST API returns
-comment/review IDs, not the GraphQL thread IDs that `resolveReviewThread` requires:
-
-```bash
-gh api graphql -f query='
-{
-  repository(owner: OWNER, name: REPO) {
-    pullRequest(number: N) {
-      reviewThreads(first: 100) {
-        nodes { id comments(first: 1) { nodes { databaseId } } }
-      }
-    }
-  }
-}'
-```
-
-Map each REST comment `databaseId` to its thread `id`, then resolve:
-
-```bash
-gh api graphql -f query="mutation {
-  resolveReviewThread(input: {threadId: \"<thread-node-id>\"}) {
-    thread { isResolved }
-  }
-}"
-```
+To resolve addressed threads after the fix push, invoke `Skill arboretum:receive-review`. That skill owns the GraphQL recipe (REST → thread node ID mapping + `resolveReviewThread` mutation) as the single source of truth — `/land` does not carry its own copy.
 
 Leave a thread open deliberately when its item is genuinely outstanding. Write
 replies to *explain* — they are a learning record, not bare acknowledgements.
