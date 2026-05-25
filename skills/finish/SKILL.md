@@ -32,6 +32,20 @@ PIPELINE=$(bash scripts/read-pipeline-flag.sh)
 
 ### Step 1: Verify implementation state
 
+**Routing on `/build`'s exit-status (S3-8).** Before any other verification, read the most recent `/build exited` journey-log entry on the active issue and route on its `exit-status:` value. Until `scripts/get-latest-stage-log.sh` ships (WS9 follow-up), this is a descriptive routing — the operator confirms which path `/build` exited on:
+
+When `exit-status: success` is the most recent `/build exited` value, continue the ship tail below (verify → consolidate → security-review → ship → PR).
+
+When `exit-status: escape-hatch` is the most recent `/build exited` value, return to `/design` with the design spec as the in-flight authority. Halt — do not invoke `/pr` or any later stage. The escape-hatch outcome means the build surfaced a design decision that requires returning to `/design`.
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /finish entered
+fi
+```
+
 Check the current state:
 
 ```bash
@@ -140,6 +154,14 @@ After the PR is created:
 > "PR created: <url>
 >
 > After it's approved and merged, run `/cleanup` to switch to main, pull, and delete this branch. The ship tail is `/cleanup` → `/reflect` → `/handoff`; `/reflect` Q5 is the canonical handoff invocation (queues `next-up` against an issue that is actually-open post-merge)."
+
+At exit, if `$ISSUE` is set, log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /finish exited
+fi
+```
 
 ## Section v2: Ship-tail under the unified workflow (when `PIPELINE=v2`)
 

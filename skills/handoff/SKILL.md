@@ -25,6 +25,25 @@ This skill is the **canonical writer** for the next-up label. The session-end sk
 
 ## Procedure
 
+### Stage logging
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /handoff entered
+fi
+```
+
+At exit (when the procedure completes), log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /handoff exited
+fi
+```
+
+
 ### Step 1: Verify prerequisites
 
 The mechanism is GitHub-native. If `gh` is missing or unauthenticated, hard-fail with install/auth instructions:

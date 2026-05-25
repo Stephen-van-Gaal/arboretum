@@ -24,6 +24,25 @@ The end of a ship cycle, with the agent's freshly-fired build context still avai
 
 ## Procedure
 
+### Stage logging
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /reflect entered
+fi
+```
+
+At exit (when the procedure completes), log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /reflect exited
+fi
+```
+
+
 ### Step 1: Set context
 
 Gather context about what just happened. Check:

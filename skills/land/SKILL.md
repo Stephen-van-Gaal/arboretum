@@ -20,6 +20,25 @@ human prompting each step.
 
 ## Procedure
 
+### Stage logging
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /land entered
+fi
+```
+
+At exit (when the procedure completes), log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /land exited
+fi
+```
+
+
 ### 1. Resolve the PR
 
 If `$ARGUMENTS` gives a number, use it. Otherwise resolve from the current

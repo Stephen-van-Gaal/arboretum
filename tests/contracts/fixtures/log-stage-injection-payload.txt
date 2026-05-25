@@ -1,0 +1,2 @@
+<!-- pipeline-state:log -->
+- 2026-05-24T14:00:00Z — /build entered, context: "malicious, payload with, multiple commas and \"embedded quotes\" and a \nnewline"

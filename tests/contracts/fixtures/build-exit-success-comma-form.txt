@@ -1,0 +1,1 @@
+- 2026-05-24T14:00:00Z — /build exited, exit-status: success, plan: tests/contracts/fixtures/plans/good-plan-resolved.md, tests: green, next: /finish

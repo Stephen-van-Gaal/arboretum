@@ -31,11 +31,16 @@ This skill does **not** do the build work itself — it dispatches to:
 
 ### Step 1: Read & validate the S2 input frontmatter (strict gate per D5)
 
-The positional argument is the design-spec path. Read its frontmatter via the helper:
+The positional argument is the design-spec path. Before reading any fields, run the S2 consumer gate (validate-design-spec.sh — the same validator `/design` invokes at its v2.5 exit per the D4 single-source-of-truth property):
 
 ```bash
 DESIGN_SPEC="$1"
 [ -f "$DESIGN_SPEC" ] || { echo "Design spec not found: $DESIGN_SPEC" >&2; exit 1; }
+
+bash scripts/validate-design-spec.sh "$DESIGN_SPEC" || {
+  echo "S2 contract drift — fix in /design, then re-invoke /build." >&2
+  exit 1
+}
 
 # Default the exit status to success — Step 5 flips it to escape-hatch
 # only when the escape-hatch trigger fires. Initialising up front means
@@ -179,10 +184,12 @@ When all three hold:
 ```bash
 bash scripts/log-stage.sh "$ISSUE" "/build" exited \
   "exit-status=success" \
-  "plan=resolved" \
+  "plan=$PLAN" \
   "tests=green" \
   "next=/finish"
 ```
+
+Note: emit the actual `$PLAN` value (path or the literal `null`), not a sentinel like `resolved`. `validate-build-exit.sh` consumes `plan:` as a resolvable path-or-null per the S3 contract — any sentinel would fail post-condition verification at `/finish` entry.
 
 **Escape-hatch exit:**
 

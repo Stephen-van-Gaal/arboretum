@@ -14,6 +14,25 @@ Create a spec-aware pull request for the current feature branch.
 
 ## Procedure
 
+### Stage logging
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /pr entered
+fi
+```
+
+At exit (when the procedure completes), log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /pr exited
+fi
+```
+
+
 ### 1. Check branch
 
 Verify you are NOT on `main` or `master`. If on a protected branch, stop and tell the user:

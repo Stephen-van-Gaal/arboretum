@@ -185,6 +185,14 @@ Parse `$ARGUMENTS` for the issue number and the request text — the issue numbe
 
 Note: under v2, `$ARGUMENTS` carries change-request text plus an issue prefix, not a spec path. (Under v1, `$ARGUMENTS` is a spec path per the existing Step 1.)
 
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /design entered
+fi
+```
+
 ### v2.1 SURVEY
 
 Before any design work, read existing governed code that may be relevant to the topic:
@@ -234,7 +242,23 @@ After writing-plans returns, verify the plan landed at `docs/plans/`, not `docs/
 
 ### v2.5 Exit to `/build`
 
-Both the design spec and the plan now exist. Hand off to `/build` with the design spec path:
+Both the design spec and the plan now exist. **Before exiting**, run the S2 producer self-check:
+
+```bash
+bash scripts/validate-design-spec.sh <design-spec-path>
+```
+
+If the validator exits non-zero, the spec is malformed against the S2 contract — fix the named field(s) and re-run before handing off. Per the S2 contract's D4 single-source-of-truth property, this is the same validator `/build` invokes at its entry step; passing it here guarantees `/build` will accept the spec.
+
+At exit, if `$ISSUE` is set, log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /design exited
+fi
+```
+
+Hand off to `/build` with the design spec path:
 
 ```
 /build docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md

@@ -22,6 +22,25 @@ This skill is read-only under `v1` (gather context, recommend next steps). Under
 
 ## Procedure
 
+### Stage logging
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /start entered
+fi
+```
+
+At exit (when the procedure completes), log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /start exited
+fi
+```
+
+
 ### 0. Read the pipeline.workflow flag
 
 Before any routing, read the active pipeline version:

@@ -19,6 +19,25 @@ Handles post-merge housekeeping so the working directory is ready for the next t
 
 ## Procedure
 
+### Stage logging
+
+At entry, if `$ISSUE` is set, log the stage:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /cleanup entered
+fi
+```
+
+At exit (when the procedure completes), log:
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/log-stage.sh "$ISSUE" /cleanup exited
+fi
+```
+
+
 ### Step 1: Detect merged state
 
 Check the current branch and its PR status:

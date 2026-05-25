@@ -1,0 +1,2 @@
+<!-- pipeline-state:log -->
+- 2026-05-24T14:00:00Z — /build entered, design-spec: docs/superpowers/specs/2026-05-24-foo.md
