@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
 # statusline.sh — Claude Code statusline renderer. Emits the project's
-# full status line on a single line: <model>  |  <project>/<branch>  |
-# ctx <N>%  |  5h:<N>% 7d:<N>%  |  wt:<name>  |  [#<issue> /<stage>].
+# full status line on a single line: <model>  |  ts HH:MM  |
+# <project>/<branch>  |  ctx <N>%  |  5h:<N>% 7d:<N>%  |  wt:<name>  |
+# [#<issue> /<stage>].
 #
 # The hook is a *replacement* for Claude Code's default statusline, so
 # we must re-emit the default-equivalent fields (model, project, branch,
@@ -49,7 +50,7 @@ fi
 export STDIN_JSON CACHE GIT_BRANCH PROJECT_DIR
 
 python3 <<'PY'
-import json, os, re, sys
+import json, os, re, sys, time
 
 # Defense in depth: scrub ASCII control characters from every
 # string field surfaced to the statusline. Mirror of the regex in
@@ -80,7 +81,12 @@ except Exception:
 # --- Segment 1: model ---
 model = scrub((data.get("model") or {}).get("display_name") or "")
 
-# --- Segment 2: project/branch ---
+# --- Segment 2: ts (wall-clock, local, HH:MM) ---
+# Always present — the ambient "what time is it now" surface (issue #363).
+# Derived from local system time only; no external content, so no scrub.
+ts = time.strftime("%H:%M")
+
+# --- Segment 3: project/branch ---
 workspace = data.get("workspace") or {}
 project_dir = workspace.get("project_dir") or data.get("cwd") or os.environ.get("PROJECT_DIR") or ""
 project = scrub(os.path.basename(project_dir.rstrip("/"))) if project_dir else ""
@@ -92,20 +98,20 @@ elif project:
 else:
     proj_branch = ""
 
-# --- Segment 3: ctx % ---
+# --- Segment 4: ctx % ---
 ctx_pct = pct_int((data.get("context_window") or {}).get("used_percentage"))
 
-# --- Segment 4: 5h / 7d rate-limit % ---
+# --- Segment 5: 5h / 7d rate-limit % ---
 rl = data.get("rate_limits") or {}
 five = pct_int((rl.get("five_hour") or {}).get("used_percentage"))
 seven = pct_int((rl.get("seven_day") or {}).get("used_percentage"))
 
-# --- Segment 5: worktree ---
+# --- Segment 6: worktree ---
 # workspace.git_worktree covers any linked worktree (preferred);
 # worktree.name covers --worktree sessions only.
 wt = scrub(workspace.get("git_worktree") or (data.get("worktree") or {}).get("name") or "")
 
-# --- Segment 6: pipeline-state chip ---
+# --- Segment 7: pipeline-state chip ---
 chip = ""
 cache_path = os.environ.get("CACHE") or ""
 if cache_path and os.path.exists(cache_path):
@@ -126,6 +132,7 @@ if cache_path and os.path.exists(cache_path):
 segments = []
 if model:
     segments.append(model)
+segments.append(f"ts {ts}")
 if proj_branch:
     segments.append(proj_branch)
 if ctx_pct is not None:
