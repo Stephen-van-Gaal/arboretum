@@ -14,12 +14,14 @@
 | scripts/generate-register.sh | docs/contracts/register-pipeline.contract.md | full |
 | scripts/handoff-commit-wip.sh | MISSING | — |
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
+| scripts/land-handler.sh | MISSING | — |
 | scripts/log-stage.sh | MISSING | — |
 | scripts/parse-plan-checkboxes.sh | MISSING | — |
 | scripts/post-handoff-comment.sh | MISSING | — |
+| scripts/read-journey-log.sh | MISSING | — |
 | scripts/read-pipeline-flag.sh | MISSING | — |
 | scripts/read-s2-frontmatter.sh | MISSING | — |
-| scripts/refresh-next-cache.sh | MISSING | — |
+| scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
 | scripts/refresh-stage-cache.sh | MISSING | — |
 | scripts/refresh-update-cache.sh | MISSING | — |
 | scripts/roadmap/audit-board.sh | MISSING | — |
@@ -42,5 +44,6 @@
 | scripts/write-agent-brief.sh | MISSING | — |
 | scripts/write-escape-hatch.sh | MISSING | — |
 | .claude/hooks/pre-commit-branch-check.sh | MISSING | — |
+| .claude/hooks/prompt-timestamp.sh | MISSING | — |
 | .claude/hooks/session-start.sh | MISSING | — |
 | .claude/hooks/statusline.sh | MISSING | — |

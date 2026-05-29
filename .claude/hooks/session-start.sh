@@ -148,7 +148,15 @@ else:
     for ln in issue.get("body_first_lines", [])[:5]:
         lines.append(f"  {scrub(ln)}")
     handoff = cache.get("handoff")
-    if handoff:
+    # The handoff field is a discriminated three-way union (per
+    # docs/contracts/refresh-next-cache.contract.md RNC-3): null,
+    # a normal dict, or an error dict {"error": "fetch-failed", ...}.
+    # Check the error case FIRST — without this, an error dict would
+    # fall through to .get("next_action", "") returning "" and skip
+    # silently, re-introducing the bug at the consumer (PR 4 design D3).
+    if isinstance(handoff, dict) and handoff.get("error") == "fetch-failed":
+        lines.append("  → (handoff fetch failed — see .arboretum/next-cache.err)")
+    elif handoff:
         na = scrub(handoff.get("next_action", ""))
         if na:
             lines.append(f"  → Next action: {na}")

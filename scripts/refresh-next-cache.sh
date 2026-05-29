@@ -17,16 +17,27 @@
 #       "labels": ["<string>", ...],
 #       "updated_at": "<ISO-8601 UTC>"
 #     },
-#     "handoff": null | {
-#       "posted_at": "<ISO-8601 UTC | branch-marker timestamp>",
-#       "branch": "<branch name, control-char-stripped>",
-#       "next_action": "<string, control-char-stripped>",
-#       "body": "<prose lines joined with spaces, control-char-stripped>"
-#     },
+#     "handoff": null | { posted_at, branch, next_action, body }   # success — see below
+#                    | { "error": "fetch-failed", "detail": "<string>" }  # comment-fetch failure
 #     "no_gh_remote": true | false,
 #     "error": null | "gh-unavailable" | "gh-call-failed"
 #                  | "python3 unavailable; issue details omitted in fallback cache"
 #   }
+#
+# The `handoff` field is a discriminated three-way union (per
+# refresh-next-cache.contract.md RNC-3):
+#   - `null`             : no arbo-handoff-marked comment exists on the issue
+#   - normal dict        : handoff comment fetched successfully
+#                          {"posted_at": "<ISO-8601 UTC | branch-marker timestamp>",
+#                           "branch":    "<branch name, control-char-stripped>",
+#                           "next_action": "<string, control-char-stripped>",
+#                           "body":      "<prose lines joined with spaces, control-char-stripped>"}
+#   - error dict (NEW)   : `gh issue view <N> --json comments` was attempted but exited
+#                          non-zero. The first line of gh's stderr is captured in `detail`
+#                          (control-char-stripped); full diagnostic still written to
+#                          .arboretum/next-cache.err. Cache write succeeds (exit 0) — the
+#                          failure is recorded *in* the cache, not *about* the cache.
+#                          Replaces the pre-#264 silent-null-on-failure behaviour.
 #
 # Title and body lines are stripped of ASCII control characters
 # (including \x1b ANSI escape introducers) when stored, so the
@@ -101,6 +112,7 @@ if [ -z "$remote_name" ]; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": true,
   "error": null
 }' "$(now_iso)")"
@@ -113,6 +125,7 @@ if ! command -v gh >/dev/null 2>&1; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": false,
   "error": "gh-unavailable"
 }' "$(now_iso)")"
@@ -124,6 +137,7 @@ if ! gh auth status >/dev/null 2>&1; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": false,
   "error": "gh-unavailable"
 }' "$(now_iso)")"
@@ -155,6 +169,7 @@ if [ "$gh_exit" -ne 0 ]; then
     write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": true,
   "error": null
 }' "$(now_iso)")"
@@ -163,6 +178,7 @@ if [ "$gh_exit" -ne 0 ]; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": false,
   "error": "gh-call-failed"
 }' "$(now_iso)")"
@@ -178,6 +194,7 @@ if [ -z "$issues_json" ] || [ "$issues_json" = "[]" ]; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
+  "handoff": null,
   "no_gh_remote": false,
   "error": null
 }' "$(now_iso)")"
@@ -191,9 +208,40 @@ issue_number=$(printf '%s' "$issues_json" \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if d else "")' 2>/dev/null || true)
 comments_file=$(mktemp "$CACHE_DIR/gh.comments.XXXXXX")
 echo '{"comments":[]}' > "$comments_file"
+# Distinguish "gh issue view succeeded with no comments" from "gh issue view
+# failed" — pre-#264 these collapsed into the same silent-empty state, which
+# made handoff: null indistinguishable from a transient fetch failure. Now we
+# propagate the distinction via env vars to the python3 cache-builder below
+# (refresh-next-cache.contract.md RNC-4 pins this as non-recurrable).
+comment_fetch_status="not-attempted"
+comment_fetch_err=""
 if [ -n "$issue_number" ]; then
-  ( cd "$PROJECT_DIR" && gh issue view "$issue_number" --json comments ) \
-    > "$comments_file" 2>/dev/null || echo '{"comments":[]}' > "$comments_file"
+  comment_stderr=$(mktemp "$CACHE_DIR/gh.comments.err.XXXXXX")
+  if ( cd "$PROJECT_DIR" && gh issue view "$issue_number" --json comments ) \
+       > "$comments_file" 2>"$comment_stderr"; then
+    comment_fetch_status="ok"
+  else
+    comment_fetch_status="failed"
+    # Two separate capture variables — the cache JSON gets only the first
+    # line of stderr (keeps cache readable per design D7/OQ2); the diagnostic
+    # file gets the FULL multi-line stderr (preserved for debugging). Codex
+    # caught the conflation in PR #365 review — using only $comment_fetch_err
+    # for both would truncate multi-line gh diagnostics in the .err file too.
+    comment_fetch_err=$(head -1 "$comment_stderr" 2>/dev/null || true)
+    # Keep the comments file valid JSON even though the builder won't read it
+    # in the failure path — defense in depth against a future refactor that
+    # might call latest_handoff() without first checking COMMENT_FETCH_STATUS.
+    echo '{"comments":[]}' > "$comments_file"
+    # Emit each stderr line through write_err so every line gets a timestamp
+    # prefix — write_err is a single-line logger (`printf '[%s] %s\n' ...`),
+    # so a multi-line argument would prefix only the first line. Per Copilot
+    # PR #368 review.
+    write_err "gh issue view comments call failed:"
+    while IFS= read -r _err_line; do
+      [ -n "$_err_line" ] && write_err "  $_err_line"
+    done < "$comment_stderr"
+  fi
+  rm -f "$comment_stderr"
 fi
 
 # ── Truncate body and emit cache ─────────────────────────────────────
@@ -207,7 +255,10 @@ if command -v python3 >/dev/null 2>&1; then
   # arg-length limits on issues with very long bodies.
   issues_file=$(mktemp "$CACHE_DIR/gh.issues.XXXXXX")
   printf '%s' "$issues_json" > "$issues_file"
-  cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$issues_file" "$comments_file" <<'PY'
+  cache_json=$(FETCHED_AT="$(now_iso)" \
+               COMMENT_FETCH_STATUS="$comment_fetch_status" \
+               COMMENT_FETCH_ERR="$comment_fetch_err" \
+               python3 - "$issues_file" "$comments_file" <<'PY'
 import json, os, re, sys
 
 with open(sys.argv[1], encoding="utf-8") as fh:
@@ -305,13 +356,28 @@ def latest_handoff(comments_path):
         "body": " ".join(prose),
     }
 
-handoff = latest_handoff(sys.argv[2])
+# Branch on COMMENT_FETCH_STATUS (propagated from the shell layer):
+#   "failed"        — gh issue view exited non-zero; emit the error union variant
+#   "ok"            — gh issue view succeeded; latest_handoff() returns the
+#                     handoff dict (or None for genuine no-handoff)
+#   "not-attempted" — issue_number couldn't be parsed (rare path); fall through
+#                     to latest_handoff() on the seeded empty comments file
+# Per refresh-next-cache.contract.md RNC-3 + RNC-4 + design D2.
+comment_status = os.environ.get("COMMENT_FETCH_STATUS", "ok")
+comment_err = os.environ.get("COMMENT_FETCH_ERR", "")
+if comment_status == "failed":
+    handoff = {
+        "error": "fetch-failed",
+        "detail": scrub(comment_err),  # RNC-6 ANSI-scrub invariant
+    }
+else:
+    handoff = latest_handoff(sys.argv[2])
 
 if issue is None:
     cache = {
         "fetched_at": os.environ["FETCHED_AT"],
         "issue": None,
-        "handoff": None,
+        "handoff": handoff,
         "no_gh_remote": False,
         "error": None,
     }
