@@ -191,6 +191,126 @@ PY
   fi
 fi
 
+# ── Workspace orientation (#375) ─────────────────────────────────────
+WORKSPACE_CACHE="$PROJECT_DIR/.arboretum/workspace-cache.json"
+WORKSPACE_REFRESH="$PROJECT_DIR/scripts/refresh-workspace-cache.sh"
+if [ -f "$WORKSPACE_REFRESH" ]; then
+  # Refresh SYNCHRONOUSLY every boot — no TTL/background like next-cache. The
+  # staleness rail must reflect THIS session's refs: a backgrounded fetch would
+  # read last session's refs and could falsely report "current ✓". The script
+  # self-bounds its own fetch (5s timeout), so the worst-case boot cost is
+  # capped. `|| true` keeps a refresh failure from ever aborting the hook.
+  bash "$WORKSPACE_REFRESH" "$PROJECT_DIR" >/dev/null 2>&1 || true
+  if [ -f "$WORKSPACE_CACHE" ] && command -v python3 >/dev/null 2>&1; then
+    ws_block=""   # ensure set under `set -u` even if the substitution is skipped
+    # $NEXT_CACHE may not exist (its refresh is TTL-gated above); the renderer
+    # reads it inside a try/except and degrades to no mode-B correlation.
+    ws_block=$(python3 - "$WORKSPACE_CACHE" "$NEXT_CACHE" <<'PY'
+import json, re, sys
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
+try:
+    ws = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+if ws.get("error"):   # not-a-git-repo, python3-unavailable, fetch-failed, … → stay
+    sys.exit(0)        # silent. A degraded cache has current_branch:null, which would
+                       # otherwise misrender as a false "detached HEAD" warning (Copilot #376).
+
+branch = scrub(ws.get("current_branch")) or "(detached HEAD)"
+dirty, dc = ws.get("dirty"), ws.get("dirty_count", 0)
+main = ws.get("main") or {}
+mb = main.get("behind")
+ma = main.get("ahead")
+up = ws.get("current_upstream") or {}
+pr = ws.get("open_pr")
+fetch_ok = ws.get("fetch_ok")
+
+# next-up correlation (mode B): handoff-recorded branch only, no fuzzy match
+recorded_branch = None; next_num = None
+try:
+    nc = json.load(open(sys.argv[2]))
+    issue = nc.get("issue") or {}
+    next_num = issue.get("number")
+    h = nc.get("handoff")
+    if isinstance(h, dict) and not h.get("error"):
+        recorded_branch = scrub(h.get("branch")) or None
+except Exception:
+    pass
+
+# A recorded branch is only resumable if it still exists locally or as a
+# worktree — otherwise route to the fresh-branch path, not a dead branch
+# (Codex #376 review).
+detached = ws.get("current_branch") is None
+_local = set(ws.get("local_branches") or [])
+_wt = {w.get("branch") for w in (ws.get("worktrees") or []) if w.get("branch")}
+recorded_exists = bool(recorded_branch) and (recorded_branch in _local or recorded_branch in _wt)
+
+# header (compact, only signal-bearing segments). "(current ✓)" shows ONLY
+# when drift is KNOWN to be 0 — mb is None when origin/main is missing or
+# unreachable, and claiming "current" then would contradict the
+# "remote unreachable" segment (Codex #376 review).
+if branch != "main":
+    seg = [branch]
+elif mb == 0 and main.get("fresh"):
+    seg = ["main (current ✓)"]   # only when drift is known 0 AND main's own fetch succeeded
+else:
+    seg = ["main"]  # mb None/unknown, mb > 0 (behind, shown separately), or main's
+                    # fetch failed (stale refs — never claim "current": Codex #376)
+if dirty: seg.append(f"{dc} uncommitted file" + ("s" if dc != 1 else ""))
+if mb: seg.append(f"main {mb} behind ⚠")
+if ma: seg.append(f"main {ma} unpushed ⚠")  # local commits on main not on its upstream
+if isinstance(pr, dict): seg.append(f"open PR #{pr.get('number')}")
+# Suppress the branch-upstream segment when on main: current_upstream is then
+# the SAME comparison as the main rail, so it would duplicate it (Codex #376).
+if up.get("behind") and branch != "main": seg.append(f"branch {up['behind']} behind {scrub(up.get('name'))}")
+if fetch_ok is False: seg.append("remote unreachable — staleness unknown")
+
+# routing precedence → one recommended action line.
+# Order matters: B-resume (resuming a /handoff-recorded branch) is NOT a
+# fresh-branch operation, so main drift must NOT block it — it is checked
+# BEFORE the behind-main (D) blocker. Design: "main drift blocks only the
+# fresh-branch path." (Copilot #376 review.)
+if detached:                                         # detached HEAD — design edge case
+    action = "Detached HEAD — checkout a branch before starting work."
+elif dirty:                                          # A — resume WIP
+    action = "Resume WIP here. Sync main separately when ready — don't rebase onto stale main mid-work."
+elif isinstance(pr, dict):                           # E — land/respond to PR
+    action = f"Respond to PR: /land. I'll `git pull --ff-only` the branch first."
+elif recorded_exists:                                # B — resume recorded branch (drift does not block)
+    action = f"Next-up #{next_num} → branch `{recorded_branch}` (resume) or fresh branch off updated main."
+elif mb:                                             # D — fresh-branch blocker (incl. recorded-but-missing + stale main)
+    if branch == "main":
+        action = "Sync before branching: `git pull --ff-only` (I'll run it). Branching off stale main is the usual conflict cause."
+    else:
+        # On a clean non-main branch: `git pull --ff-only` would pull THIS
+        # branch, not main — so direct to main first (Codex #376).
+        action = f"`main` is {mb} behind — switch to main and sync (`git checkout main && git pull --ff-only`) before cutting a new branch."
+elif recorded_branch:                                # B — recorded branch is gone, main current
+    action = f"Next-up #{next_num}'s recorded branch `{recorded_branch}` no longer exists — I'll create a fresh branch off main."
+elif next_num:                                       # B/D — next-up, no recorded branch
+    action = f"Next-up #{next_num} has no recorded branch — I'll create a feat/ off main, or start an independent fix the same way."
+else:                                                # C — survey via roadmap
+    action = None  # nothing to recommend; roadmap pulse already prints
+
+# Silence rule: emit NOTHING when there is zero signal and no action — i.e.
+# on clean `main`, not behind, no dirty/PR/upstream-drift, fetch ok, no
+# next-up. Being on a feature branch or detached HEAD is itself signal.
+on_feature = branch != "main"
+has_signal = (bool(action) or dirty or bool(mb) or bool(ma) or isinstance(pr, dict)
+              or bool(up.get("behind")) or (fetch_ok is False) or on_feature)
+if not has_signal:
+    sys.exit(0)
+
+lines = [f"[Workspace] {' · '.join(seg)}"]
+if action: lines.append(f"  → {action}")
+print("\n".join(lines))
+PY
+)
+    [ -n "$ws_block" ] && output+=$'\n'"$ws_block"
+  fi
+fi
+
 # ── Pipeline state (WS9 D7) ──────────────────────────────────────────
 # Three lines: Stage (from active-stage-cache); Last action (most recent
 # stage-transition log comment); Last session (most recent `summary`

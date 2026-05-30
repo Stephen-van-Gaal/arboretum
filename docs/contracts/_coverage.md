@@ -25,6 +25,7 @@
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
 | scripts/refresh-stage-cache.sh | MISSING | — |
 | scripts/refresh-update-cache.sh | MISSING | — |
+| scripts/refresh-workspace-cache.sh | docs/contracts/refresh-workspace-cache.contract.md | full |
 | scripts/roadmap/audit-board.sh | MISSING | — |
 | scripts/roadmap/build-orientation.sh | MISSING | — |
 | scripts/roadmap/install-labels.sh | MISSING | — |

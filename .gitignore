@@ -36,6 +36,8 @@ venv/
 # safe to delete, not source-of-truth.
 .arboretum/active-stage-cache.json
 .arboretum/log-comments-cache.json
+.arboretum/workspace-cache.json
+.arboretum/workspace-cache.json.*
 
 # Runtime lock files and worktree storage. Lock files are session-scoped;
 # worktrees are git-managed alternate working trees that should never be
