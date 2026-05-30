@@ -15,6 +15,8 @@ related-designs:
   - docs/superpowers/specs/2026-05-23-pipeline-overhaul-ws9-state-tracking-design.md
   - docs/superpowers/specs/2026-05-23-pipeline-overhaul-ws3a-pipeline-contracts-design.md
   - docs/superpowers/specs/2026-05-24-pipeline-overhaul-ws3b-pipeline-contracts-finalize-design.md
+owns:
+  - scripts/log-stage.sh
 ---
 <!-- owner: pipeline-contracts-template -->
 
