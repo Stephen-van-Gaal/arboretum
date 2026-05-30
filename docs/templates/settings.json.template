@@ -12,6 +12,7 @@
       "Bash(bash scripts/read-s2-frontmatter.sh *)",
       "Bash(bash scripts/write-escape-hatch.sh *)",
       "Bash(bash scripts/ci-checks.sh *)",
+      "Bash(bash scripts/upgrade-sync.sh *)",
       "Bash(bash scripts/roadmap/render-run.sh *)",
       "Bash(git status *)",
       "Bash(git rev-parse *)",

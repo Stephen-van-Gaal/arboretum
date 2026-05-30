@@ -473,6 +473,37 @@ PY
   fi
 fi
 
+# ── Project-tree staleness check (#316) ─────────────────────────────
+# If the project's install-manifest.json records a framework_version
+# older than the currently-installed plugin, nudge the user to run
+# /upgrade. Only fires when the manifest exists (i.e. in a downstream
+# project that has run /init, never in arboretum-dev itself) and when
+# jq is available. Uses the same installed_version source as the
+# update-available block above (update-cache.json).
+
+INSTALL_MANIFEST="$PROJECT_DIR/.arboretum/install-manifest.json"
+if [ -f "$INSTALL_MANIFEST" ] && command -v jq >/dev/null 2>&1; then
+  _mfv=$(jq -r '.framework_version // empty' "$INSTALL_MANIFEST" 2>/dev/null || true)
+  # installed_version from update-cache.json — same source as update-available block.
+  _instv=""
+  if [ -f "$UPDATE_CACHE" ]; then
+    _instv=$(jq -r '.installed_version // empty' "$UPDATE_CACHE" 2>/dev/null || true)
+  fi
+  # Defense in depth (CLAUDE.md § scrub author-controlled content): these version
+  # strings originate from the installed plugin's plugin.json — remote-sourced for
+  # adopters — and flow into the boot banner (Claude's context). Strip ASCII control
+  # chars before rendering, matching the next-up / stage-cache blocks' scrub convention.
+  _mfv=$(printf '%s' "$_mfv" | LC_ALL=C tr -d '\000-\037\177-\237')
+  _instv=$(printf '%s' "$_instv" | LC_ALL=C tr -d '\000-\037\177-\237')
+  if [ -n "$_mfv" ] && [ -n "$_instv" ] && [ "$_mfv" != "$_instv" ]; then
+    # Fire only when manifest version sorts strictly older than installed.
+    _newer=$(printf '%s\n%s\n' "$_mfv" "$_instv" | sort -V | tail -1)
+    if [ "$_newer" = "$_instv" ]; then
+      output+=$'\n'"[Arboretum] Project tree is behind the installed plugin ($_mfv → $_instv) — run /upgrade."
+    fi
+  fi
+fi
+
 # ── Build-cycle state ────────────────────────────────────────────────
 # When a build cycle is in flight on the current branch, surface the
 # observable state so the human and LLM see "where am I" without

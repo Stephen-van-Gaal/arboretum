@@ -146,6 +146,16 @@ for script in "$PLUGIN_ROOT/scripts/roadmap/"*.sh; do
   copy_if_missing "$script" "scripts/roadmap/$(basename "$script")"
 done
 chmod +x scripts/roadmap/*.sh 2>/dev/null || true
+
+# Library helpers (upgrade classifier and future helpers) live in scripts/lib/.
+# upgrade-sync.sh sources scripts/lib/upgrade-classify.sh at runtime, so it
+# must be present in the project tree alongside the other managed scripts.
+mkdir -p scripts/lib
+for script in "$PLUGIN_ROOT/scripts/lib/"*.sh; do
+  [ -f "$script" ] || continue
+  copy_if_missing "$script" "scripts/lib/$(basename "$script")"
+done
+chmod +x scripts/lib/*.sh 2>/dev/null || true
 ```
 
 ### Step 5: Generate CLAUDE.md from template
@@ -194,6 +204,21 @@ YAML
   echo "  created: .arboretum.yml"
 fi
 ```
+
+### Step 6b: Seed the install manifest
+
+After copying framework files and generating `.arboretum.yml`, seed the install
+manifest so the project records the baseline version and hashes of every vendored
+file. Fresh copies equal the plugin, so every managed file gets a real base — no
+spurious conflicts on the first `/upgrade`.
+
+```bash
+bash scripts/upgrade-sync.sh --bootstrap-manifest
+echo "  seeded: .arboretum/install-manifest.json"
+```
+
+If `upgrade-sync.sh` is not yet present in `scripts/` (e.g. an older plugin
+version that predates the upgrade system), skip this step silently and continue.
 
 ### Step 7: Initialize git
 

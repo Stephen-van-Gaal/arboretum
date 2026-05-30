@@ -38,9 +38,14 @@ case "$COMMAND" in
     exec "$REPO_ROOT/scripts/bootstrap-project.sh" "$@"
     ;;
   update)
-    echo "Error: 'arboretum update' is not yet implemented."
-    echo "For now, re-run bootstrap — it is idempotent and will not overwrite existing files."
-    exit 1
+    # Deploy framework evolution into an existing project (no-session path).
+    # Conflicts are reported and skipped here — the /upgrade skill handles
+    # interactive conflict resolution.
+    if [ ! -f ".arboretum.yml" ]; then
+      echo "arboretum update: not an arboretum project (no .arboretum.yml in $(pwd))" >&2
+      exit 2
+    fi
+    exec bash "$REPO_ROOT/scripts/upgrade-sync.sh" --apply
     ;;
   -h|--help|help)
     usage

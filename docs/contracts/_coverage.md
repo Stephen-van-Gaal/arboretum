@@ -16,6 +16,7 @@
 | scripts/handoff-commit-wip.sh | MISSING | — |
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
 | scripts/land-handler.sh | MISSING | — |
+| scripts/lib/upgrade-classify.sh | MISSING | — |
 | scripts/log-stage.sh | MISSING | — |
 | scripts/parse-plan-checkboxes.sh | MISSING | — |
 | scripts/post-handoff-comment.sh | MISSING | — |
@@ -36,6 +37,7 @@
 | scripts/roadmap/render-run.sh | MISSING | — |
 | scripts/seed-settings.sh | MISSING | — |
 | scripts/sync-contracts.sh | MISSING | — |
+| scripts/upgrade-sync.sh | docs/contracts/upgrade-sync.cli-contract.md | cli |
 | scripts/validate-build-exit.sh | MISSING | — |
 | scripts/validate-cli-contract.sh | MISSING | — |
 | scripts/validate-coverage-manifest.sh | MISSING | — |
