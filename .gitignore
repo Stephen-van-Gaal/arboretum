@@ -37,11 +37,14 @@ venv/
 .arboretum/active-stage-cache.json
 .arboretum/log-comments-cache.json
 
-# Runtime lock files and worktree storage under .claude/. Lock files are
-# session-scoped; worktrees are git-managed alternate working trees that
-# should never be tracked as ordinary files.
+# Runtime lock files and worktree storage. Lock files are session-scoped;
+# worktrees are git-managed alternate working trees that should never be
+# tracked as ordinary files. Both the legacy `.claude/worktrees/` location
+# and the top-level `.worktrees/<branch>` convention (per the worktree
+# naming rule in CLAUDE.md) are ignored.
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+.worktrees/
 
 # Sibling agent-tool working directories. AGENTS.md is the vendor-neutral
 # guidance file checked in; the per-tool .agents/ / .claire/ / .codex/
