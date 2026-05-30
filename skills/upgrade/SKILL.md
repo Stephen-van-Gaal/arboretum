@@ -22,11 +22,17 @@ Deploy framework evolution from the installed plugin into this project's tree.
 > (`scripts/upgrade-sync.sh`). This is intentional: the project copy may not exist
 > on the first `/upgrade` run (e.g. a project initialized before the upgrade system
 > was added). The plugin copy is always present once the plugin is installed.
-> Fall back to the project copy only when `CLAUDE_PLUGIN_ROOT` is unset.
+> The plugin path below is rendered to an absolute path when this skill loads, so it
+> resolves even though `CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's
+> runtime. The project copy is used only as a fallback, when the plugin copy is absent.
 
 ```bash
-_SYNC="${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-sync.sh}"
-_SYNC="${_SYNC:-scripts/upgrade-sync.sh}"
+# Primary: the plugin copy — always present once installed. ${CLAUDE_PLUGIN_ROOT} is
+# rendered to an absolute path when this skill loads, so this resolves without the
+# variable being exported into the Bash runtime (it isn't). Fall back to the project
+# copy only if the plugin copy is genuinely absent.
+_SYNC="${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-sync.sh"
+[ -f "$_SYNC" ] || _SYNC="scripts/upgrade-sync.sh"
 ```
 
 1. **Plan (read-only):** `bash "$_SYNC" --plan` → parse the JSON.
