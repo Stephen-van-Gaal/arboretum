@@ -2,7 +2,7 @@
 # owner: pipeline-state-tracking
 # log-stage.sh — Write a pipeline-state log entry: rewrite the
 # current-stage header in the issue body (LWW) AND post a journey-log
-# comment (naturally serialized by GitHub).
+# comment (naturally serialized by the tracker backend).
 #
 # See docs/superpowers/specs/2026-05-23-pipeline-overhaul-ws9-state-tracking-design.md.
 #
@@ -13,7 +13,7 @@
 #
 # Exit codes:
 #   0 — both ops succeeded
-#   1 — bad args / gh missing / unauthenticated
+#   1 — bad args / tracker missing / unauthenticated
 #   2 — body-edit op failed
 #   3 — comment-post op failed
 set -euo pipefail
@@ -28,7 +28,7 @@ readonly PIPELINE_STATE_LOG_MARKER="<!-- pipeline-state:log -->"
 export PIPELINE_STATE_MARKER_OPEN PIPELINE_STATE_MARKER_CLOSE PIPELINE_STATE_LOG_MARKER
 
 # Internal subcommand used by smoke tests to exercise the marker-block
-# rewriter as a pure function (no gh I/O). Prints the rewritten body to stdout.
+# rewriter as a pure function (no tracker I/O). Prints the rewritten body to stdout.
 if [ "${1:-}" = "--rewrite-body-only" ]; then
   [ "$#" -eq 3 ] || { echo "Usage: --rewrite-body-only <body-file> <stage>" >&2; exit 1; }
   BODY_FILE="$2"; NEW_STAGE="$3"
@@ -78,7 +78,7 @@ PY
 fi
 
 # Internal subcommand to exercise the log-line formatter as a pure
-# function (no gh I/O). Prints the marker line then the formatted log
+# function (no tracker I/O). Prints the marker line then the formatted log
 # line to stdout.
 # LOG_STAGE_TS_OVERRIDE may be set in tests to fix the timestamp.
 if [ "${1:-}" = "--emit-log-only" ]; then
@@ -127,6 +127,10 @@ if [ "${1:-}" = "--dry-run" ]; then
   DRY_RUN=1; shift
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=roadmap/lib.sh
+source "$SCRIPT_DIR/roadmap/lib.sh"
+
 usage() {
   cat >&2 <<'EOF'
 Usage: log-stage.sh <issue-number> <stage-name> <action> [<key>=<value>]...
@@ -147,22 +151,21 @@ case "$ACTION" in
   *) echo "log-stage.sh: invalid action '$ACTION' (valid: entered, exited, skipped, re-entered, summary, repair, dispatched)" >&2; exit 1 ;;
 esac
 
-command -v gh >/dev/null 2>&1 || { echo "log-stage.sh requires the gh CLI" >&2; exit 1; }
-gh auth status >/dev/null 2>&1 || { echo "log-stage.sh: gh is not authenticated (run: gh auth login)" >&2; exit 1; }
-
 PROJECT_DIR="${PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+export ROADMAP_BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$PROJECT_DIR")}"
+roadmap_require_backend "$ROADMAP_BACKEND" || exit 1
 TS="${LOG_STAGE_TS_OVERRIDE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 export LOG_STAGE_TS_OVERRIDE="$TS"  # Pass through to the --emit-log-only recursive invocation (T7).
 
 # ── Operation 1: body edit (header LWW, D2/D3) ───────────────────────
-# Test stubs bypass --jq, but production gh CLI honors it and extracts
+# Test stubs bypass --jq, but the default GitHub adapter honors it and extracts
 # the body string. Rewriter is tolerant of either shape (it operates
 # on the marker block, which doesn't appear in the JSON wrapper).
 body_in=$(mktemp)
 body_out=$(mktemp)
 trap 'rm -f "$body_in" "$body_out"' EXIT
 
-if ! ( cd "$PROJECT_DIR" && gh issue view "$ISSUE" --json body --jq .body ) > "$body_in" 2>/dev/null; then
+if ! ( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$ISSUE" --json body --jq .body ) > "$body_in" 2>/dev/null; then
   echo "log-stage.sh: failed to read issue #$ISSUE body" >&2
   exit 2
 fi
@@ -187,10 +190,10 @@ bash "$0" --rewrite-body-only "$body_in" "$STAGE" > "$body_out" \
   || { echo "log-stage.sh: marker-block rewrite failed" >&2; exit 2; }
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "would: gh issue edit $ISSUE --body-file <rewritten-body>"
+  echo "would: tracker issue update $ISSUE --body-file <rewritten-body>"
   echo "(body content omitted for brevity — diff between current and rewritten differs in the marker block only)"
 else
-  if ! ( cd "$PROJECT_DIR" && gh issue edit "$ISSUE" --body-file "$body_out" >/dev/null 2>&1 ); then
+  if ! ( cd "$PROJECT_DIR" && roadmap_tracker_issue_update "$ISSUE" --body-file "$body_out" >/dev/null 2>&1 ); then
     echo "log-stage.sh: body-edit (header write) failed for issue #$ISSUE" >&2
     exit 2
   fi
@@ -209,10 +212,10 @@ if [ "$malformed" -eq 1 ]; then
     # not abort the script (the body has already been repaired in place;
     # losing the audit entry is degraded, not fatal).
     if [ "$DRY_RUN" -eq 1 ]; then
-      echo "would: gh issue comment $ISSUE --body-file <repair-entry>"
+      echo "would: tracker issue comment $ISSUE --body-file <repair-entry>"
       cat "$repair_body"
     else
-      ( cd "$PROJECT_DIR" && gh issue comment "$ISSUE" --body-file "$repair_body" >/dev/null 2>&1 ) \
+      ( cd "$PROJECT_DIR" && roadmap_tracker_issue_comment "$ISSUE" --body-file "$repair_body" >/dev/null 2>&1 ) \
         || echo "log-stage.sh: repair log entry post failed for issue #$ISSUE — body was repaired but audit entry missing" >&2
     fi
     rm -f "$repair_body"
@@ -220,8 +223,8 @@ if [ "$malformed" -eq 1 ]; then
 fi
 
 # ── Operation 2: comment post (log entry, D2 op 2 / D4 / D5) ─────────
-# GitHub serializes comment creation server-side; no two writers create
-# "the same comment," so this op has natural append-only semantics.
+# The tracker backend serializes comment creation server-side; no two writers
+# create "the same comment," so this op has natural append-only semantics.
 comment_body=$(mktemp)
 # Replace trap with the expanded cleanup list (D2/D9: log post is independent).
 trap 'rm -f "$body_in" "$body_out" "$comment_body"' EXIT
@@ -230,10 +233,10 @@ bash "$0" --emit-log-only "$STAGE" "$ACTION" "$@" > "$comment_body" \
   || { echo "log-stage.sh: log-line formatter failed" >&2; exit 3; }
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "would: gh issue comment $ISSUE --body-file <comment>"
+  echo "would: tracker issue comment $ISSUE --body-file <comment>"
   cat "$comment_body"
 else
-  if ! ( cd "$PROJECT_DIR" && gh issue comment "$ISSUE" --body-file "$comment_body" >/dev/null 2>&1 ); then
+  if ! ( cd "$PROJECT_DIR" && roadmap_tracker_issue_comment "$ISSUE" --body-file "$comment_body" >/dev/null 2>&1 ); then
     echo "log-stage.sh: comment-post (log entry) failed for issue #$ISSUE — body-edit already applied" >&2
     exit 3
   fi

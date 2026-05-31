@@ -4,7 +4,7 @@
 #
 # Inputs (one of):
 #   --board-file <path>   read issue JSON from file (test mode)
-#   (default)             call gh issue list against current repo
+#   (default)             call the configured tracker backend
 #
 # Optional:
 #   --as-of <YYYY-MM-DD>  override "today" for deterministic tests
@@ -57,9 +57,8 @@ if [ -n "$board_file" ]; then
   [ -f "$board_file" ] || { echo "Not a file: $board_file" >&2; exit 1; }
   board="$(cat "$board_file")"
 else
-  command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 1; }
-  gh auth status >/dev/null 2>&1 || { echo "gh not authenticated" >&2; exit 1; }
-  board="$(gh issue list --state open --limit 200 \
+  roadmap_require_backend || exit 1
+  board="$(roadmap_tracker_issue_list --state open --limit 200 \
     --json number,title,labels,createdAt,updatedAt,comments,milestone)"
 fi
 

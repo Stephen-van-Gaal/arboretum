@@ -250,9 +250,9 @@ out=$(GH_STUB_BODY="$c14/issue-body.json" \
     || fail "case 14 — --dry-run exited non-zero" "$out"
 
 # Output mentions both ops it would perform.
-echo "$out" | grep -qiE 'would.*issue edit.*307' \
+echo "$out" | grep -qiE 'would.*tracker issue update.*307' \
   || fail "case 14 — dry-run output should describe the body-edit it would do" "$out"
-echo "$out" | grep -qiE 'would.*issue comment.*307' \
+echo "$out" | grep -qiE 'would.*tracker issue comment.*307' \
   || fail "case 14 — dry-run output should describe the comment-post it would do" "$out"
 echo "$out" | grep -qF -- '- 2026-05-23T14:03:00Z — /design entered, branch: feat/foo' \
   || fail "case 14 — dry-run should show the log line it would post" "$out"

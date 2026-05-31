@@ -6,9 +6,9 @@
 # issue-body heuristics, assigning each issue exactly one bucket by a fixed
 # precedence. Mirrors audit-board.sh: pure classification, no mutation.
 #
-# Inputs (live mode calls gh; test mode reads files):
-#   --issues-file <path>   open-issue JSON (gh issue list --json ...)
-#   --prs-file <path>      merged-PR JSON (gh pr list --state merged --json ...)
+# Inputs (live mode calls the configured tracker adapter; test mode reads files):
+#   --issues-file <path>   open item JSON (tracker issue list shape)
+#   --prs-file <path>      merged PR JSON (tracker PR list shape)
 #   --as-of <YYYY-MM-DD>   override "today" for deterministic tests
 #
 # Buckets (precedence — first match wins):
@@ -34,6 +34,10 @@ if [ -z "${BASH_VERSION:-}" ]; then
   echo "Error: requires bash. Run: bash $0" >&2; exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
 issues_file=""
 prs_file=""
 as_of="$(date -u +%Y-%m-%d)"
@@ -53,9 +57,10 @@ if [ -n "$issues_file" ]; then
   [ -f "$issues_file" ] || { echo "Not a file: $issues_file" >&2; exit 1; }
   issues="$(cat "$issues_file")"
 else
-  command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 1; }
-  gh auth status >/dev/null 2>&1 || { echo "gh not authenticated" >&2; exit 1; }
-  issues="$(gh issue list --state open --limit 200 \
+  PROJECT_ROOT="$(roadmap_project_root)"
+  export ROADMAP_BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$PROJECT_ROOT")}"
+  roadmap_require_backend "$ROADMAP_BACKEND" || exit 1
+  issues="$(roadmap_tracker_issue_list --state open --limit 200 \
     --json number,title,body,labels,createdAt,updatedAt,comments)"
 fi
 
@@ -64,14 +69,14 @@ if [ -n "$prs_file" ]; then
   [ -f "$prs_file" ] || { echo "Not a file: $prs_file" >&2; exit 1; }
   prs="$(cat "$prs_file")"
 else
-  prs="$(gh pr list --state merged --limit 200 \
+  prs="$(roadmap_tracker_pr_list --state merged --limit 200 \
     --json number,title,body,mergedAt)"
 fi
 
 # --- Decay pre-pass (design D5) -------------------------------------------
 # jq cannot compute SHA-256. For each open issue carrying `agent-ready` we
 # hash the current body and extract the latest `agent-prep:verified` marker
-# here, in bash, from the already-fetched $issues JSON (no extra gh calls).
+# here, in bash, from the already-fetched $issues JSON (no extra tracker calls).
 # The classifier consumes the result as $agent_ready.
 agent_ready='{}'
 while IFS= read -r n; do
@@ -159,7 +164,7 @@ jq -n \
             else "healthy" end
           ),
           # Evidence strings must use only controlled fields (issue/PR numbers, dates, day counts).
-          # Never embed untrusted .title or .body content — evidence flows verbatim into gh issue comment bodies in maintain-apply.sh.
+          # Never embed untrusted .title or .body content — evidence flows verbatim into tracker comment bodies in maintain-apply.sh.
           evidence: (
             if   $closing_ref then "Merged PR #\($closing_prs[0].number) references this with a closing keyword"
             elif $all_checked then "All \($done_boxes) acceptance checkbox(es) ticked, none left open"

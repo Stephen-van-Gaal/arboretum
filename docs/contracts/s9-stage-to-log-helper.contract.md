@@ -1,6 +1,6 @@
 ---
 seam: s9-stage-to-log-helper
-version: 1.0
+version: 1.1
 producer-type: skill
 consumer-type: script
 consumes:
@@ -22,7 +22,7 @@ owns:
 
 # S9 — Stage Skill → `scripts/log-stage.sh` Contract
 
-The seam between any pipeline-stage skill (the producer set canonized by WS2 at PR #329) and the pipeline-state helper script. Each invocation performs two **independent** GitHub API operations — a body edit overwriting the current-stage header marker block (LWW) and a comment post carrying one journey-log entry (GitHub-serialized). Per CWD-1, the two operations have no atomicity guarantee; partial failure surfaces loudly. The action vocabulary is the seven-entry set CWD-2 finalized.
+The seam between any pipeline-stage skill (the producer set canonized by WS2 at PR #329) and the pipeline-state helper script. Each invocation performs two **independent** tracker operations — a body edit overwriting the current-stage header marker block (LWW) and a comment post carrying one journey-log entry. Per CWD-1, the two operations have no atomicity guarantee; partial failure surfaces loudly. The action vocabulary is the seven-entry set CWD-2 finalized. The default GitHub adapter delegates the tracker operations to `gh issue view/edit/comment`.
 
 ## Producer
 
@@ -46,7 +46,7 @@ The producer set is closed at any given moment but **expandable**: new stage ski
 
 `scripts/log-stage.sh`. Consumer-type: `script`.
 
-The script performs two independent GitHub API operations per invocation per WS9 §D2: a body edit (header overwrite) via `gh issue edit --body-file -`, and a comment post (log entry) via `gh issue comment --body-file -`.
+The script performs two independent tracker operations per invocation per WS9 §D2: a body edit (header overwrite) via `roadmap_tracker_issue_update`, and a comment post (log entry) via `roadmap_tracker_issue_comment`.
 
 ## Protocol shape
 
@@ -60,7 +60,7 @@ bash scripts/log-stage.sh <issue-number> <stage-name> <action> [<key>=<value>]..
 
 Positional arguments:
 
-- **`<issue-number>`** — positive integer naming the GitHub issue whose pipeline-state surfaces (body header + comment log) will be updated.
+- **`<issue-number>`** — positive integer naming the tracker item whose pipeline-state surfaces (body header + comment log) will be updated.
 - **`<stage-name>`** — kebab-case slash-prefixed string naming the stage that is the subject of this log entry (e.g. `/build`, `/handoff`).
 - **`<action>`** — one of the seven-entry closed enum (per Invariants below).
 
@@ -70,9 +70,9 @@ Variadic arguments:
 
 ### Outputs
 
-Two independent GitHub API operations.
+Two independent tracker operations.
 
-**Operation 1 — body edit (header write).** `gh issue edit --body-file -` rewrites the marker-delimited current-stage block at the top of the issue body. The block shape is:
+**Operation 1 — body edit (header write).** `roadmap_tracker_issue_update --body-file <file>` rewrites the marker-delimited current-stage block at the top of the item body. The block shape is:
 
 ```
 <!-- pipeline-state:current-stage -->
@@ -82,7 +82,7 @@ Two independent GitHub API operations.
 
 Non-marker body content (everything after the closing `<!-- /pipeline-state:current-stage -->` marker) is preserved byte-for-byte. The block is always placed at the top of the body. If the markers are malformed (e.g. unclosed block, orphan opening marker), the script repairs them per WS9 OQ2 and posts a separate journey-log comment with action `repair`.
 
-**Operation 2 — comment post (log entry).** `gh issue comment --body-file -` posts a new comment whose body has the exact shape:
+**Operation 2 — comment post (log entry).** `roadmap_tracker_issue_comment --body-file <file>` posts a new comment whose body has the exact shape:
 
 ```
 <!-- pipeline-state:log -->
@@ -94,7 +94,7 @@ The marker (`<!-- pipeline-state:log -->`) identifies the comment as a journey-l
 **Script exit codes** (per WS9 §D2 commentary and the live `scripts/log-stage.sh` implementation):
 
 - **`0`** — both operations succeeded.
-- **`1`** — bad args, `gh` CLI missing, or `gh` not authenticated.
+- **`1`** — bad args, configured tracker backend missing, or tracker authentication failure.
 - **`2`** — body-edit operation failed.
 - **`3`** — comment-post operation failed.
 
@@ -116,13 +116,13 @@ The marker (`<!-- pipeline-state:log -->`) identifies the comment as a journey-l
 
 No other action value is permitted. WS4's contract test for the action vocabulary asserts this exact seven-entry set.
 
-**No hash-based dedupe.** `gh` CLI handles network retries internally; accidental duplicate invocations produce a visible duplicate log comment. The model is honest-rather-than-silent: a visible duplicate is strictly less harmful than a silently-dropped legitimate re-entry (per WS9 §D9 and the rejected-alternative in WS9 §D2).
+**No hash-based dedupe.** Tracker adapters may retry internally; accidental duplicate invocations produce a visible duplicate log comment. The model is honest-rather-than-silent: a visible duplicate is strictly less harmful than a silently-dropped legitimate re-entry (per WS9 §D9 and the rejected-alternative in WS9 §D2).
 
 **Header LWW is intentional.** Re-running with the same stage value produces the same body. Older header values are uninteresting by definition — only the latest stage matters.
 
 **Body preservation.** The body edit rewrites only the content between the current-stage markers. All other body content (frontmatter, original issue body, any non-marker text) is preserved byte-for-byte. Marker-block repair (per WS9 OQ2) is the only exception, and even then the script posts a `repair` log comment recording what was fixed.
 
-**Comment serialization (GitHub-side).** Comment creation is serialized server-side by GitHub. No two writers create "the same comment"; the journey log is append-only by construction with no concurrency conflict possible at the per-entry level.
+**Comment serialization (tracker-side).** Comment creation is serialized by the configured tracker backend. No two writers create "the same comment"; the journey log is append-only by construction with no concurrency conflict possible at the per-entry level.
 
 **Quoted-value escaping.** Values containing the structural `, ` delimiter are wrapped in double quotes. Within quoted values, three escape sequences are defined: `\"` (literal double-quote), `\\` (literal backslash), `\n` (newline; collapsed to a single space on read for single-sentence `summary:` values, preserved as-is for other values). No other escapes are permitted — values containing characters outside the format vocabulary must be rejected at write time rather than emitted ambiguously.
 
@@ -138,4 +138,5 @@ No other action value is permitted. WS4's contract test for the action vocabular
 
 ## Versioning
 
+- **1.1** (2026-05-31) — issue reads/updates/comments flow through backend-neutral tracker helpers; GitHub remains the default adapter.
 - **1.0** (2026-05-24) — initial contract per WS9 §D1–D2; embeds CWD-1 (non-atomicity) verbatim in `### Invariants` and the seven-entry action vocabulary from CWD-2. Producer + consumer behaviour from PR #314 (WS9 build) + PR #320 (statusline-default fix).

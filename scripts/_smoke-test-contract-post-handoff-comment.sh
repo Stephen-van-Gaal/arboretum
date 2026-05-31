@@ -4,9 +4,10 @@
 # docs/contracts/post-handoff-comment.contract.md. Asserts PHC-1..PHC-6
 # against scripts/post-handoff-comment.sh.
 #
-# The producer posts via `gh issue comment <n> --body-file <tmp>`. We
-# shadow PATH with a `gh` stub that captures the --body-file contents to
-# $GH_CAPTURE so we can assert the marker + body shape without network.
+# The producer posts via the roadmap tracker adapter. In the default GitHub
+# backend that delegates to `gh issue comment <n> --body-file <tmp>`. We shadow
+# PATH with a `gh` stub that captures the --body-file contents to $GH_CAPTURE so
+# we can assert the marker + body shape without network.
 # A GH_FAIL=1 env makes the stub exit nonzero to exercise the exit-2 path.
 # PHC-2 round-trips the captured body through the *consumer's* regex
 # (refresh-next-cache.sh's parser) to prove the marker is parseable.
@@ -29,6 +30,7 @@ fail_case() { echo "FAIL: $1" >&2; [ -n "${2:-}" ] && echo "  $2" >&2; fail=1; }
 cat > "$GH_STUB_DIR/gh" <<'GH'
 #!/usr/bin/env bash
 # gh issue comment <issue> --body-file <path>
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
 if [ "${GH_FAIL:-0}" != 0 ]; then echo "gh stub: simulated failure" >&2; exit 1; fi
 bf=""
 while [ $# -gt 0 ]; do
@@ -85,9 +87,9 @@ done
 out=$(PATH="$NOGH_BIN" bash "$PROBE" 42 "$BRANCH" "$NOTE" "$FIX" 2>/dev/null); rc=$?
 [ "$rc" = 1 ] && pass PHC-5 || fail_case PHC-5 "rc=$rc out=$out"
 
-# PHC-6 — gh issue comment fails → exit 2
+# PHC-6 — tracker issue comment fails → exit 2
 out=$(GH_FAIL=1 GH_CAPTURE="$CAP" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" 42 "$BRANCH" "$NOTE" "$FIX" 2>"$FIX/.err"); rc=$?
-if [ "$rc" = 2 ] && grep -qi 'gh issue comment failed' "$FIX/.err"; then pass PHC-6
+if [ "$rc" = 2 ] && grep -qi 'tracker issue comment failed' "$FIX/.err"; then pass PHC-6
 else fail_case PHC-6 "rc=$rc err=$(cat "$FIX/.err")"; fi
 
 [ "$fail" = 0 ] && echo "post-handoff-comment contract: ALL PASS" || exit 1

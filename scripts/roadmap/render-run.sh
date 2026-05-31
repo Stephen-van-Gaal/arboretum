@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # owner: roadmap
-# Render the /roadmap run daily view from current GH state.
+# Render the /roadmap run daily view from current tracker state.
 #
 # Two output modes:
 #   (default)    full §7c-style view (Done / Now / Next / Later / Slack + Recommend)
 #   --condensed  compact ~5-line orientation block for SessionStart hook injection
 #
 # Inputs (one of):
-#   (default)            call gh against current repo
+#   (default)            call the configured tracker backend
 #   --board-file <path>  read issue JSON from file (test mode)
 #   --closed-file <path> read recently-closed issue JSON from file (test mode)
 
@@ -43,7 +43,7 @@ if [ -z "$board_file" ]; then
 
   wip_limit=$(roadmap_config_get wip_limit 2>/dev/null || echo 1)
 
-  # Run nag before gh guard so strategic-review-due surfaces even offline.
+  # Run nag before the tracker guard so strategic-review-due surfaces offline.
   nag_output="$(bash "$SCRIPT_DIR/nag.sh" 2>/dev/null || true)"
 fi
 
@@ -51,11 +51,11 @@ fi
 if [ -n "$board_file" ]; then
   open_json="$(cat "$board_file")"
 else
-  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+  if ! roadmap_require_backend >/dev/null 2>&1; then
     [ -n "$nag_output" ] && printf '%s\n' "$nag_output"
     exit 0
   fi
-  open_json="$(gh issue list --state open --limit 200 \
+  open_json="$(roadmap_tracker_issue_list --state open --limit 200 \
     --json number,title,labels,updatedAt,milestone 2>/dev/null || echo '[]')"
 fi
 
@@ -63,7 +63,7 @@ fi
 if [ -n "$closed_file" ]; then
   closed_json="$(cat "$closed_file")"
 elif [ -z "$board_file" ]; then
-  closed_json="$(gh issue list --state closed --limit 50 \
+  closed_json="$(roadmap_tracker_issue_list --state closed --limit 50 \
     --json number,title,closedAt --search "closed:>$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)" 2>/dev/null || echo '[]')"
 else
   closed_json='[]'

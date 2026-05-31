@@ -98,7 +98,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# CLI-4: gh-absent guard exits 1 with "gh CLI not found" message.
+# CLI-4: tracker guard exits 1 with a backend=github diagnostic when gh is absent.
 # Build a PATH that has every real tool the script needs EXCEPT gh, so
 # `command -v gh` genuinely fails on any host. `env -i PATH=/usr/bin:/bin`
 # does NOT work — CI images ship gh in /usr/bin, so the guard would not fire
@@ -123,10 +123,10 @@ PATH="$NOGH_BIN" bash "$INSTALLER" --config "$SHARED_CONFIG" >"$stdout_4" 2>"$st
 
 if [ "$rc4" -ne 1 ]; then
   fail_case "CLI-4" "exit $rc4 (expected 1 for gh-absent); stderr: $(cat "$stderr_4")"
-elif ! grep -q "gh CLI not found" "$stderr_4"; then
-  fail_case "CLI-4" "expected 'gh CLI not found' in stderr; got: $(cat "$stderr_4")"
+elif ! grep -q "gh CLI" "$stderr_4" || ! grep -q "backend=github" "$stderr_4"; then
+  fail_case "CLI-4" "expected gh/backend diagnostic in stderr; got: $(cat "$stderr_4")"
 else
-  pass "CLI-4: gh-absent guard exits 1 with 'gh CLI not found'"
+  pass "CLI-4: tracker guard exits 1 with backend=github gh diagnostic"
 fi
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,34 @@ grep -q "^### 4-v2\. Agent-target triage" "$START" \
   || fail "case 2 — /start Step 4-v2 missing"
 ok "case 2 — /start Step 4-v2 present"
 
+# Case 2a: /start honours agent-ready as a contract only after freshness verification
+grep -q "scripts/verify-agent-ready.sh <issue>" "$START" \
+  || fail "case 2a — /start does not invoke verify-agent-ready.sh for labelled issues"
+grep -q "Do \*\*not\*\* re-screen labelled issues" "$START" \
+  || fail "case 2a — /start does not document the labelled-issue pre-screen skip"
+ok "case 2a — /start verifies agent-ready freshness before fast-lane use"
+
+# Case 2b: /start refuses stale/invalid agent-ready labels
+grep -q "Do \*\*not\*\* implement from it" "$START" \
+  || fail "case 2b — /start does not refuse stale agent-ready labels"
+grep -q "/roadmap agent-prep <issue>" "$START" \
+  || fail "case 2b — /start does not route stale agent-ready labels back through agent-prep"
+ok "case 2b — /start refuses stale/invalid agent-ready labels"
+
+# Case 2c: /start verifies and writes from the same issue snapshot
+grep -q -- "--issue-file \"\$issue_json\"" "$START" \
+  || fail "case 2c — /start does not verify the saved issue snapshot"
+grep -q "verified JSON snapshot" "$START" \
+  || fail "case 2c — /start does not require brief writes from the verified snapshot"
+ok "case 2c — /start reuses the verified issue snapshot for brief creation"
+
+# Case 2d: /start distinguishes helper preflight/input failures from stale labels
+grep -q "If it exits \`2\`" "$START" \
+  || fail "case 2d — /start does not document verify-agent-ready exit 2"
+grep -q "do not route it through \`/roadmap agent-prep\`" "$START" \
+  || fail "case 2d — /start still routes helper setup failures through agent-prep"
+ok "case 2d — /start handles verify-agent-ready exit 2 separately"
+
 # Case 3: /start v2 everything-else routes to /design (PR2's central edit)
 grep -q "Hand off to \`/design\` with the issue number" "$START" \
   || fail "case 3 — /start v2 everything-else does not invoke /design"

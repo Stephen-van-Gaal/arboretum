@@ -1,21 +1,21 @@
 ---
 name: handoff
 owner: session-handoff
-description: "Queue a GitHub issue as `next-up` so the next session boots oriented on it. Single canonical writer for the session-handoff label — /finish, /cleanup, and /reflect delegate here. Use directly when leaving mid-session ('I'm wrapping up; #154 is next')."
+description: "Queue a tracker item as `next-up` so the next session boots oriented on it. Single canonical writer for the session-handoff label — /finish, /cleanup, and /reflect delegate here. Use directly when leaving mid-session ('I'm wrapping up; #154 is next')."
 disable-model-invocation: false
 allowed-tools:
   - Bash
   - Read
   - AskUserQuestion
-argument-hint: "[<issue-number>] [--dry-run] [--completed]"
+argument-hint: "[<item-number>] [--dry-run] [--completed]"
 layer: 0
 ---
 
 # Handoff
 
-Captures session-handoff state by applying the **`next-up`** label to a single GitHub issue. The label is exclusive: the writer ensures at most one open issue carries it at any time. The `session-start.sh` hook surfaces whichever issue carries `next-up` in the boot banner of every subsequent session.
+Captures session-handoff state by applying the **`next-up`** label to a single tracker item. The label is exclusive: the writer ensures at most one open item carries it at any time. The `session-start.sh` hook surfaces whichever item carries `next-up` in the boot banner of every subsequent session.
 
-This skill is the **canonical writer** for the next-up label. The session-end skills (`/finish`, `/cleanup`, `/reflect`) collect the issue number and delegate the GH state changes here. They never call `gh` directly.
+This skill is the **canonical writer** for the next-up label. The session-end skills (`/finish`, `/cleanup`, `/reflect`) collect the item number and delegate tracker state changes here. They never call vendor-specific tracker CLIs directly.
 
 ## When to use
 
@@ -46,36 +46,29 @@ fi
 
 ### Step 1: Verify prerequisites
 
-The mechanism is GitHub-native. If `gh` is missing or unauthenticated, hard-fail with install/auth instructions:
+The mechanism uses the repo's configured tracker backend. Load the roadmap helper library and hard-fail if the selected backend is unavailable:
 
 ```bash
-if ! command -v gh >/dev/null 2>&1; then
-  echo "/handoff requires the gh CLI."
-  echo "  → Install: https://cli.github.com/"
-  echo "  → Then: gh auth login"
-  exit 1
-fi
-
-if ! gh auth status >/dev/null 2>&1; then
-  echo "/handoff requires gh to be authenticated."
-  echo "  → Run: gh auth login"
-  exit 1
-fi
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+source "$PROJECT_DIR/scripts/roadmap/lib.sh"
+ROADMAP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"
+export ROADMAP_BACKEND
+roadmap_require_backend "$ROADMAP_BACKEND" || exit 1
 ```
 
-If the project has no configured GitHub remote (none of the entries in `git remote` resolve to a GitHub URL), tell the user that the handoff feature requires GitHub and exit. Do not assume the remote is named `origin` — repos using `upstream`-style workflows are valid here, and `gh` itself decides whether the repo is readable. No file fallback exists by design.
+If the configured backend is unavailable, surface the helper's diagnostic and exit. No file fallback exists by design: `next-up` is shared tracker state so it works across machines.
 
-### Step 2: Resolve the target issue
+### Step 2: Resolve the target item
 
-If `$ARGUMENTS` contains a number (or `#N`), use it as the target issue. Strip the leading `#` if present.
+If `$ARGUMENTS` contains a number (or `#N`), use it as the target item. Strip the leading `#` if present.
 
 Otherwise, prompt once:
 
-> "Which issue should be queued as next-up? (Issue number, or 'cancel')"
+> "Which item should be queued as next-up? (Item number, or 'cancel')"
 
 Use `AskUserQuestion` with a free-text response. If the user says 'cancel' or gives an empty answer, exit silently — the handoff is **advisory**, never gated.
 
-If the input contains `--dry-run`, set a `DRY_RUN=1` flag; in dry-run mode print what *would* happen but don't mutate GH state.
+If the input contains `--dry-run`, set a `DRY_RUN=1` flag; in dry-run mode print what *would* happen but don't mutate tracker state.
 
 ### Step 2b: Determine mode — completion or pause
 
@@ -102,29 +95,29 @@ Mode is determined by an **ordered priority list — evaluate top-down, first ma
 
 ### Step 3: Validate the target
 
-Fetch the issue and check it's open with a non-empty body:
+Fetch the item and check it's open with a non-empty body:
 
 ```bash
-gh issue view "$N" --json number,title,body,state
+roadmap_tracker_issue_show "$N" --json number,title,body,state
 ```
 
-- **State must be `OPEN`.** If closed, refuse: *"Issue #N is closed; cannot queue a closed issue as next-up."* and exit.
+- **State must be `OPEN`.** If closed, refuse: *"Item #N is closed; cannot queue a closed item as next-up."* and exit.
 - **Body must be non-empty.** Strip whitespace and check. If empty:
-  > "Issue #N has no body — fresh sessions won't have context to start from. Add context now (paste a few lines into the issue), or apply `next-up` anyway?"
-  Allow override; the readiness check is advisory. If the user chooses to add context first, exit so they can edit the issue manually, then re-run.
+  > "Item #N has no body — fresh sessions won't have context to start from. Add context now (paste a few lines into the item), or apply `next-up` anyway?"
+  Allow override; the readiness check is advisory. If the user chooses to add context first, exit so they can edit the item manually, then re-run.
 
 ### Step 3b: Cross-check the target (pause mode)
 
-Attempt to determine the issue the current branch belongs to:
+Attempt to determine the item the current branch belongs to:
 
 1. Check the design spec matched by the branch topic for a `related-issue:` frontmatter field.
-2. If an open PR exists for the branch, read its body: `gh pr view --json body` and extract the issue number from a `Closes #M` or `Fixes #M` pattern. If no such pattern is found, treat the branch issue as undetermined — show no warning.
+2. If an open PR exists for the branch and the current backend exposes PR lookup, read its body and extract the item number from a closing-reference pattern. If no such pattern is found, or if PR lookup is unavailable, treat the branch item as undetermined — show no warning.
 
-If a branch-issue (`M`) is found and it differs from the target (`N`), **warn the human explicitly** (design §4.3, decision #14):
+If a branch item (`M`) is found and it differs from the target (`N`), **warn the human explicitly** (design §4.3, decision #14):
 
-> "⚠ The note describes work on the `<branch>` branch (issue #M), but you're queuing #N as next-up. The handoff comment will post to #N. Continue, or change the target?"
+> "⚠ The note describes work on the `<branch>` branch (item #M), but you're queuing #N as next-up. The handoff comment will post to #N. Continue, or change the target?"
 
-Use `AskUserQuestion` and wait for confirmation. If the user changes the target, update `N` and re-validate (Step 3). If the branch-issue cannot be determined, show no warning — this check is best-effort.
+Use `AskUserQuestion` and wait for confirmation. If the user changes the target, update `N` and re-validate (Step 3). If the branch item cannot be determined, show no warning — this check is best-effort.
 
 ### Step 3c: Draft and human-edit the note (pause mode)
 
@@ -154,7 +147,7 @@ NOTE_FILE=$(mktemp)
 # write approved text to "$NOTE_FILE"
 ```
 
-When `DRY_RUN=1`: show the draft and the `gh issue comment` command that would be run, but do **not** write the file to disk — carry the draft text in memory for Step 5b's dry-run output.
+When `DRY_RUN=1`: show the draft and the tracker comment operation that would be run, but do **not** write the file to disk — carry the draft text in memory for Step 5b's dry-run output.
 
 ### Step 3d: Enforce the working tree (pause mode)
 
@@ -188,30 +181,30 @@ When `DRY_RUN=1`: print the list of files, the commit message that would be used
 
 ### Step 4: Enforce label exclusivity
 
-List all open issues currently carrying `next-up`:
+List all open items currently carrying `next-up`:
 
 ```bash
-gh issue list --label next-up --state open --json number --jq '.[].number'
+roadmap_tracker_issue_list --label next-up --state open --json number --jq '.[].number'
 ```
 
 For each number that is **not** the target, remove the label:
 
 ```bash
-gh issue edit "$other" --remove-label next-up
+roadmap_tracker_issue_update "$other" --remove-label next-up
 ```
 
-This keeps the label genuinely exclusive without relying on GitHub-side enforcement (which doesn't exist for label uniqueness).
+This keeps the label genuinely exclusive without relying on tracker-side enforcement.
 
 ### Step 5: Ensure the label exists, then apply
 
 ```bash
 # Create the label if missing. The exit code from `label create` is
 # non-zero when it already exists; ignore that case.
-gh label create next-up \
+roadmap_tracker_label_create next-up \
   --description "Queued for the next session — see /handoff (issue #155)" \
   --color "b083d7" 2>/dev/null || true
 
-gh issue edit "$N" --add-label next-up
+roadmap_tracker_issue_update "$N" --add-label next-up
 ```
 
 If `DRY_RUN=1`, print these commands instead of running them.
@@ -229,7 +222,7 @@ touch "$PROJECT_DIR/.arboretum/handoff-done"
 
 The `handoff-done` marker tells the Stop and SessionEnd hooks a handoff was captured this session, so they stay silent. `session-start.sh` clears it at the next boot.
 
-When `DRY_RUN=1`: print the `gh issue comment` command and the full comment body that would be posted (including the HTML marker and header the script prepends), but do not run the script, do not post the comment, and do not write the marker file.
+When `DRY_RUN=1`: print the tracker comment operation and the full comment body that would be posted (including the HTML marker and header the script prepends), but do not run the script, do not post the comment, and do not write the marker file.
 
 ### Step 5c: Post the pipeline-state `summary` log entry (D8)
 
@@ -266,19 +259,19 @@ bash "$PROJECT_DIR/scripts/refresh-next-cache.sh" "$PROJECT_DIR"
 
 One line:
 
-- **Completion mode:** *"Queued #N (issue title) as next-up. Surfaces in next session's banner."*
-- **Pause mode:** *"Queued #N (issue title) as next-up and posted the session-handoff note. Surfaces in the next session's banner."*
+- **Completion mode:** *"Queued #N (item title) as next-up. Surfaces in next session's banner."*
+- **Pause mode:** *"Queued #N (item title) as next-up and posted the session-handoff note. Surfaces in the next session's banner."*
 
 For example: *"Queued #155 (Session handoff…) as next-up and posted the session-handoff note."*
 
 ## Important
 
-- **Single canonical writer.** `/finish`, `/cleanup`, and `/reflect` invoke this skill rather than calling `gh` themselves. If you're editing one of those skills and find yourself reaching for `gh issue edit`, stop and delegate here.
+- **Single canonical writer.** `/finish`, `/cleanup`, and `/reflect` invoke this skill rather than calling tracker CLIs themselves. If you're editing one of those skills and find yourself reaching for a vendor-specific issue command, stop and delegate here.
 - **Advisory, not a gate.** Skip silently on user decline. Never block a parent skill on a missing handoff.
-- **Hard fail on missing prerequisites.** Decision #6 in the design spec: when GitHub is unreachable but the project has a GH remote, surface install/auth instructions explicitly. Don't silently degrade.
-- **Exclusivity is enforced by the writer.** GitHub doesn't enforce label uniqueness; this skill does. Each apply pass strips `next-up` from any other open issue.
-- **Not a backlog.** `next-up` is *handoff* — exactly one issue. Strategic items go to ROADMAP.md (#152); tactical items remain in the full issue list.
-- **Dry-run.** `/handoff 155 --dry-run` prints the GH calls, the drafted note, the files that would be `wip:`-committed, the commit message, and the push target — and mutates nothing. No commit, no push, no comment, no label, no marker file.
+- **Hard fail on missing prerequisites.** Decision #6 in the design spec still applies: when the configured tracker is unavailable, surface install/auth instructions explicitly. Don't silently degrade.
+- **Exclusivity is enforced by the writer.** Tracker backends do not enforce `next-up` uniqueness; this skill does. Each apply pass strips `next-up` from any other open item.
+- **Not a backlog.** `next-up` is *handoff* — exactly one item. Strategic items go to ROADMAP.md (#152); tactical items remain in the full item list.
+- **Dry-run.** `/handoff 155 --dry-run` prints the tracker calls, the drafted note, the files that would be `wip:`-committed, the commit message, and the push target — and mutates nothing. No commit, no push, no comment, no label, no marker file.
 - **No stash, ever.** The only outcomes for a dirty tree in pause mode are: commit+push (on confirmation) or abort (on decline). A stash is never offered because it is machine-local and cannot survive a machine switch.
 - **Completion mode bypasses the note and tree steps.** When invoked with `--completed` (by `/finish`, `/cleanup`, `/reflect`), or when the tree is clean and the plan has no unchecked boxes, Steps 3b–3d and 5b are skipped entirely. No note is drafted, no tree enforcement runs.
 - **Two writes per handoff.** `/handoff` writes both the human-readable handoff comment (Step 5b) AND a machine-parseable `summary` log entry (Step 5c). The two surfaces are intentional: humans read the handoff thread; the boot banner reads the `summary` log entry. Both must succeed for the next session's orientation to be complete.

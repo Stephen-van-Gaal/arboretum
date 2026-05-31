@@ -6,7 +6,7 @@
 # state markers) and the project-defined component labels from roadmap.config.yaml.
 #
 # Flags:
-#   --dry-run       print TSV (name<TAB>color<TAB>description); no gh calls
+#   --dry-run       print TSV (name<TAB>color<TAB>description); no tracker calls
 #   --config <path> path to roadmap.config.yaml (default: ./roadmap.config.yaml)
 #   --no-components install only framework-fixed labels; skip components
 
@@ -15,6 +15,10 @@ set -euo pipefail
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "Error: requires bash. Run: bash $0" >&2; exit 1
 fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 dry_run=false
 no_components=false
@@ -122,10 +126,9 @@ if $dry_run; then
 fi
 
 # Live mode
-command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 1; }
-gh auth status >/dev/null 2>&1 || { echo "gh not authenticated; run: gh auth login" >&2; exit 1; }
+roadmap_require_backend || exit 1
 
-existing="$(gh label list --limit 200 --json name --jq '.[].name')"
+existing="$(roadmap_tracker_label_list --limit 200 --json name --jq '.[].name')"
 
 created=0
 skipped=0
@@ -136,11 +139,11 @@ for entry in "${labels[@]}"; do
     echo "skip:   $name"
     skipped=$((skipped + 1))
   else
-    if gh label create "$name" --color "$color" --description "$description" >/dev/null 2>&1; then
+    if roadmap_tracker_label_create "$name" --color "$color" --description "$description" >/dev/null 2>&1; then
       echo "create: $name"
       created=$((created + 1))
     else
-      echo "FAIL:   $name (gh label create failed)" >&2
+      echo "FAIL:   $name (tracker label create failed)" >&2
       failed=$((failed + 1))
     fi
   fi

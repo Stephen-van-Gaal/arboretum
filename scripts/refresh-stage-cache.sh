@@ -8,7 +8,7 @@
 #      docs/superpowers/specs/*-<slug>-design.md has `related-issue: <N>`
 #      in frontmatter → use issue N. Also accepts `<prefix>/<slug>-build`
 #      (the build-branch convention).
-#   2. Else if a `next-up`-labeled open issue exists → use it.
+#   2. Else if a `next-up`-labeled open tracker item exists → use it.
 #   3. Else issue:null.
 #
 # Cache shape:
@@ -24,6 +24,11 @@ CACHE_DIR="$PROJECT_DIR/.arboretum"
 CACHE_FILE="$CACHE_DIR/active-stage-cache.json"
 mkdir -p "$CACHE_DIR"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=roadmap/lib.sh
+source "$SCRIPT_DIR/roadmap/lib.sh"
+export ROADMAP_BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$PROJECT_DIR")}"
+
 now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 write_cache() {
@@ -38,8 +43,7 @@ emit_null() {
   write_cache "$(printf '{"issue": null, "stage": null, "ts": "%s"}' "$(now_iso)")"
 }
 
-command -v gh >/dev/null 2>&1 || { emit_null; exit 0; }
-gh auth status >/dev/null 2>&1 || { emit_null; exit 0; }
+roadmap_require_backend "$ROADMAP_BACKEND" >/dev/null 2>&1 || { emit_null; exit 0; }
 # python3 is required for JSON shaping; without it the python3 -c calls
 # below would die under set -euo pipefail. Match the header's "Exit: 0
 # always" contract by degrading gracefully to a null cache.
@@ -65,11 +69,11 @@ done
 
 # ── Step 2: next-up fallback ─────────────────────────────────────────
 if [ -z "$issue" ]; then
-  next_json=$( cd "$PROJECT_DIR" && gh issue list --label next-up --state open --limit 1 --json number 2>/dev/null || echo "[]" )
+  next_json=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number 2>/dev/null || echo "[]" )
   issue=$(python3 -c '
 import json, sys
 data = json.loads(sys.stdin.read() or "[]")
-# gh issue list --json returns an array; stub may return same shape
+# Tracker issue list returns an array; stubs may return the same shape.
 if isinstance(data, list):
     print(data[0]["number"] if data else "")
 else:
@@ -84,14 +88,14 @@ fi
 
 # ── Step 3: read body, extract current-stage header ──────────────────
 # Use --json body (no --jq) so the output is {"body":"..."} JSON —
-# compatible with both the real gh CLI and the test stub.
+# compatible with the default GitHub adapter and existing test stubs.
 #
 # Author-controlled strings (issue body, log-comment bodies) are
 # scrubbed of ASCII control characters before being written to the
 # cache — same defense-in-depth pattern as scripts/refresh-next-cache.sh.
 # Without this scrub, an issue-body hand-edit or a crafted comment could
 # inject ANSI terminal-escape sequences into the boot banner / statusline.
-body_json=$( cd "$PROJECT_DIR" && gh issue view "$issue" --json body 2>/dev/null || echo '{"body":""}' )
+body_json=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue" --json body 2>/dev/null || echo '{"body":""}' )
 stage=$(python3 -c '
 import re, sys, json
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
@@ -103,7 +107,7 @@ try:
     body = obj.get("body", "") if isinstance(obj, dict) else raw
 except Exception:
     body = raw
-# Decode JSON-escaped newlines (\n) that gh CLI may emit in JSON strings.
+# Decode JSON-escaped newlines (\n) that tracker adapters may emit in JSON strings.
 body = body.replace("\\n", "\n")
 m = re.search(
     r"<!--\s*pipeline-state:current-stage\s*-->\s*\*\*Current\s+stage:\*\*\s*(\S+)",
@@ -128,7 +132,7 @@ write_cache "$cache_json"
 # Filtered to comments carrying the <!-- pipeline-state:log --> marker.
 # Used by .claude/hooks/session-start.sh's pipeline-state block.
 LOG_CACHE_FILE="$CACHE_DIR/log-comments-cache.json"
-comments_raw=$( cd "$PROJECT_DIR" && gh api "repos/{owner}/{repo}/issues/$issue/comments" --paginate 2>/dev/null || echo "[]" )
+comments_raw=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_comments "$issue" --paginate 2>/dev/null || echo "[]" )
 filtered=$(python3 -c '
 import json, re, sys
 # Same defense-in-depth scrub as Step 3: comment bodies are author-
@@ -138,11 +142,11 @@ _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 
-# `gh api --paginate` concatenates page bodies — for JSON arrays this
+# Some tracker adapters concatenate paginated page bodies — for JSON arrays this
 # means multiple `[...]` documents back-to-back, NOT a single array.
 # `json.loads(raw)` chokes with "Extra data" on the second page; the
 # original `except: data = []` would have silently swallowed the
-# error and emitted an empty cache for any issue with >30 comments
+# error and emitted an empty cache for any item with >30 comments
 # (GitHub default page size). Use raw_decode to walk the documents
 # one at a time and concatenate the arrays. (Codex R2-2.)
 raw = sys.stdin.read().strip() or "[]"

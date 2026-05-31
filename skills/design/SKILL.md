@@ -181,7 +181,7 @@ Under v2, the Path A vs Path B distinction is gone: every everything-else change
 
 `$ARGUMENTS` arrives from `/start` in the form `Issue #<N>: <change request text>`.
 
-Parse `$ARGUMENTS` for the issue number and the request text — the issue number populates `related-issue` in v2.5's S2 frontmatter (`/build`'s strict gate requires a positive integer). If `$ARGUMENTS` is `Issue #pending: <request>`, prompt the user to create the GitHub issue before writing the design spec (use `gh issue create` per the project's standard issue templates) and substitute the new issue number.
+Parse `$ARGUMENTS` for the issue number and the request text — the issue number populates `related-issue` in v2.5's S2 frontmatter (`/build`'s strict gate requires a positive integer). If `$ARGUMENTS` is `Issue #pending: <request>`, prompt the user to create the tracker issue before writing the design spec (use `roadmap_tracker_issue_create` per the project's standard issue templates) and substitute the new issue number.
 
 Note: under v2, `$ARGUMENTS` carries change-request text plus an issue prefix, not a spec path. (Under v1, `$ARGUMENTS` is a spec path per the existing Step 1.)
 

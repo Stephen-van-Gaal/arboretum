@@ -14,6 +14,10 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
 scan_file=""
 dry_run=false
 
@@ -37,8 +41,9 @@ fi
 echo "$scan" | jq -e . >/dev/null 2>&1 || { echo "Invalid scan JSON" >&2; exit 1; }
 
 if ! $dry_run; then
-  command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 1; }
-  gh auth status >/dev/null 2>&1 || { echo "gh not authenticated" >&2; exit 1; }
+  PROJECT_ROOT="$(roadmap_project_root)"
+  export ROADMAP_BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$PROJECT_ROOT")}"
+  roadmap_require_backend "$ROADMAP_BACKEND" || exit 1
 fi
 
 # Emit "<number>\t<evidence>" lines for one bucket.
@@ -51,7 +56,7 @@ apply_close() {
   local body="$ev. Closed by /roadmap maintain [auto-close]. Reopen if this was premature."
   if $dry_run; then
     echo "[dry-run] close #$n — $ev"
-  elif gh issue close "$n" --reason completed --comment "$body" >/dev/null 2>&1; then
+  elif roadmap_tracker_issue_close "$n" --reason completed --comment "$body" >/dev/null 2>&1; then
     echo "✓ closed #$n — $ev"
   else
     echo "⚠ could not close #$n (skipped)" >&2
@@ -67,11 +72,11 @@ apply_label() {
     echo "[dry-run] label #$n $label — $ev"
     return
   fi
-  if ! gh issue edit "$n" --add-label "$label" >/dev/null 2>&1; then
+  if ! roadmap_tracker_issue_update "$n" --add-label "$label" >/dev/null 2>&1; then
     echo "⚠ could not add label $label to #$n (skipped)" >&2
     return
   fi
-  if ! gh issue comment "$n" --body "$note" >/dev/null 2>&1; then
+  if ! roadmap_tracker_issue_comment "$n" --body "$note" >/dev/null 2>&1; then
     echo "⚠ labelled #$n $label but could not post comment" >&2
     return
   fi
@@ -89,11 +94,11 @@ apply_relabel() {
   fi
   local args=(--remove-label "$remove")
   [ -n "$add" ] && args+=(--add-label "$add")
-  if ! gh issue edit "$n" "${args[@]}" >/dev/null 2>&1; then
+  if ! roadmap_tracker_issue_update "$n" "${args[@]}" >/dev/null 2>&1; then
     echo "⚠ could not relabel #$n (-$remove${add:+ +$add}) (skipped)" >&2
     return
   fi
-  if ! gh issue comment "$n" --body "$note" >/dev/null 2>&1; then
+  if ! roadmap_tracker_issue_comment "$n" --body "$note" >/dev/null 2>&1; then
     echo "⚠ relabelled #$n but could not post comment" >&2
     return
   fi

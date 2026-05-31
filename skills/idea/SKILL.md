@@ -1,6 +1,6 @@
 ---
 name: idea
-description: "Capture a new idea as a GitHub issue with the minimum ceremony (work-later template, horizon:later label, project-defined component). Single-purpose capture — never blocks, never triages."
+description: "Capture a new idea as a tracker item with the minimum ceremony (work-later template, horizon:later label, project-defined component). Single-purpose capture — never blocks, never triages."
 disable-model-invocation: false
 allowed-tools:
   - Bash
@@ -12,7 +12,7 @@ layer: 0
 
 # Idea
 
-The capture endpoint of the roadmap system. Creates a new GitHub issue using
+The capture endpoint of the roadmap system. Creates a new tracker item using
 the `work-later.md` template with `horizon:later` set, prompts for a
 project-defined `component:*` label, and exits. No shaping, no readying — those
 are `/roadmap shape` and `/roadmap ready` (Phase 3).
@@ -21,7 +21,7 @@ are `/roadmap shape` and `/roadmap ready` (Phase 3).
 
 - An idea surfaces mid-session and you don't want to lose it.
 - A bug or improvement is reported but isn't this session's work.
-- Anywhere you'd reach for `gh issue create` for a low-detail backlog item.
+- Anywhere you'd capture a low-detail backlog item.
 
 ## Procedure
 
@@ -29,8 +29,8 @@ are `/roadmap shape` and `/roadmap ready` (Phase 3).
 
 - `roadmap.config.yaml` exists at repo root (the project has been
   instantiated). If not, exit with: "Run `/roadmap instantiate` first."
-- `gh` is installed and authenticated (reuse `roadmap_require_gh` from
-  `scripts/roadmap/lib.sh`).
+- The configured tracker backend is available (reuse `roadmap_require_backend`
+  from `scripts/roadmap/lib.sh`).
 
 ```bash
 SCRIPT_DIR="$(git rev-parse --show-toplevel)/scripts/roadmap"
@@ -42,12 +42,12 @@ if [ -z "$config" ]; then
   exit 1
 fi
 
-roadmap_require_gh || exit 1
+roadmap_require_backend || exit 1
 ```
 
 ### Step 2: Resolve title
 
-If `$ARGUMENTS` is non-empty, use it as the issue title. Otherwise prompt
+If `$ARGUMENTS` is non-empty, use it as the item title. Otherwise prompt
 once using AskUserQuestion:
 
 > "What's the idea? (one-line title)"
@@ -76,16 +76,16 @@ Use the title as the one-paragraph body if no elaboration is provided. Do
 not prompt for elaboration unless the user volunteers it — the goal is
 friction-free capture.
 
-### Step 5: Create the issue
+### Step 5: Create the tracker item
 
 ```bash
-gh issue create \
+roadmap_tracker_issue_create \
   --title "<title>" \
   --label "horizon:later,component:<value>" \
   --body "$BODY"
 ```
 
-Print the resulting issue URL.
+Print the resulting tracker item URL.
 
 ### Step 6: Done
 

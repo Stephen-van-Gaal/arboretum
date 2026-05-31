@@ -49,6 +49,8 @@ Create `.arboretum.yml` in the target directory with the selected layer:
 # Arboretum project configuration
 # layer: 0 = foundation, 1 = structure, 2 = governance
 layer: <selected-layer>
+# Tracker/repo backend. Default: github. Future: azure-devops.
+backend: github
 ```
 
 Present what was created:

@@ -123,17 +123,195 @@ PYEOF
   fi
 }
 
-# Returns 0 if gh is installed and authenticated; nonzero otherwise. Prints
-# nothing on success; prints diagnostic on failure.
+# Read a top-level scalar from a simple YAML config file. This intentionally
+# mirrors roadmap_config_get's stdlib-only fallback because .arboretum.yml is
+# small and uses only top-level scalar keys for framework settings.
+roadmap_yaml_scalar_get() {
+  local path="$1"
+  local key="$2"
+  [ -f "$path" ] || return 1
+  if ! [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+    echo "roadmap_yaml_scalar_get: invalid key name: $key" >&2
+    return 1
+  fi
+  if command -v yq >/dev/null 2>&1; then
+    yq -r ".${key} // \"\"" "$path"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" "$key" <<'PYEOF'
+import sys, re
+path, key = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    for line in f:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        m = re.match(r"^" + re.escape(key) + r"\s*:\s*(.*)", line)
+        if not m:
+            continue
+        val = re.sub(r"\s+#.*$", "", m.group(1)).strip()
+        if val in ("", "null", "~"):
+            print("")
+        elif len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            print(val[1:-1])
+        else:
+            print(val)
+        break
+PYEOF
+  else
+    echo "roadmap: yq or python3 required. Install yq: https://github.com/mikefarah/yq" >&2
+    return 1
+  fi
+}
+
+# Backend selection. .arboretum.yml is the framework-level config surface;
+# roadmap.config.yaml is accepted for compatibility with the original roadmap
+# backend proposal. Missing/empty means GitHub so current projects keep working.
+# shellcheck disable=SC2120 # Optional root arg is primarily used by callers.
+roadmap_backend() {
+  local root="${1:-}"
+  local backend=""
+  [ -n "$root" ] || root="$(roadmap_project_root)"
+  if [ -f "$root/.arboretum.yml" ]; then
+    backend="$(roadmap_yaml_scalar_get "$root/.arboretum.yml" backend 2>/dev/null || true)"
+  fi
+  if [ -z "$backend" ] && [ -f "$root/roadmap.config.yaml" ]; then
+    backend="$(roadmap_yaml_scalar_get "$root/roadmap.config.yaml" backend 2>/dev/null || true)"
+  fi
+  case "$backend" in
+    ""|github) printf '%s\n' "github" ;;
+    azure|ado|azure-devops) printf '%s\n' "azure-devops" ;;
+    *) printf '%s\n' "$backend" ;;
+  esac
+}
+
+roadmap_require_backend() {
+  local backend="${1:-$(roadmap_backend)}"
+  case "$backend" in
+    github)
+      if ! command -v gh >/dev/null 2>&1; then
+        echo "/roadmap requires the gh CLI for backend=github. Install: https://cli.github.com/" >&2
+        return 1
+      fi
+      if ! gh auth status >/dev/null 2>&1; then
+        echo "/roadmap requires gh to be authenticated for backend=github. Run: gh auth login" >&2
+        return 1
+      fi
+      ;;
+    azure-devops)
+      echo "/roadmap backend=azure-devops is not implemented in this checkout yet. Use backend=github or install a future arboretum-tracker Azure adapter." >&2
+      return 1
+      ;;
+    *)
+      echo "/roadmap unsupported backend: $backend" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Backward-compatible alias for older scripts while they migrate to the
+# backend-neutral helper names.
 roadmap_require_gh() {
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "/roadmap requires the gh CLI. Install: https://cli.github.com/" >&2
-    return 1
-  fi
-  if ! gh auth status >/dev/null 2>&1; then
-    echo "/roadmap requires gh to be authenticated. Run: gh auth login" >&2
-    return 1
-  fi
+  roadmap_require_backend github
+}
+
+roadmap_tracker_issue_list() {
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh issue list "$@" ;;
+    *) echo "roadmap_tracker_issue_list: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_issue_show() {
+  local issue="$1"
+  shift
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh issue view "$issue" "$@" ;;
+    *) echo "roadmap_tracker_issue_show: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_issue_comment() {
+  local issue="$1"
+  shift
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh issue comment "$issue" "$@" ;;
+    *) echo "roadmap_tracker_issue_comment: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_issue_update() {
+  local issue="$1"
+  shift
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh issue edit "$issue" "$@" ;;
+    *) echo "roadmap_tracker_issue_update: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_issue_close() {
+  local issue="$1"
+  shift
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh issue close "$issue" "$@" ;;
+    *) echo "roadmap_tracker_issue_close: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_issue_create() {
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh issue create "$@" ;;
+    *) echo "roadmap_tracker_issue_create: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_label_list() {
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh label list "$@" ;;
+    *) echo "roadmap_tracker_label_list: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_label_create() {
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh label create "$@" ;;
+    *) echo "roadmap_tracker_label_create: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_issue_comments() {
+  local issue="$1"
+  shift
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh api "repos/{owner}/{repo}/issues/$issue/comments" "$@" ;;
+    *) echo "roadmap_tracker_issue_comments: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_pr_list() {
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh pr list "$@" ;;
+    *) echo "roadmap_tracker_pr_list: unsupported backend: $backend" >&2; return 1 ;;
+  esac
 }
 
 # True if a label with the given name exists in the current repo. Makes one
@@ -141,7 +319,7 @@ roadmap_require_gh() {
 # bulk checks.
 roadmap_label_exists() {
   local name="$1"
-  gh label list --limit 1000 --json name --jq '.[].name' | grep -Fxq "$name"
+  roadmap_tracker_label_list --limit 1000 --json name --jq '.[].name' | grep -Fxq "$name"
 }
 
 # ── Phase 1.5: Pulse file helpers ─────────────────────────────────────

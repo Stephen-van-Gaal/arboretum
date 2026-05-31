@@ -1,7 +1,7 @@
 ---
 name: start
 owner: workflow-unification
-description: Entry point for new work — ensures a GitHub issue exists, determines whether the change is planned or exploratory, and routes to the appropriate workflow path. Auto-invoked by CLAUDE.md when a change request is detected.
+description: Entry point for new work — ensures a tracker issue exists, determines whether the change is planned or exploratory, and routes to the appropriate workflow path. Auto-invoked by CLAUDE.md when a change request is detected.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob
 layer: 0
@@ -15,7 +15,7 @@ Entry point for all change requests. Establishes context and routes the user int
 
 Claude should invoke this skill (or follow its logic) whenever the user:
 - Asks to add a feature, fix a bug, refactor code, or make any change
-- References a GitHub issue they want to work on
+- References a tracker issue they want to work on
 - Starts a session with an intent to modify the project
 
 This skill is read-only under `v1` (gather context, recommend next steps). Under `v2` (`pipeline.workflow: v2`), the agent-target lane in Step 4-v2 writes a task brief via `scripts/write-agent-brief.sh`; the v1 routing path remains read-only.
@@ -59,21 +59,23 @@ From the user's message, extract:
 - **Why** (if stated)
 - **Any referenced issue number** (e.g., "fix #12", "working on issue 42")
 
-### 2. Check for a GitHub issue
+### 2. Check for a tracker issue
 
 If the user referenced an issue number:
 ```bash
-gh issue view <number> --json title,state,body
+source scripts/roadmap/lib.sh
+roadmap_tracker_issue_show <number> --json title,state,body,labels,comments
 ```
 
 If no issue was referenced, check if there's an open issue that matches:
 ```bash
-gh issue list --state open --limit 20
+source scripts/roadmap/lib.sh
+roadmap_tracker_issue_list --state open --limit 20
 ```
 
 Present what you found:
 - If a matching issue exists: "Found issue #N: <title>. Working from this?"
-- If no issue exists: "No GitHub issue found for this work. Want me to create one, or proceed without?"
+- If no issue exists: "No tracker issue found for this work. Want me to create one, or proceed without?"
 
 Do not block on issue creation — suggest it but proceed if the user declines.
 
@@ -127,6 +129,60 @@ For genuinely exploratory questions (no idea what to build yet), the **explore**
 Skip this section when `PIPELINE=v1`. When `PIPELINE=v2`, replace Step 4 with this triage.
 
 The unified workflow's only structural fork: classify the request as **agent-target** or **everything-else**.
+
+**First, honor the `agent-ready` contract when present.** If the referenced
+issue carries the `agent-ready` label, that label means `/roadmap agent-prep`
+already verified the full 10-item checklist, including the four fast-lane
+criteria below. Do **not** re-screen labelled issues with the cheap
+four-criterion triage. Instead, run the consumer-side freshness gate:
+
+```bash
+bash scripts/verify-agent-ready.sh <issue>
+```
+
+When `/start` is going to write an agent brief, fetch the issue once and verify
+that exact snapshot. This avoids reading a different title/body after the body
+hash has already been checked:
+
+```bash
+issue_json="$(mktemp)"
+verify_err="$(mktemp)"
+trap 'rm -f "$issue_json" "$verify_err"' EXIT
+
+source scripts/roadmap/lib.sh
+roadmap_tracker_issue_show <issue> --json number,title,body,labels,comments > "$issue_json"
+
+if bash scripts/verify-agent-ready.sh --issue-file "$issue_json" 2>"$verify_err"; then
+  jq -r '"Issue title: \(.title // "")\n\nIssue body:\n\(.body // "")"' "$issue_json" \
+    | bash scripts/write-agent-brief.sh <issue>
+else
+  rc=$?
+  cat "$verify_err" >&2
+  case "$rc" in
+    1) echo "agent-ready label is stale or invalid; re-run /roadmap agent-prep <issue> or route through /design." >&2 ;;
+    2) echo "verify-agent-ready failed due to tool/input setup; fix that before routing." >&2 ;;
+    *) echo "verify-agent-ready failed unexpectedly; stop and inspect." >&2 ;;
+  esac
+fi
+```
+
+- If it exits `0`, the issue is fresh. Treat it as **agent-target**, write the
+  issue title/body from the verified JSON snapshot into the task brief literally,
+  and continue to `/build`.
+
+  The pipe carries user-authored issue text as data; do not turn the title/body
+  into shell arguments or commands.
+
+- If it exits `1`, the label is stale or invalid (missing trusted marker,
+  body edit since verification, or >7 days old). Do **not** implement from it.
+  Surface the helper's controlled reason and route back through
+  `/roadmap agent-prep <issue>` for re-verification, or through `/design` if
+  the issue no longer fits the fast lane.
+
+- If it exits `2`, the helper hit an input or environment failure (bad
+  invocation, missing dependency, unauthenticated tracker, invalid JSON). Surface
+  the diagnostic and stop; do not treat this as an issue-readiness failure and
+  do not route it through `/roadmap agent-prep`.
 
 **Agent-target requires all four criteria to hold unambiguously:**
 

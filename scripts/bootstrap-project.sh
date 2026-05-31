@@ -269,6 +269,8 @@ else
 # Arboretum project configuration
 # layer: 0 = foundation, 1 = structure, 2 = governance
 layer: 0
+# Tracker/repo backend. Default: github. Future: azure-devops.
+backend: github
 ARBORETUM
   echo "  created: .arboretum.yml"
 fi

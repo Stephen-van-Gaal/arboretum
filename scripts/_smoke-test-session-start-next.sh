@@ -50,7 +50,7 @@ ok() { echo "PASS: $1"; }
 new_fixture() {
   local name="$1"
   local fix="$ROOT_TMP/$name"
-  mkdir -p "$fix/docs/definitions" "$fix/docs/specs" "$fix/scripts" "$fix/.claude/hooks" "$fix/.arboretum"
+mkdir -p "$fix/docs/definitions" "$fix/docs/specs" "$fix/scripts/roadmap" "$fix/.claude/hooks" "$fix/.arboretum"
   echo "# fixture" > "$fix/docs/ARCHITECTURE.md"
   echo "# fixture" > "$fix/docs/REGISTER.md"
   echo "# fixture" > "$fix/contracts.yaml"
@@ -63,6 +63,7 @@ EOF
   # tree is edited mid-test; rebuild the fixture to pick up changes.
   cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
   cp "$REFRESH" "$fix/scripts/refresh-next-cache.sh"
+  cp "$REPO_ROOT/scripts/roadmap/lib.sh" "$fix/scripts/roadmap/lib.sh"
 
   # Init git so the hook's git-author-count heuristic doesn't blow up
   # under set -e/pipefail. Disable signing for this fixture.

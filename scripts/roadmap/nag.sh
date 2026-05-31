@@ -60,7 +60,7 @@ _fire() {
   FIRED_NAGS="$FIRED_NAGS $name"
 }
 
-# ── Nag 1: strategic-review-due (weekly, no gh required) ─────────────
+# ── Nag 1: strategic-review-due (weekly, no tracker required) ─────────
 # Fires when now - last_reviewed >= review_cadence_weeks * 7 days.
 
 if ! _throttled_week "strategic-review-due" 2>/dev/null; then
@@ -78,16 +78,16 @@ if ! _throttled_week "strategic-review-due" 2>/dev/null; then
   fi
 fi
 
-# ── Nag 2: maintain-overdue (daily; needs gh for untriaged count) ─────
+# ── Nag 2: maintain-overdue (daily; needs tracker for untriaged count) ─
 # Fires when last_maintain_run is >7 days ago AND untriaged >= 3.
-# Silent when gh is unavailable — untriaged count cannot be verified.
+# Silent when the tracker is unavailable — untriaged count cannot be verified.
 
 if ! _throttled_day "maintain-overdue" 2>/dev/null; then
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  if roadmap_require_backend >/dev/null 2>&1; then
     last_maintain="$(roadmap_pulse_get_field "last_maintain_run" 2>/dev/null || true)"
     days_since_maintain="$(_days_since "${last_maintain:-}")"
     if [ "$days_since_maintain" -ge 7 ]; then
-      untriaged="$(gh issue list --search "no:label is:open" --limit 200 \
+      untriaged="$(roadmap_tracker_issue_list --search "no:label is:open" --limit 200 \
         --json number --jq 'length' 2>/dev/null || echo 0)"
       if [ "$untriaged" -ge 3 ]; then
         _fire "maintain-overdue" \
@@ -97,12 +97,12 @@ if ! _throttled_day "maintain-overdue" 2>/dev/null; then
   fi
 fi
 
-# ── Nag 3: stale-flagged-today (daily; needs gh) ──────────────────────
+# ── Nag 3: stale-flagged-today (daily; needs tracker) ─────────────────
 # Fires when any provisionally-stale issues exist.
 
 if ! _throttled_day "stale-flagged-today" 2>/dev/null; then
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    stale_count="$(gh issue list --label "provisionally-stale" --state open \
+  if roadmap_require_backend >/dev/null 2>&1; then
+    stale_count="$(roadmap_tracker_issue_list --label "provisionally-stale" --state open \
       --limit 200 --json number --jq 'length' 2>/dev/null || echo 0)"
     if [ "$stale_count" -ge 1 ]; then
       _fire "stale-flagged-today" \
@@ -111,16 +111,16 @@ if ! _throttled_day "stale-flagged-today" 2>/dev/null; then
   fi
 fi
 
-# ── Nag 4: agent-ready-while-WIP-full (daily; needs gh) ──────────────
+# ── Nag 4: agent-ready-while-WIP-full (daily; needs tracker) ──────────
 # Fires when WIP is at or above wip_limit AND agent-ready issues exist.
 
 if ! _throttled_day "agent-ready-while-WIP-full" 2>/dev/null; then
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  if roadmap_require_backend >/dev/null 2>&1; then
     wip_limit="$(roadmap_config_get wip_limit 2>/dev/null || true)"
     wip_limit="${wip_limit:-1}"
-    wip_count="$(gh issue list --label "horizon:now" --state open --limit 200 \
+    wip_count="$(roadmap_tracker_issue_list --label "horizon:now" --state open --limit 200 \
       --json number --jq 'length' 2>/dev/null || echo 0)"
-    agent_ready="$(gh issue list --label "agent-ready" --state open --limit 200 \
+    agent_ready="$(roadmap_tracker_issue_list --label "agent-ready" --state open --limit 200 \
       --json number --jq 'length' 2>/dev/null || echo 0)"
     if [ "$wip_count" -ge "$wip_limit" ] && [ "$agent_ready" -ge 1 ]; then
       _fire "agent-ready-while-WIP-full" \
@@ -129,14 +129,14 @@ if ! _throttled_day "agent-ready-while-WIP-full" 2>/dev/null; then
   fi
 fi
 
-# ── Nag 5: profile-graduation-lean (weekly; needs gh for count) ──────
+# ── Nag 5: profile-graduation-lean (weekly; needs tracker for count) ──
 # Fires when profile=minimal and open issue count >= 20.
 
 if ! _throttled_week "profile-graduation-lean" 2>/dev/null; then
   profile="$(roadmap_config_get profile 2>/dev/null || true)"
   if [ "${profile:-minimal}" = "minimal" ]; then
-    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-      open_count="$(gh issue list --state open --limit 200 \
+    if roadmap_require_backend >/dev/null 2>&1; then
+      open_count="$(roadmap_tracker_issue_list --state open --limit 200 \
         --json number --jq 'length' 2>/dev/null || echo 0)"
       if [ "$open_count" -ge 20 ]; then
         _fire "profile-graduation-lean" \

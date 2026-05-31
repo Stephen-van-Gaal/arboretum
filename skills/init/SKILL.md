@@ -200,6 +200,8 @@ if [ ! -f .arboretum.yml ]; then
 # Arboretum project configuration
 # layer: 0 = foundation, 1 = structure, 2 = governance
 layer: 0
+# Tracker/repo backend. Default: github. Future: azure-devops.
+backend: github
 YAML
   echo "  created: .arboretum.yml"
 fi

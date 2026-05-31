@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-roadmap-lib.sh — Contract test for
-# docs/contracts/roadmap-lib.contract.md. Asserts RL-1..RL-7 against
+# docs/contracts/roadmap-lib.contract.md. Asserts RL-1..RL-9 against
 # scripts/roadmap/lib.sh.
 #
 # The library resolves the project root via `git rev-parse --show-toplevel`,
@@ -9,8 +9,8 @@
 # carries a fixture roadmap.config.yaml. Functions are exercised in a
 # subshell that cd's into the fixture root and sources the lib, so the
 # real lib.sh is the unit under test. Covers the load-bearing helpers
-# (root/config resolution, the scalar/list getters, pulse round-trip);
-# trivial wrappers (require_gh, label_exists) are not network-tested here.
+# (root/config resolution, the scalar/list getters, pulse round-trip,
+# backend selection, and the GitHub tracker adapter dispatch).
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.
 set -uo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "Error: requires bash. Run: bash $0" >&2; exit 1; }
@@ -103,5 +103,67 @@ inlib roadmap_pulse_bootstrap
 inlib roadmap_pulse_update_field last_maintain_run "2026-05-30T12:00:00Z"
 got=$(inlib roadmap_pulse_get_field last_maintain_run)
 [ "$got" = "2026-05-30T12:00:00Z" ] && pass RL-7 || fail_case RL-7 "got=[$got] pulse=$(cat "$FIX/.arboretum/roadmap-pulse.json" 2>/dev/null)"
+
+# RL-8 — backend resolution: default GitHub; roadmap.config.yaml value accepted;
+# .arboretum.yml takes precedence when both are present.
+rm -f "$FIX/.arboretum.yml"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+profile: lean
+YAML
+backend_default=$(inlib roadmap_backend)
+[ "$backend_default" = "github" ] && pass "RL-8 (default)" || fail_case "RL-8 (default)" "got=[$backend_default]"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+YAML
+backend_roadmap=$(inlib roadmap_backend)
+[ "$backend_roadmap" = "azure-devops" ] && pass "RL-8 (roadmap config)" || fail_case "RL-8 (roadmap config)" "got=[$backend_roadmap]"
+cat > "$FIX/.arboretum.yml" <<'YAML'
+backend: github
+YAML
+backend_arbo=$(inlib roadmap_backend)
+[ "$backend_arbo" = "github" ] && pass "RL-8 (.arboretum precedence)" || fail_case "RL-8 (.arboretum precedence)" "got=[$backend_arbo]"
+
+# RL-9 — GitHub tracker adapter delegates issue-list through gh while keeping
+# the caller on the backend-neutral function.
+GH_BIN="$FIX/.gh-bin"; mkdir -p "$GH_BIN"
+cat > "$GH_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+printf '%s\n' "$*" >> "${GH_STUB_LOG:?}"
+if [ "$1 $2" = "issue list" ]; then
+  printf '[]'
+  exit 0
+fi
+if [ "$1 $2" = "issue close" ]; then exit 0; fi
+if [ "$1" = "api" ]; then printf '[]'; exit 0; fi
+if [ "$1 $2" = "pr list" ]; then printf '[]'; exit 0; fi
+echo "unexpected gh call: $*" >&2
+exit 2
+GH
+chmod +x "$GH_BIN/gh"
+export GH_STUB_LOG="$FIX/gh.log"
+: > "$GH_STUB_LOG"
+tracker_out=$(PATH="$GH_BIN:$PATH" inlib roadmap_tracker_issue_list --label next-up --state open --limit 1)
+if [ "$tracker_out" = "[]" ] && grep -q 'issue list --label next-up --state open --limit 1' "$FIX/gh.log"; then
+  pass RL-9
+else
+  fail_case RL-9 "out=[$tracker_out] log=$(cat "$FIX/gh.log" 2>/dev/null)"
+fi
+
+# RL-10 — Additional GitHub adapter wrappers delegate close/comment-list/PR-list
+# through the same backend-neutral surface used by stage and maintain scripts.
+PATH="$GH_BIN:$PATH" inlib roadmap_tracker_issue_close 42 --reason completed >/dev/null \
+  || fail_case "RL-10 (close)" "close helper failed"
+comments_out=$(PATH="$GH_BIN:$PATH" inlib roadmap_tracker_issue_comments 42 --paginate)
+prs_out=$(PATH="$GH_BIN:$PATH" inlib roadmap_tracker_pr_list --state merged --limit 1)
+if [ "$comments_out" = "[]" ] \
+   && [ "$prs_out" = "[]" ] \
+   && grep -q 'issue close 42 --reason completed' "$FIX/gh.log" \
+   && grep -q 'api repos/{owner}/{repo}/issues/42/comments --paginate' "$FIX/gh.log" \
+   && grep -q 'pr list --state merged --limit 1' "$FIX/gh.log"; then
+  pass RL-10
+else
+  fail_case RL-10 "comments=[$comments_out] prs=[$prs_out] log=$(cat "$FIX/gh.log" 2>/dev/null)"
+fi
 
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

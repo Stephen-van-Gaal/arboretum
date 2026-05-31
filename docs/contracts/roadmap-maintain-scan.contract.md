@@ -1,6 +1,6 @@
 ---
 seam: roadmap-maintain-scan
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes:
@@ -21,13 +21,13 @@ The seam between `scripts/roadmap/maintain-scan.sh` (which classifies open issue
 
 `scripts/roadmap/maintain-scan.sh` — producer-type: `script`.
 
-Read-only classifier. Reads open issues and recently-merged PRs (live: `gh issue list` / `gh pr list`; test: `--issues-file <path>` / `--prs-file <path>`), with `--as-of <YYYY-MM-DD>` overriding "today" for deterministic runs. It cross-references issues against merged PRs (60-day window) and issue-body heuristics, plus an agent-ready decay pre-pass (body-SHA + `agent-prep:verified` marker, trusted-author gated), then assigns each issue exactly one bucket by a fixed precedence (first match wins):
+Read-only classifier. Reads open tracker items and recently-merged PRs (live: configured tracker adapter; test: `--issues-file <path>` / `--prs-file <path>`), with `--as-of <YYYY-MM-DD>` overriding "today" for deterministic runs. The default GitHub adapter delegates to `gh issue list` and `gh pr list`. It cross-references issues against merged PRs (60-day window) and issue-body heuristics, plus an agent-ready decay pre-pass (body-SHA + `agent-prep:verified` marker, trusted-author gated), then assigns each issue exactly one bucket by a fixed precedence (first match wins):
 
 `auto_close` → `soft_resolved` → `agent_ready_invalidated` → `agent_ready_stale` → `orphan` → `untriaged` → `unshaped_next` → `healthy`.
 
-It emits a single JSON document to stdout. `buckets` carries one array per actionable bucket (every bucket except `healthy` — healthy issues are intentionally omitted from `buckets`); `counts` carries an integer per bucket including `healthy`. Evidence strings are deliberately restricted to controlled fields (issue/PR numbers, dates, day counts) and never embed untrusted `.title`/`.body` text, because evidence flows verbatim into `gh issue comment` bodies in `maintain-apply.sh`.
+It emits a single JSON document to stdout. `buckets` carries one array per actionable bucket (every bucket except `healthy` — healthy issues are intentionally omitted from `buckets`); `counts` carries an integer per bucket including `healthy`. Evidence strings are deliberately restricted to controlled fields (issue/PR numbers, dates, day counts) and never embed untrusted `.title`/`.body` text, because evidence flows verbatim into tracker comment bodies in `maintain-apply.sh`.
 
-Depends on `jq`, `shasum`, and (live mode) an installed, authenticated `gh`.
+Depends on `jq`, `shasum`, and (live mode) an available, authenticated tracker backend.
 
 ## Consumer
 
@@ -47,7 +47,7 @@ Consumer-type: `script`. One downstream consumer:
 ### Inputs
 
 - Flags: `--issues-file <path>` and `--prs-file <path>` (test mode — open-issue / merged-PR JSON), `--as-of <YYYY-MM-DD>` (deterministic "today"), `-h|--help`.
-- Live mode (no `--issues-file`): `gh issue list --state open` + `gh pr list --state merged`; requires `gh` installed and authenticated.
+- Live mode (no `--issues-file`): configured tracker item list + PR list; requires the tracker backend to be available and authenticated. For the default GitHub adapter this uses `gh issue list --state open` + `gh pr list --state merged`.
 - No stdin.
 
 ### Outputs
@@ -58,7 +58,7 @@ Consumer-type: `script`. One downstream consumer:
     "counts":  { "<bucket>": N, … } }
   ```
   `buckets` contains the seven actionable buckets (`healthy` omitted); `counts` contains all eight buckets including `healthy`.
-- stderr / exit: `0` on success; `2` on unknown arg; `1` on a missing `--issues-file`/`--prs-file` path or (live mode) missing/unauthenticated `gh`.
+- stderr / exit: `0` on success; `2` on unknown arg; `1` on a missing `--issues-file`/`--prs-file` path or (live mode) unavailable/unauthenticated tracker backend.
 
 ### Invariants
 
@@ -68,7 +68,7 @@ Consumer-type: `script`. One downstream consumer:
 - **Healthy omission.** Issues classified `healthy` appear only under `counts.healthy`, never under `buckets`.
 - **Single bucket per issue.** Each open issue lands in exactly one bucket (first-match precedence); `counts` sums to the total open-issue count.
 - **Controlled evidence.** Evidence strings reference only issue/PR numbers, dates, and day counts — never verbatim issue title/body — since they flow into comment bodies downstream.
-- **Read-only.** The scanner never mutates issues, PRs, or repo files.
+- **Read-only.** The scanner never mutates tracker items, PRs, or repo files.
 
 ## Test surface
 
@@ -80,4 +80,5 @@ Consumer-type: `script`. One downstream consumer:
 
 ## Versioning
 
+- **1.1** (2026-05-31) — live item and PR reads flow through backend-neutral helper functions; GitHub remains the default adapter.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/roadmap/maintain-scan.sh` on this branch. Issue #303 (WS5 PR 7a).

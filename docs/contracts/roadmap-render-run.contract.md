@@ -1,6 +1,6 @@
 ---
 seam: roadmap-render-run
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: hook
 consumes:
@@ -26,7 +26,7 @@ Sources `scripts/roadmap/lib.sh` for root/config access. Two output modes:
 - **default (full view)** — a `/roadmap run` board view: a `═══`-ruled header (`Roadmap — N open · …`), then `DONE` / `NOW` / `NEXT` / `AGENT-READY` / `LATER` / `SLACK` sections and a `RECOMMEND` block, with captured `nag.sh` output appended last.
 - **`--condensed`** — a compact orientation block for SessionStart injection: a single `[roadmap] N open · N now · N next · N later · N untriaged · WIP: N` header line, then conditional `NOW:` (top 3), `★ agent-ready:` (top 3), and a `→ /roadmap maintain has N untriaged` hint (only when untriaged ≥ 5).
 
-Inputs come from `gh` in live mode, or from `--board-file <path>` / `--closed-file <path>` in test mode (open / recently-closed issue JSON). In live mode it config-guards first: with no resolvable `roadmap.config.yaml` it exits 0 with empty stdout (no-op on un-instantiated projects); with config but no/unauthenticated `gh` it prints only captured nag output (if any) and exits 0. `--board-file` mode skips the config/gh guards entirely. Issue titles flow verbatim from `gh` into the rendered lines.
+Inputs come from the configured tracker backend in live mode, or from `--board-file <path>` / `--closed-file <path>` in test mode (open / recently-closed issue JSON). In live mode it config-guards first: with no resolvable `roadmap.config.yaml` it exits 0 with empty stdout (no-op on un-instantiated projects); with config but unavailable/unauthenticated tracker it prints only captured nag output (if any) and exits 0. `--board-file` mode skips the config/backend guards entirely. Issue titles flow verbatim from the tracker into the rendered lines.
 
 ## Consumer
 
@@ -36,23 +36,23 @@ Consumer-type: `hook`. One downstream consumer:
 
 **Consumer obligations:**
 
-- The hook MUST invoke render-run with `--condensed` and treat empty stdout as "no roadmap orientation" (the un-instantiated / no-gh case), not an error — it already wraps with `|| true`.
+- The hook MUST invoke render-run with `--condensed` and treat empty stdout as "no roadmap orientation" (the un-instantiated / no-tracker case), not an error — it already wraps with `|| true`.
 - The hook MUST inject the captured block verbatim (it is pre-formatted, leading with the `[roadmap] …` header line) — it does not re-parse the block.
-- **Scrubbing gap (documented, not asserted).** Issue titles flow unscrubbed from `gh` through render-run into the `--condensed` block, and `session-start.sh` appends `orientation_text` to `output` **without** the control-char `scrub()` it applies to the next-cache block (~line 123). Per the repo's "scrub author-controlled content into Claude's context" rule, this block is author-controlled (issue titles) reaching `additionalContext` with neither a source-side nor consumer-side scrub. Neither render-run nor the hook currently scrubs it. This contract records the gap; closing it (scrub at render-run's title emission and/or at the hook's append) is follow-up work, out of scope for this read-only contract.
+- **Scrubbing gap (documented, not asserted).** Issue titles flow unscrubbed from the tracker through render-run into the `--condensed` block, and `session-start.sh` appends `orientation_text` to `output` **without** the control-char `scrub()` it applies to the next-cache block (~line 123). Per the repo's "scrub author-controlled content into Claude's context" rule, this block is author-controlled (issue titles) reaching `additionalContext` with neither a source-side nor consumer-side scrub. Neither render-run nor the hook currently scrubs it. This contract records the gap; closing it (scrub at render-run's title emission and/or at the hook's append) is follow-up work, out of scope for this read-only contract.
 
 ## Protocol shape
 
 ### Inputs
 
 - Flags: `--condensed` (compact block), `--board-file <path>` / `--closed-file <path>` (test-mode issue JSON), `-h`-less; unknown flag → exit 2.
-- Live mode (no `--board-file`): reads `roadmap.config.yaml` + `gh issue list` (open & recently-closed); captures `nag.sh` stdout.
+- Live mode (no `--board-file`): reads `roadmap.config.yaml` + tracker issue lists (open & recently-closed); captures `nag.sh` stdout.
 - No stdin.
 
 ### Outputs
 
 - **`--condensed` stdout:** a `[roadmap] N open · N now · N next · N later · N untriaged · WIP: N` header line, then optional `NOW:` / `★ agent-ready:` / `→ /roadmap maintain …` blocks. Empty stdout in live mode when `roadmap.config.yaml` is absent.
 - **default stdout:** the full `═══`-ruled board view (`Roadmap — …` header, `DONE`/`NOW`/`NEXT`/`AGENT-READY`/`LATER`/`SLACK`/`RECOMMEND`), nag output appended.
-- Exit code: `0` on success (including the silent no-config / no-gh paths); `2` on unknown flag.
+- Exit code: `0` on success (including the silent no-config / no-tracker paths); `2` on unknown flag.
 
 ### Invariants
 
@@ -73,4 +73,5 @@ Consumer-type: `hook`. One downstream consumer:
 
 ## Versioning
 
+- **1.1** (2026-05-31) — live issue reads flow through backend-neutral tracker helpers; GitHub remains the default adapter.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/roadmap/render-run.sh` on this branch. Issue #303 (WS5 PR 7a).

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
-# refresh-next-cache.sh — Refresh .arboretum/next-cache.json from GitHub.
+# refresh-next-cache.sh — Refresh .arboretum/next-cache.json from the tracker.
 #
-# Reads the open issue carrying the `next-up` label (at most one) via
-# `gh` and writes a small JSON cache that `session-start.sh` consumes.
+# Reads the open tracker item carrying the `next-up` label (at most one) via
+# the configured backend and writes a small JSON cache that `session-start.sh`
+# consumes.
 #
 # Cache shape (as actually written by this script):
 #   {
@@ -32,8 +33,8 @@
 #                           "branch":    "<branch name, control-char-stripped>",
 #                           "next_action": "<string, control-char-stripped>",
 #                           "body":      "<prose lines joined with spaces, control-char-stripped>"}
-#   - error dict (NEW)   : `gh issue view <N> --json comments` was attempted but exited
-#                          non-zero. The first line of gh's stderr is captured in `detail`
+#   - error dict (NEW)   : tracker comment fetch was attempted but exited
+#                          non-zero. The first stderr line is captured in `detail`
 #                          (control-char-stripped); full diagnostic still written to
 #                          .arboretum/next-cache.err. Cache write succeeds (exit 0) — the
 #                          failure is recorded *in* the cache, not *about* the cache.
@@ -43,15 +44,15 @@
 # (including \x1b ANSI escape introducers) when stored, so the
 # session-start banner can render them as-is without risk of
 # remote-controlled terminal-escape injection (issue text is
-# author-controlled on GitHub).
+# author-controlled tracker content).
 #
 # Usage:
 #   bash scripts/refresh-next-cache.sh [project-dir]
 #
 # Exit codes:
-#   0  — cache written (issue found, no issue, or no GH remote)
-#   1  — gh CLI missing or unauthenticated (cache also reflects this)
-#   2  — gh call failed for some other reason
+#   0  — cache written (issue found, no issue, or no tracker remote)
+#   1  — configured tracker backend missing or unauthenticated (cache also reflects this)
+#   2  — tracker call failed for some other reason
 #
 # Safe to call concurrently — write_cache uses a per-process mktemp
 # tempfile and atomic rename, so racing refreshes never clobber each
@@ -70,10 +71,16 @@ if [ -z "${BASH_VERSION:-}" ]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/roadmap/lib.sh
+. "$SCRIPT_DIR/roadmap/lib.sh"
+
 PROJECT_DIR="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CACHE_DIR="$PROJECT_DIR/.arboretum"
 CACHE_FILE="$CACHE_DIR/next-cache.json"
 ERR_FILE="$CACHE_DIR/next-cache.err"
+ROADMAP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"
+export ROADMAP_BACKEND
 
 mkdir -p "$CACHE_DIR"
 
@@ -100,12 +107,9 @@ write_err() {
 }
 
 # ── Detect git remote (any) ──────────────────────────────────────────
-# We don't insist the URL contain github.com — the cloud Claude env
-# proxies via a local URL, and self-hosted GHE installs use custom
-# domains. We also don't insist on a remote named `origin` — repos
-# that use `upstream`-style workflows would be silently skipped.
-# Any remote is good enough; gh decides whether it's actually a GH
-# repo when called.
+# We don't insist on a remote named `origin` — repos that use
+# `upstream`-style workflows would be silently skipped. The selected
+# tracker backend decides whether the local repo context is usable.
 
 remote_name=$(git -C "$PROJECT_DIR" remote 2>/dev/null | head -n 1 || true)
 if [ -z "$remote_name" ]; then
@@ -119,9 +123,10 @@ if [ -z "$remote_name" ]; then
   exit 0
 fi
 
-# ── Detect gh ────────────────────────────────────────────────────────
+# ── Detect tracker backend ───────────────────────────────────────────
 
-if ! command -v gh >/dev/null 2>&1; then
+backend_stderr=$(mktemp "$CACHE_DIR/backend.stderr.XXXXXX")
+if ! roadmap_require_backend "$ROADMAP_BACKEND" > /dev/null 2>"$backend_stderr"; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
@@ -129,43 +134,35 @@ if ! command -v gh >/dev/null 2>&1; then
   "no_gh_remote": false,
   "error": "gh-unavailable"
 }' "$(now_iso)")"
-  write_err "gh CLI not found on PATH"
+  while IFS= read -r _err_line; do
+    [ -n "$_err_line" ] && write_err "$_err_line"
+  done < "$backend_stderr"
+  rm -f "$backend_stderr"
   exit 1
 fi
-
-if ! gh auth status >/dev/null 2>&1; then
-  write_cache "$(printf '{
-  "fetched_at": "%s",
-  "issue": null,
-  "handoff": null,
-  "no_gh_remote": false,
-  "error": "gh-unavailable"
-}' "$(now_iso)")"
-  write_err "gh CLI is installed but not authenticated (run: gh auth login)"
-  exit 1
-fi
+rm -f "$backend_stderr"
 
 # ── Fetch the next-up issue ──────────────────────────────────────────
-# Run gh from inside the project dir so it picks up the right repo
-# from the local git config; no need to pass -R explicitly.
+# Run the tracker command from inside the project dir so the backend picks up
+# the right repo from local git config where applicable.
 
 # Capture stdout (the JSON payload) and stderr (warnings/errors)
-# separately, so a stderr warning from gh doesn't poison the JSON
+# separately, so a stderr warning from the tracker doesn't poison the JSON
 # we hand to the parser. tempfiles, not pipes, since we need both
 # streams plus the exit status.
-gh_stdout=$(mktemp "$CACHE_DIR/gh.stdout.XXXXXX")
-gh_stderr=$(mktemp "$CACHE_DIR/gh.stderr.XXXXXX")
-gh_exit=0
+tracker_stdout=$(mktemp "$CACHE_DIR/tracker.stdout.XXXXXX")
+tracker_stderr=$(mktemp "$CACHE_DIR/tracker.stderr.XXXXXX")
+tracker_exit=0
 ( cd "$PROJECT_DIR" && \
-  gh issue list --label next-up --state open --limit 1 \
+  roadmap_tracker_issue_list --label next-up --state open --limit 1 \
      --json number,title,url,body,labels,updatedAt \
-     >"$gh_stdout" 2>"$gh_stderr" ) || gh_exit=$?
+     >"$tracker_stdout" 2>"$tracker_stderr" ) || tracker_exit=$?
 
-if [ "$gh_exit" -ne 0 ]; then
-  gh_err=$(cat "$gh_stderr" 2>/dev/null || true)
-  rm -f "$gh_stdout" "$gh_stderr"
-  # Distinguish "not a GH repo" from other failures.
-  if printf '%s' "$gh_err" | grep -qiE 'no.*github.*remote|not a github repository'; then
+if [ "$tracker_exit" -ne 0 ]; then
+  tracker_err=$(cat "$tracker_stderr" 2>/dev/null || true)
+  rm -f "$tracker_stdout" "$tracker_stderr"
+  # Distinguish "not a GitHub repo" from other default-adapter failures.
+  if printf '%s' "$tracker_err" | grep -qiE 'no.*github.*remote|not a github repository'; then
     write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
@@ -182,12 +179,12 @@ if [ "$gh_exit" -ne 0 ]; then
   "no_gh_remote": false,
   "error": "gh-call-failed"
 }' "$(now_iso)")"
-  write_err "gh issue list call failed: $gh_err"
+  write_err "tracker issue list call failed: $tracker_err"
   exit 2
 fi
 
-issues_json=$(cat "$gh_stdout")
-rm -f "$gh_stdout" "$gh_stderr"
+issues_json=$(cat "$tracker_stdout")
+rm -f "$tracker_stdout" "$tracker_stderr"
 
 # If the array is empty, no issue carries the label.
 if [ -z "$issues_json" ] || [ "$issues_json" = "[]" ]; then
@@ -202,13 +199,13 @@ if [ -z "$issues_json" ] || [ "$issues_json" = "[]" ]; then
 fi
 
 # ── Fetch handoff comments for the next-up issue ─────────────────────
-# A second gh call: the latest `arbo-handoff`-marked comment on the
+# A second tracker call: the latest `arbo-handoff`-marked comment on the
 # next-up issue is the current session-handoff note (design §4.6).
 issue_number=$(printf '%s' "$issues_json" \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if d else "")' 2>/dev/null || true)
-comments_file=$(mktemp "$CACHE_DIR/gh.comments.XXXXXX")
+comments_file=$(mktemp "$CACHE_DIR/tracker.comments.XXXXXX")
 echo '{"comments":[]}' > "$comments_file"
-# Distinguish "gh issue view succeeded with no comments" from "gh issue view
+# Distinguish "tracker issue show succeeded with no comments" from "tracker fetch
 # failed" — pre-#264 these collapsed into the same silent-empty state, which
 # made handoff: null indistinguishable from a transient fetch failure. Now we
 # propagate the distinction via env vars to the python3 cache-builder below
@@ -216,8 +213,8 @@ echo '{"comments":[]}' > "$comments_file"
 comment_fetch_status="not-attempted"
 comment_fetch_err=""
 if [ -n "$issue_number" ]; then
-  comment_stderr=$(mktemp "$CACHE_DIR/gh.comments.err.XXXXXX")
-  if ( cd "$PROJECT_DIR" && gh issue view "$issue_number" --json comments ) \
+  comment_stderr=$(mktemp "$CACHE_DIR/tracker.comments.err.XXXXXX")
+  if ( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue_number" --json comments ) \
        > "$comments_file" 2>"$comment_stderr"; then
     comment_fetch_status="ok"
   else
@@ -226,7 +223,7 @@ if [ -n "$issue_number" ]; then
     # line of stderr (keeps cache readable per design D7/OQ2); the diagnostic
     # file gets the FULL multi-line stderr (preserved for debugging). Codex
     # caught the conflation in PR #365 review — using only $comment_fetch_err
-    # for both would truncate multi-line gh diagnostics in the .err file too.
+    # for both would truncate multi-line tracker diagnostics in the .err file too.
     comment_fetch_err=$(head -1 "$comment_stderr" 2>/dev/null || true)
     # Keep the comments file valid JSON even though the builder won't read it
     # in the failure path — defense in depth against a future refactor that
@@ -236,7 +233,7 @@ if [ -n "$issue_number" ]; then
     # prefix — write_err is a single-line logger (`printf '[%s] %s\n' ...`),
     # so a multi-line argument would prefix only the first line. Per Copilot
     # PR #368 review.
-    write_err "gh issue view comments call failed:"
+    write_err "tracker issue comments call failed:"
     while IFS= read -r _err_line; do
       [ -n "$_err_line" ] && write_err "  $_err_line"
     done < "$comment_stderr"
@@ -253,7 +250,7 @@ fi
 if command -v python3 >/dev/null 2>&1; then
   # Pass issues_json via a temp file rather than argv to avoid OS
   # arg-length limits on issues with very long bodies.
-  issues_file=$(mktemp "$CACHE_DIR/gh.issues.XXXXXX")
+  issues_file=$(mktemp "$CACHE_DIR/tracker.issues.XXXXXX")
   printf '%s' "$issues_json" > "$issues_file"
   cache_json=$(FETCHED_AT="$(now_iso)" \
                COMMENT_FETCH_STATUS="$comment_fetch_status" \
@@ -267,7 +264,7 @@ issue = data[0] if data else None
 
 # Strip ASCII control characters (including \x1b ANSI escape
 # introducers) from any string we write into the cache. Issue
-# titles/bodies are author-controlled on GitHub, and the
+# titles/bodies are author-controlled tracker content, and the
 # session-start banner pipes them straight to a terminal — without
 # this scrub, a malicious issue could inject ANSI escapes that
 # manipulate display/logs.
@@ -357,8 +354,8 @@ def latest_handoff(comments_path):
     }
 
 # Branch on COMMENT_FETCH_STATUS (propagated from the shell layer):
-#   "failed"        — gh issue view exited non-zero; emit the error union variant
-#   "ok"            — gh issue view succeeded; latest_handoff() returns the
+#   "failed"        — tracker issue show exited non-zero; emit the error union variant
+#   "ok"            — tracker issue show succeeded; latest_handoff() returns the
 #                     handoff dict (or None for genuine no-handoff)
 #   "not-attempted" — issue_number couldn't be parsed (rare path); fall through
 #                     to latest_handoff() on the seeded empty comments file
