@@ -75,22 +75,12 @@ if ! diff -q "$COMMITTED" "$fresh" >/dev/null; then
   exit 1
 fi
 
-# Ramp mode — at least one cli-contract has landed (bootstrap predicate
-# passed) but the manifest still has MISSING rows. PR 5 introduced this
-# branch; PR 7b removes it when the manifest is fully populated.
-#
-# The strict-mode check below stays in the file unmodified — it becomes
-# structurally unreachable until PR 7b deletes this branch. That deletion
-# is the re-tightening event; the strict check fires from then on.
-if grep -q "| MISSING |" "$COMMITTED"; then
-  missing_count=$(grep -c "| MISSING |" "$COMMITTED")
-  echo "validate-coverage-manifest: ramp mode — $missing_count MISSING row(s) (will be covered by WS5 PRs 6 / 7a / 7b)" >&2
-  exit 0
-fi
-
-# Strict mode (post-PR-7b): no MISSING rows. Structurally unreachable
-# while the ramp branch above exists; PR 7b's diff deletes the ramp
-# branch, re-activating this check for any future regression.
+# Strict mode (post-PR-7b re-tightening): no MISSING rows permitted. The
+# WS5 rollout's ramp tier — which exited 0 with a warning while sweep PRs
+# 6 / 7a / 7b were still populating the manifest — was removed once MISSING
+# hit zero (the re-tightening event the contract-coverage contract pins to
+# PR 7b). From here on, a MISSING row can only be a regression (a new
+# uncovered governance surface), and it fails the build.
 if grep -q "| MISSING |" "$COMMITTED"; then
   echo "COVERAGE-MANIFEST-INCOMPLETE: at least one script/hook has no covering contract" >&2
   grep "| MISSING |" "$COMMITTED" | sed 's/^/  /' >&2

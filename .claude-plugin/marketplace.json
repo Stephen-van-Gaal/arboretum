@@ -1,6 +1,6 @@
 {
   "name": "arboretum",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "description": "Arboretum plugin marketplace — single-plugin catalog publishing the arboretum framework from this repository.",
   "owner": {
     "name": "Stephen van Gaal",
@@ -10,7 +10,7 @@
     {
       "name": "arboretum",
       "description": "Choreography for AI-assisted software development. Defers heavy lifting to specialists like superpowers; provides governance, workflows, and templates that produce maintainable projects.",
-      "version": "0.22.0",
+      "version": "0.22.1",
       "author": {
         "name": "Stephen van Gaal"
       },

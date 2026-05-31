@@ -17,7 +17,7 @@
 # Closes #140 (arboretum should detect drift in its own artifacts) as
 # non-recurrable by construction: CC-1 asserts the drift detector is
 # itself covered. Any regression that drops the coverage scripts' rows or
-# breaks the freshness/duplicate/ramp invariants fails this test in CI.
+# breaks the freshness/duplicate/strict invariants fails this test in CI.
 
 set -uo pipefail
 
@@ -176,24 +176,23 @@ else
   fail_case "CC-5 (full+cli): mixed-shape duplicate not detected (rc=$rc_dup_mixed)" "$out_dup_mixed"
 fi
 
-# ── CC-6: ramp-mode discipline ───────────────────────────────────────
-# >=1 cli-contract present and a MISSING row remaining → exit 0 + warning.
+# ── CC-6: strict-mode completeness ───────────────────────────────────
+# Post-PR-7b re-tightening: the ramp escape branch is gone. A MISSING row —
+# now only reachable as a regression (a new uncovered governance surface) —
+# must fail non-zero with COVERAGE-MANIFEST-INCOMPLETE, not pass with a
+# warning. This is the inverse of the pre-7b ramp-mode behaviour CC-6 used
+# to assert; the rollout-window ramp tier was removed once MISSING hit zero.
 F=$(new_fixture)
 : > "$F/scripts/foo.sh"        # covered by bar.cli-contract
-: > "$F/scripts/uncovered.sh"  # no covering contract → MISSING
+: > "$F/scripts/uncovered.sh"  # no covering contract → MISSING (regression)
 write_cli_contract "$F/docs/contracts/bar.cli-contract.md" "bar" "scripts/foo.sh"
 ( cd "$F" && bash "$GEN" ) >/dev/null 2>&1
-out_ramp=$( cd "$F" && bash "$VALIDATOR" 2>&1 ); rc_ramp=$?
-# Assert the warning's documented details, not just the words "ramp mode":
-# it must name the MISSING count (a digit + "MISSING row") and the
-# "6 / 7a / 7b" sweep-PR handoff, per the contract's operator-guidance promise.
-if [ "$rc_ramp" -eq 0 ] \
-   && echo "$out_ramp" | grep -qi "ramp mode" \
-   && echo "$out_ramp" | grep -qE "[0-9]+ MISSING row" \
-   && echo "$out_ramp" | grep -qF "6 / 7a / 7b"; then
-  pass "CC-6: ramp mode — exits 0 with a warning naming the MISSING count and the 6 / 7a / 7b sweep PRs"
+out_strict=$( cd "$F" && bash "$VALIDATOR" 2>&1 ); rc_strict=$?
+if [ "$rc_strict" -ne 0 ] \
+   && echo "$out_strict" | grep -qF "COVERAGE-MANIFEST-INCOMPLETE"; then
+  pass "CC-6: strict mode — a MISSING row fails non-zero with COVERAGE-MANIFEST-INCOMPLETE (no ramp escape)"
 else
-  fail_case "CC-6: ramp-mode warning missing required details (rc=$rc_ramp)" "$out_ramp"
+  fail_case "CC-6: strict-mode regression gate did not fire (rc=$rc_strict; expected non-zero + COVERAGE-MANIFEST-INCOMPLETE)" "$out_strict"
 fi
 
 # ── CC-7: scan-scope exclusion ───────────────────────────────────────
