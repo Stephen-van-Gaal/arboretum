@@ -1,0 +1,42 @@
+{
+  "name": "arboretum",
+  "version": "0.23.3",
+  "description": "Choreography for AI-assisted software development. Defers heavy lifting to specialists like superpowers; provides governance, workflows, and templates that produce maintainable projects.",
+  "author": {
+    "name": "Stephen van Gaal",
+    "email": "svangaal@gmail.com",
+    "url": "https://github.com/stvangaal"
+  },
+  "homepage": "https://github.com/stvangaal/arboretum",
+  "repository": "https://github.com/stvangaal/arboretum",
+  "license": "MIT",
+  "keywords": [
+    "governance",
+    "workflows",
+    "spec-driven-development",
+    "choreography",
+    "ai-assisted-development"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Arboretum",
+    "shortDescription": "Governed software-development workflows for coding agents",
+    "longDescription": "Use Arboretum to route coding-agent work through governed workflows, project initialization, design, build orchestration, verification, pull requests, cleanup, and reflection.",
+    "developerName": "Stephen van Gaal",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/stvangaal/arboretum",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "brandColor": "#2F855A",
+    "defaultPrompt": [
+      "Use Arboretum /start to route this change.",
+      "Use Arboretum /build for this design spec."
+    ],
+    "screenshots": []
+  }
+}

@@ -16,7 +16,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 make_manifests() {
   # $1 = dir, $2 = version
-  mkdir -p "$1/.claude-plugin"
+  mkdir -p "$1/.claude-plugin" "$1/.codex-plugin"
   cat > "$1/.claude-plugin/plugin.json" <<EOF
 {
   "name": "arboretum",
@@ -35,6 +35,12 @@ EOF
   ]
 }
 EOF
+  cat > "$1/.codex-plugin/plugin.json" <<EOF
+{
+  "name": "arboretum",
+  "version": "$2"
+}
+EOF
 }
 
 read_v() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$1"; }
@@ -45,7 +51,8 @@ git_fixture() {
   # (skills/demo/SKILL.md), a dev-only file (docs/specs/demo.spec.md), a
   # public-mirror source (CLAUDE.public.md — shippable), a root README.md
   # (dev-only), a prefix-collision path (CLAUDE.md.bak), a dev-only skill
-  # (.claude/skills/dev-demo) and a shippable one (.claude/skills/shipped).
+  # (.claude/skills/dev-demo and .agents/skills/dev-local) and shippable
+  # paths (.claude/skills/shipped and .agents/plugins/marketplace.json).
   # Base commit captured on branch `base-ref`.
   local d="$1"
   mkdir -p "$d"
@@ -54,7 +61,8 @@ git_fixture() {
   git -C "$d" config user.name "test"
   make_manifests "$d" "1.0.0"
   mkdir -p "$d/skills/demo" "$d/docs/specs" \
-    "$d/.claude/skills/dev-demo" "$d/.claude/skills/shipped"
+    "$d/.claude/skills/dev-demo" "$d/.claude/skills/shipped" \
+    "$d/.agents/skills/dev-local" "$d/.agents/plugins"
   echo "demo skill" > "$d/skills/demo/SKILL.md"
   echo "demo spec" > "$d/docs/specs/demo.spec.md"
   echo "public claude source" > "$d/CLAUDE.public.md"
@@ -62,17 +70,20 @@ git_fixture() {
   echo "stray backup" > "$d/CLAUDE.md.bak"
   echo "dev skill" > "$d/.claude/skills/dev-demo/SKILL.md"
   echo "shipped skill" > "$d/.claude/skills/shipped/SKILL.md"
+  echo "dev codex skill" > "$d/.agents/skills/dev-local/SKILL.md"
+  echo '{"name":"fixture","plugins":[]}' > "$d/.agents/plugins/marketplace.json"
   git -C "$d" add -A
   git -C "$d" commit -qm "base"
   git -C "$d" branch -q base-ref
 }
 
-echo "=== bump-version.sh: patch increments all three spots ==="
+echo "=== bump-version.sh: patch increments all four spots ==="
 D="$TMP/patch"; make_manifests "$D" "1.2.3"
 REPO_ROOT="$D" bash "$BUMP" patch >/dev/null
 [ "$(read_v "$D/.claude-plugin/plugin.json")" = "1.2.4" ] || fail "plugin.json patch"
 [ "$(read_v "$D/.claude-plugin/marketplace.json")" = "1.2.4" ] || fail "marketplace.json patch"
 [ "$(read_mp "$D/.claude-plugin/marketplace.json")" = "1.2.4" ] || fail "marketplace plugins[0] patch"
+[ "$(read_v "$D/.codex-plugin/plugin.json")" = "1.2.4" ] || fail "codex plugin.json patch"
 
 echo "=== bump-version.sh: minor resets patch ==="
 D="$TMP/minor"; make_manifests "$D" "1.2.3"
@@ -150,6 +161,20 @@ if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
   fail "disagreeing versions should fail"
 fi
 
+echo "=== check-version-bump.sh: Codex plugin version disagreement fails ==="
+D="$TMP/check-codex-disagree"; git_fixture "$D"
+python3 - "$D/.codex-plugin/plugin.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["version"] = "5.5.5"
+json.dump(d, open(p, "w"), indent=2)
+PY
+git -C "$D" add -A; git -C "$D" commit -qm "break codex consistency"
+if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+  fail "Codex version disagreement should fail"
+fi
+
 echo "=== check-version-bump.sh: public-mirror source (CLAUDE.public.md) is shippable ==="
 D="$TMP/check-public"; git_fixture "$D"
 echo "more" >> "$D/CLAUDE.public.md"
@@ -186,6 +211,21 @@ echo "more" >> "$D/.claude/skills/shipped/SKILL.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit shipped skill"
 if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
   fail ".claude/skills/shipped change without a bump should fail — sync-public.yml excludes only dev-*/_archived/"
+fi
+
+echo "=== check-version-bump.sh: .agents/skills/ is dev-only ==="
+D="$TMP/check-agents-skills"; git_fixture "$D"
+echo "more" >> "$D/.agents/skills/dev-local/SKILL.md"
+git -C "$D" add -A; git -C "$D" commit -qm "edit codex dev skill"
+REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null \
+  || fail ".agents/skills/ change should pass without a bump"
+
+echo "=== check-version-bump.sh: .agents/plugins/ is shippable ==="
+D="$TMP/check-agents-plugins"; git_fixture "$D"
+echo "more" >> "$D/.agents/plugins/marketplace.json"
+git -C "$D" add -A; git -C "$D" commit -qm "edit codex marketplace"
+if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+  fail ".agents/plugins/ change without a bump should fail"
 fi
 
 echo "ALL PASS"

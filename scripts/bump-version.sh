@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
 #
-# bump-version.sh — increment the arboretum plugin version across all three
-# manifest occurrences: plugin.json `version`, marketplace.json `version`,
-# and marketplace.json `plugins[0].version`.
+# bump-version.sh — increment the arboretum plugin version across all four
+# manifest occurrences: Claude plugin.json `version`, Claude marketplace.json
+# `version`, Claude marketplace.json `plugins[0].version`, and Codex
+# plugin.json `version`.
 #
 # Usage: scripts/bump-version.sh <major|minor|patch>
 #
@@ -24,19 +25,20 @@ esac
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="$REPO_ROOT/.claude-plugin/marketplace.json"
+CODEX_PLUGIN_JSON="$REPO_ROOT/.codex-plugin/plugin.json"
 
-for f in "$PLUGIN_JSON" "$MARKETPLACE_JSON"; do
+for f in "$PLUGIN_JSON" "$MARKETPLACE_JSON" "$CODEX_PLUGIN_JSON"; do
   if [ ! -f "$f" ]; then
     echo "bump-version: manifest not found: $f" >&2
     exit 1
   fi
 done
 
-python3 - "$PART" "$PLUGIN_JSON" "$MARKETPLACE_JSON" <<'PY'
+python3 - "$PART" "$PLUGIN_JSON" "$MARKETPLACE_JSON" "$CODEX_PLUGIN_JSON" <<'PY'
 import json
 import sys
 
-part, plugin_path, marketplace_path = sys.argv[1], sys.argv[2], sys.argv[3]
+part, plugin_path, marketplace_path, codex_plugin_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
 
 def load(path):
@@ -55,12 +57,14 @@ def dump(path, data):
 
 plugin = load(plugin_path)
 marketplace = load(marketplace_path)
+codex_plugin = load(codex_plugin_path)
 
 current = plugin["version"]
 occurrences = {
-    "plugin.json version": plugin["version"],
-    "marketplace.json version": marketplace["version"],
-    "marketplace.json plugins[0].version": marketplace["plugins"][0]["version"],
+    ".claude-plugin/plugin.json version": plugin["version"],
+    ".claude-plugin/marketplace.json version": marketplace["version"],
+    ".claude-plugin/marketplace.json plugins[0].version": marketplace["plugins"][0]["version"],
+    ".codex-plugin/plugin.json version": codex_plugin["version"],
 }
 disagreeing = {k: v for k, v in occurrences.items() if v != current}
 if disagreeing:
@@ -82,8 +86,10 @@ new = f"{major}.{minor}.{patch}"
 plugin["version"] = new
 marketplace["version"] = new
 marketplace["plugins"][0]["version"] = new
+codex_plugin["version"] = new
 
 dump(plugin_path, plugin)
 dump(marketplace_path, marketplace)
+dump(codex_plugin_path, codex_plugin)
 print(f"{current} -> {new}")
 PY

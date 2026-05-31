@@ -2,7 +2,7 @@
 # owner: arboretum-as-plugin
 #
 # check-version-bump.sh — pull-request gate. Two assertions:
-#   1. The three plugin-version occurrences are mutually equal.
+#   1. The four plugin-version occurrences are mutually equal.
 #   2. If the diff against the merge-base touches shippable content, the
 #      plugin version was incremented.
 #
@@ -19,15 +19,17 @@ BASE_REF="${BASE_REF:-origin/main}"
 v_plugin="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')"
 v_market="$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["version"])')"
 v_market_plugin="$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["version"])')"
+v_codex="$(python3 -c 'import json; print(json.load(open(".codex-plugin/plugin.json"))["version"])')"
 
-# --- Assertion 1: the three version occurrences agree ---
-if [ "$v_plugin" != "$v_market" ] || [ "$v_plugin" != "$v_market_plugin" ]; then
+# --- Assertion 1: the four version occurrences agree ---
+if [ "$v_plugin" != "$v_market" ] || [ "$v_plugin" != "$v_market_plugin" ] || [ "$v_plugin" != "$v_codex" ]; then
   {
     echo "FAIL: plugin version occurrences disagree —"
     echo "  .claude-plugin/plugin.json          : $v_plugin"
     echo "  .claude-plugin/marketplace.json     : $v_market"
     echo "  .claude-plugin/marketplace.json [0] : $v_market_plugin"
-    echo "Fix: scripts/bump-version.sh <major|minor|patch> rewrites all three together."
+    echo "  .codex-plugin/plugin.json           : $v_codex"
+    echo "Fix: scripts/bump-version.sh <major|minor|patch> rewrites all four together."
   } >&2
   exit 1
 fi
@@ -41,7 +43,7 @@ merge_base="$(git merge-base "$BASE_REF" HEAD)"
 # copies them into the published CLAUDE.md / README.md, so they are shippable.
 # File patterns are $-anchored so e.g. CLAUDE.md does not also exempt a
 # stray CLAUDE.md.bak; directory patterns end in / by design.
-dev_only_regex='^(docs/specs/|docs/plans/|docs/superpowers/|docs/reviews/|docs/reference/|docs/ARCHITECTURE\.md$|docs/REGISTER\.md$|\.github/|\.claude/skills/dev-|\.claude/skills/_archived/|\.claude/projects/|scripts/_archived/|CLAUDE\.md$|README\.md$|\.gitmodules$|\.arboretum\.yml$|contracts\.yaml$)'
+dev_only_regex='^(docs/specs/|docs/plans/|docs/superpowers/|docs/reviews/|docs/reference/|docs/ARCHITECTURE\.md$|docs/REGISTER\.md$|\.github/|\.agents/skills/|\.claude/skills/dev-|\.claude/skills/_archived/|\.claude/projects/|scripts/_archived/|CLAUDE\.md$|README\.md$|\.gitmodules$|\.arboretum\.yml$|contracts\.yaml$)'
 
 shippable="$(git diff --name-only "$merge_base" HEAD | grep -Ev "$dev_only_regex" || true)"
 

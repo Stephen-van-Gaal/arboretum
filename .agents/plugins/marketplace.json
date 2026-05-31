@@ -1,0 +1,20 @@
+{
+  "name": "arboretum",
+  "interface": {
+    "displayName": "Arboretum"
+  },
+  "plugins": [
+    {
+      "name": "arboretum",
+      "source": {
+        "source": "local",
+        "path": "./plugins/arboretum"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

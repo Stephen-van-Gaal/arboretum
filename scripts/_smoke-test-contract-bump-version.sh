@@ -16,11 +16,11 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # make_manifests <dir> <version>
-# Seeds $dir/.claude-plugin/{plugin.json,marketplace.json} with the given
-# version in all three locations that bump-version.sh rewrites.
+# Seeds $dir with the Claude and Codex plugin manifests, with the given
+# version in all four locations that bump-version.sh rewrites.
 make_manifests() {
   local d="$1" v="$2"
-  mkdir -p "$d/.claude-plugin"
+  mkdir -p "$d/.claude-plugin" "$d/.codex-plugin"
   python3 - "$d/.claude-plugin/plugin.json" "$v" <<'PY'
 import json, sys
 path, version = sys.argv[1], sys.argv[2]
@@ -41,16 +41,25 @@ with open(path, "w", encoding="utf-8") as fh:
     json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write("\n")
 PY
+  python3 - "$d/.codex-plugin/plugin.json" "$v" <<'PY'
+import json, sys
+path, version = sys.argv[1], sys.argv[2]
+data = {"name": "arboretum", "version": version}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+PY
 }
 
 read_plugin_v()     { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$1/.claude-plugin/plugin.json"; }
 read_market_top_v() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$1/.claude-plugin/marketplace.json"; }
 read_market_p0_v()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plugins"][0]["version"])' "$1/.claude-plugin/marketplace.json"; }
+read_codex_v()      { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$1/.codex-plugin/plugin.json"; }
 
 fail=0
 
 # --------------------------------------------------------------------------
-# Scenario A — CLI-1: patch increment updates all three occurrences.
+# Scenario A — CLI-1: patch increment updates all four occurrences.
 # --------------------------------------------------------------------------
 A="$TMP/a"; make_manifests "$A" "1.2.3"
 OUT="$(REPO_ROOT="$A" bash "$BUMP" patch 2>/dev/null)"
@@ -58,14 +67,15 @@ RC=$?
 PV="$(read_plugin_v "$A")"
 MV="$(read_market_top_v "$A")"
 MP="$(read_market_p0_v "$A")"
+CV="$(read_codex_v "$A")"
 if [ "$RC" -ne 0 ]; then
   echo "FAIL: A — expected exit 0, got $RC" >&2; fail=1
-elif [ "$PV" != "1.2.4" ] || [ "$MV" != "1.2.4" ] || [ "$MP" != "1.2.4" ]; then
-  echo "FAIL: A — expected all occurrences 1.2.4; got plugin=$PV market_top=$MV market_p0=$MP" >&2; fail=1
+elif [ "$PV" != "1.2.4" ] || [ "$MV" != "1.2.4" ] || [ "$MP" != "1.2.4" ] || [ "$CV" != "1.2.4" ]; then
+  echo "FAIL: A — expected all occurrences 1.2.4; got plugin=$PV market_top=$MV market_p0=$MP codex=$CV" >&2; fail=1
 elif [ "$OUT" != "1.2.3 -> 1.2.4" ]; then
   echo "FAIL: A — expected stdout '1.2.3 -> 1.2.4'; got '$OUT'" >&2; fail=1
 else
-  echo "PASS: A — patch increment (all three occurrences 1.2.3 -> 1.2.4)"
+  echo "PASS: A — patch increment (all four occurrences 1.2.3 -> 1.2.4)"
 fi
 
 # --------------------------------------------------------------------------

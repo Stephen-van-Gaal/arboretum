@@ -49,9 +49,11 @@ venv/
 .worktrees/
 
 # Sibling agent-tool working directories. AGENTS.md is the vendor-neutral
-# guidance file checked in; the per-tool .agents/ / .claire/ / .codex/
-# directories carry local hooks, skills, and worktree caches that aren't
-# part of the arboretum framework distribution.
-.agents/
+# guidance file checked in; per-tool hooks, skills, and worktree caches stay
+# local. The Codex marketplace file is tracked because it is part of the
+# arboretum plugin distribution.
+.agents/*
+!.agents/plugins/
+!.agents/plugins/marketplace.json
 .claire/
 .codex/

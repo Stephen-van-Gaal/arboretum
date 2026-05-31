@@ -35,14 +35,15 @@ init_repo() {
   git -C "$dir" "${GIT_ID[@]}" commit -q --allow-empty -m "init"
 }
 
-# write_plugin_json <dir> <version> — write a self-consistent plugin.json and
-# marketplace.json under <dir>/.claude-plugin/ with the given version string.
+# write_plugin_json <dir> <version> — write self-consistent Claude and Codex
+# plugin manifests with the given version string.
 write_plugin_json() {
   local dir="$1" ver="$2"
-  mkdir -p "$dir/.claude-plugin"
+  mkdir -p "$dir/.claude-plugin" "$dir/.codex-plugin"
   printf '{"version":"%s"}' "$ver" > "$dir/.claude-plugin/plugin.json"
   printf '{"version":"%s","plugins":[{"version":"%s"}]}' "$ver" "$ver" \
     > "$dir/.claude-plugin/marketplace.json"
+  printf '{"version":"%s"}' "$ver" > "$dir/.codex-plugin/plugin.json"
 }
 
 # commit_all <dir> <message> — stage everything in <dir> and commit.
@@ -138,7 +139,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Scenario: CLI-1 (version-consistency gate) — three occurrences disagree
+# Scenario: CLI-1 (version-consistency gate) — version occurrences disagree
 # ---------------------------------------------------------------------------
 #   Build: plugin.json says 1.2.0, marketplace.json says 1.1.0.  The
 #   script must fail before reaching the shippable-content check.
