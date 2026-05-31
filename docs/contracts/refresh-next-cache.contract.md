@@ -26,7 +26,7 @@ The seam between `scripts/refresh-next-cache.sh` (the producer of `.arboretum/ne
 
 `scripts/refresh-next-cache.sh` — producer-type: `script`.
 
-Refreshes the cache at `.arboretum/next-cache.json` by making up to two tracker calls through `scripts/roadmap/lib.sh`: one `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` (the primary list call) and, when an issue is found, one follow-up `roadmap_tracker_issue_show <N> --json comments` to extract the latest `arbo-handoff`-marked comment as the current session-handoff note (per `session-handoff` design §4.6). Only the `github` adapter is implemented in this version, and these neutral operations delegate to the existing `gh` commands.
+Refreshes the cache at `.arboretum/next-cache.json` by making up to two tracker calls through `scripts/roadmap/lib.sh`: one `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` (the primary list call) and, when an issue is found, one follow-up `roadmap_tracker_issue_show <N> --json comments` to extract the latest `arbo-handoff`-marked comment as the current session-handoff note (per `session-handoff` design §4.6). These neutral operations are implemented by the configured roadmap backend (`github` by default, `azure-devops` when selected).
 
 Path resolution uses `PROJECT_DIR` (positional arg, defaults to `git rev-parse --show-toplevel` or `pwd`). The script writes the cache atomically via per-process `mktemp` + `mv` (the `write_cache()` helper at L73-84) — concurrent refreshes never produce truncated or interleaved content.
 
@@ -58,7 +58,7 @@ Reads (under the project-dir root):
 
 - `git remote` — to detect whether any repo remote is configured at all (`no_gh_remote: true` legacy-field short-circuit when no remote is configured).
 - `roadmap_backend [PROJECT_DIR]` — selects the configured backend (`github` by default).
-- `roadmap_require_backend` — validates local prerequisites. For `github`, `gh` must be installed and authenticated. Absence or auth failure sets whole-cache `error: "gh-unavailable"` and exits 1.
+- `roadmap_require_backend` — validates local prerequisites. For `github`, `gh` must be installed and authenticated. For `azure-devops`, Azure CLI, the Azure DevOps extension, readable defaults, and `jq` must be available. Absence or auth/setup failure sets whole-cache `error: "gh-unavailable"` and exits 1; that legacy error value is retained for cache-schema compatibility.
 - `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` — the primary list call. Failure (other than "not a GH repo" on the GitHub adapter) sets whole-cache `error: "gh-call-failed"` and exits 2.
 - `roadmap_tracker_issue_show <N> --json comments` — the secondary comment-fetch call, made only when the primary list returned an item. Failure sets `handoff: {"error": "fetch-failed", "detail": <stderr-first-line>}` and the script continues to exit 0.
 - `python3` — used for body truncation and JSON assembly. Absence triggers the minimal-fallback cache shape with whole-cache `error: "python3 unavailable; issue details omitted in fallback cache"` and exits 0.

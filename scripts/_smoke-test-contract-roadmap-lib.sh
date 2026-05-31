@@ -62,13 +62,10 @@ wip=$(inlib roadmap_config_get wip_limit)
 badout=$(inlib roadmap_config_get 'bad key' 2>/dev/null); rc=$?
 [ "$rc" != 0 ] && [ -z "$badout" ] && pass RL-4 || fail_case RL-4 "rc=$rc out=[$badout]"
 
-# RL-5 — list getter: block style, then flow style.
-# Forced onto the python3 fallback: the list getter's yq path uses jq-syntax
-# (`.key[]? // empty`) that mikefarah yq rejects ("lexer: invalid input text
-# 'empty'"), a pre-existing lib.sh bug tracked as #412. Hide yq (mirror every
-# OTHER PATH executable into a shadow bin) so `command -v yq` fails and the
-# portable python3 path runs on every platform. See roadmap-lib.contract.md
-# § Invariants "list-getter yq-path gap".
+# RL-5 — list getter: block style, flow style, and yq-failure fallback.
+# Hide yq for the first two cases so the portable python3 path is asserted on
+# every platform, then install a fake failing yq to pin fallback behaviour when
+# a runner has a yq binary that rejects the expression dialect.
 NOYQ_BIN="$FIX/.noyq-bin"; mkdir -p "$NOYQ_BIN"
 IFS=':' read -ra _pdirs <<< "$PATH"
 for _d in "${_pdirs[@]}"; do
@@ -91,6 +88,17 @@ component_values: [skills, workflows, hooks]
 YAML
 list_flow=$(inlib_noyq roadmap_config_list component_values | tr '\n' ',')
 [ "$list_flow" = "skills,workflows,hooks," ] && pass "RL-5 (flow)" || fail_case "RL-5 (flow)" "got=[$list_flow]"
+YQFAIL_BIN="$FIX/.yqfail-bin"; mkdir -p "$YQFAIL_BIN"
+cat > "$YQFAIL_BIN/yq" <<'YQ'
+#!/usr/bin/env bash
+echo "fake yq parser failure" >&2
+exit 2
+YQ
+chmod +x "$YQFAIL_BIN/yq"
+# shellcheck source=scripts/roadmap/lib.sh
+inlib_yqfail() { ( cd "$FIX" && PATH="$YQFAIL_BIN:$PATH" && source "$LIB" && "$@" ); }
+list_yqfail=$(inlib_yqfail roadmap_config_list component_values | tr '\n' ',')
+[ "$list_yqfail" = "skills,workflows,hooks," ] && pass "RL-5 (yq failure fallback)" || fail_case "RL-5 (yq failure fallback)" "got=[$list_yqfail]"
 
 # RL-6 — pulse readers fail-silent when pulse file is missing
 [ ! -f "$FIX/.arboretum/roadmap-pulse.json" ] || rm -f "$FIX/.arboretum/roadmap-pulse.json"
@@ -164,6 +172,131 @@ if [ "$comments_out" = "[]" ] \
   pass RL-10
 else
   fail_case RL-10 "comments=[$comments_out] prs=[$prs_out] log=$(cat "$FIX/gh.log" 2>/dev/null)"
+fi
+
+# RL-11..RL-17 — Azure DevOps tracker adapter maps the same neutral helper
+# surface onto az boards/devops calls and normalizes work-item JSON into the
+# GitHub-shaped fields consumed by existing roadmap scripts.
+cat > "$FIX/.arboretum.yml" <<'YAML'
+backend: azure-devops
+azure_devops_organization: https://dev.azure.com/example
+azure_devops_project: Demo
+azure_devops_work_item_type: Issue
+azure_devops_done_state: Closed
+YAML
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+component_values:
+  - skills
+YAML
+
+AZ_BIN="$FIX/.az-bin"; mkdir -p "$AZ_BIN"
+cat > "$AZ_BIN/az" <<'AZ'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${AZ_STUB_LOG:?}"
+if [ "$1 $2" = "devops -h" ] || [ "$1 $2" = "boards -h" ]; then
+  exit 0
+fi
+if [ "$1 $2 $3" = "devops configure --list" ]; then
+  printf 'organization = https://dev.azure.com/example\nproject = Demo\n'
+  exit 0
+fi
+if [ "$1 $2" = "boards query" ]; then
+  printf '%s\n' '[{"id":42,"fields":{"System.Title":"Ship ADO adapter","System.Description":"## Goal\nUse ADO","System.Tags":"next-up; horizon:next","System.CreatedDate":"2026-05-29T00:00:00Z","System.ChangedDate":"2026-05-30T00:00:00Z","System.State":"Active"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/42"}}}]'
+  exit 0
+fi
+if [ "$1 $2 $3" = "boards work-item show" ]; then
+  if printf '%s\n' "$*" | grep -q -- '--fields System.Tags'; then
+    printf '%s\n' '{"id":42,"fields":{"System.Tags":"agent-ready; horizon:next"}}'
+  else
+    printf '%s\n' '{"id":42,"fields":{"System.Title":"Ship ADO adapter","System.Description":"## Goal\nUse ADO","System.Tags":"agent-ready; horizon:next","System.CreatedDate":"2026-05-29T00:00:00Z","System.ChangedDate":"2026-05-30T00:00:00Z","System.State":"Active"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/42"}}}'
+  fi
+  exit 0
+fi
+if [ "$1 $2" = "devops invoke" ]; then
+  if printf '%s\n' "$*" | grep -q -- '--http-method PATCH'; then
+    prev=""
+    for arg in "$@"; do
+      if [ "$prev" = "--in-file" ]; then
+        cp "$arg" "${AZ_STUB_PATCH_LOG:?}"
+      fi
+      prev="$arg"
+    done
+    exit 0
+  fi
+  printf '%s\n' '{"value":[{"text":"agent-prep:verified date=2026-05-30 body-sha=abc123","createdDate":"2026-05-30T01:00:00Z"}]}'
+  exit 0
+fi
+if [ "$1 $2 $3" = "boards work-item update" ]; then
+  exit 0
+fi
+if [ "$1 $2 $3" = "boards work-item create" ]; then
+  printf '%s\n' '{"id":77,"fields":{"System.Title":"Captured idea","System.Description":"Body","System.Tags":"component:skills; horizon:later","System.CreatedDate":"2026-05-31T00:00:00Z","System.ChangedDate":"2026-05-31T00:00:00Z","System.State":"New"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/77"}}}'
+  exit 0
+fi
+echo "unexpected az call: $*" >&2
+exit 2
+AZ
+chmod +x "$AZ_BIN/az"
+export AZ_STUB_LOG="$FIX/az.log"
+export AZ_STUB_PATCH_LOG="$FIX/az.patch.json"
+: > "$AZ_STUB_LOG"
+: > "$AZ_STUB_PATCH_LOG"
+
+PATH="$AZ_BIN:$PATH" inlib roadmap_require_backend azure-devops >/dev/null \
+  && pass RL-11 || fail_case RL-11 "azure-devops backend guard failed"
+
+ado_list=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,labels,updatedAt)
+if printf '%s' "$ado_list" | jq -e '.[0].number == 42 and (.[0].labels | map(.name) | index("next-up")) and .[0].updatedAt == "2026-05-30T00:00:00Z"' >/dev/null \
+   && grep -q 'boards query --wiql' "$AZ_STUB_LOG"; then
+  pass RL-12
+else
+  fail_case RL-12 "out=[$ado_list] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
+
+ado_show=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_show 42 --json number,title,body,labels,comments)
+if printf '%s' "$ado_show" | jq -e '.number == 42 and .comments[0].authorAssociation == "MEMBER" and (.labels | map(.name) | index("agent-ready"))' >/dev/null \
+   && grep -q 'devops invoke --area wit --resource workItemComments' "$AZ_STUB_LOG"; then
+  pass RL-13
+else
+  fail_case RL-13 "out=[$ado_show] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
+
+PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_update 42 --add-label next-up --remove-label agent-ready >/dev/null \
+  || fail_case RL-14 "update helper failed"
+if jq -e '.[] | select(.path == "/fields/System.Tags" and .op == "replace" and (.value | contains("next-up")) and ((.value | contains("agent-ready")) | not))' "$AZ_STUB_PATCH_LOG" >/dev/null; then
+  pass RL-14
+else
+  fail_case RL-14 "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
+fi
+
+PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_comment 42 --body "hello from roadmap" >/dev/null \
+  || fail_case "RL-15 (comment)" "comment helper failed"
+PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_close 42 --reason completed --comment "done from roadmap" >/dev/null \
+  || fail_case "RL-15 (close)" "close helper failed"
+ado_prs=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_list --state merged --limit 1 --json number,title)
+if [ "$ado_prs" = "[]" ] \
+   && grep -q 'boards work-item update --id 42 --discussion hello from roadmap' "$AZ_STUB_LOG" \
+   && grep -q 'boards work-item update --id 42 --state Closed' "$AZ_STUB_LOG"; then
+  pass RL-15
+else
+  fail_case RL-15 "prs=[$ado_prs] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
+
+ado_labels=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_label_list --limit 100 --json name --jq '.[].name' | sort)
+if printf '%s\n' "$ado_labels" | grep -Fxq "type:feature" \
+   && printf '%s\n' "$ado_labels" | grep -Fxq "horizon:now" \
+   && printf '%s\n' "$ado_labels" | grep -Fxq "component:skills"; then
+  pass RL-16
+else
+  fail_case RL-16 "labels=[$ado_labels]"
+fi
+
+ado_created=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_create --title "Captured idea" --label "horizon:later,component:skills" --body "Body")
+if printf '%s' "$ado_created" | jq -e '.number == 77 and (.labels | map(.name) | index("component:skills"))' >/dev/null \
+   && grep -q 'boards work-item create --title Captured idea --type Issue' "$AZ_STUB_LOG"; then
+  pass RL-17
+else
+  fail_case RL-17 "out=[$ado_created] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
 fi
 
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

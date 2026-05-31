@@ -15,6 +15,15 @@ time_horizon: "Through 2026-Q3"
 last_reviewed: 2026-05-09
 review_cadence_weeks: 12
 
+# Tracker backend. `.arboretum.yml backend:` takes precedence; missing means
+# GitHub. Uncomment/configure these for Azure DevOps-backed projects.
+# backend: github
+# azure_devops_organization: https://dev.azure.com/<org>
+# azure_devops_project: <project>
+# azure_devops_work_item_type: Issue
+# azure_devops_done_state: Closed
+# azure_devops_closed_states: Closed,Done,Removed
+
 # WIP gate (default 1; warn-never-block)
 wip_limit: 1
 slack_wip_limit: 1

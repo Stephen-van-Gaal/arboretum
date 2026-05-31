@@ -9,6 +9,18 @@ review_cadence_weeks: 12
 # Adoption profile: minimal | lean | full
 profile: {{PROFILE}}
 
+# Tracker backend. `.arboretum.yml backend:` takes precedence; missing means
+# GitHub. For Azure DevOps, authenticate/configure Azure CLI first:
+#   az extension add --name azure-devops
+#   az devops login
+#   az devops configure --defaults organization=https://dev.azure.com/<org> project=<project>
+# backend: github
+# azure_devops_organization: https://dev.azure.com/<org>
+# azure_devops_project: <project>
+# azure_devops_work_item_type: Issue
+# azure_devops_done_state: Closed
+# azure_devops_closed_states: Closed,Done,Removed
+
 # WIP gate
 wip_limit: 1
 slack_wip_limit: 1
