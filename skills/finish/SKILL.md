@@ -122,15 +122,34 @@ Check if any changed files are agent-facing:
 
 ### Step 5.5: Pre-PR local CI gate
 
-If `scripts/ci-checks.sh` exists, run it:
+Determine the local check command from the project's declared testing shape,
+falling back to `/finish`'s **current** behaviour — run `ci-checks.sh` if present,
+else skip (this consumer does **not** add `package.json`/`Makefile` discovery; that
+would change today's `/finish` behaviour — see the `/finish` carve-out in
+`docs/contracts/test-infrastructure.contract.md`):
 
 ```bash
-bash scripts/ci-checks.sh
+TEST_SPEC="docs/specs/test-infrastructure.spec.md"
+RTC_ERR=$(mktemp)
+if CFG=$(bash scripts/read-test-config.sh "$TEST_SPEC" 2>"$RTC_ERR"); then
+  TEST_CMD=$(printf '%s\n' "$CFG" | grep -m1 '^default-command=' | cut -d= -f2-)
+else
+  # Present-but-invalid (exit 2) warns; absent (exit 1) is silent.
+  [ -f "$TEST_SPEC" ] && echo "WARNING: $TEST_SPEC is present but invalid ($(cat "$RTC_ERR")); falling back — fix the declaration." >&2
+  if [ -f scripts/ci-checks.sh ]; then TEST_CMD="bash scripts/ci-checks.sh"; else TEST_CMD=""; fi
+fi
+rm -f "$RTC_ERR"
+
+if [ -n "$TEST_CMD" ]; then
+  eval "$TEST_CMD"
+else
+  echo "no declared default-command and no scripts/ci-checks.sh — skipping pre-PR gate"
+fi
 ```
 
-If it exits non-zero, present the failures and fix them before proceeding —
-the PR should be green from its first push. If `ci-checks.sh` does not exist,
-note "no local check entrypoint — skipping pre-PR gate" and continue.
+Run **only** `default-command` — never the `opt-in-commands` tiers. If it exits
+non-zero, present the failures and fix them before proceeding — the PR should be
+green from its first push.
 
 ### Step 6: Create PR
 

@@ -10,6 +10,7 @@
       "Bash(bash scripts/refresh-stage-cache.sh *)",
       "Bash(bash scripts/parse-plan-checkboxes.sh *)",
       "Bash(bash scripts/read-s2-frontmatter.sh *)",
+      "Bash(bash scripts/read-test-config.sh *)",
       "Bash(bash scripts/write-escape-hatch.sh *)",
       "Bash(bash scripts/ci-checks.sh *)",
       "Bash(bash scripts/upgrade-sync.sh *)",

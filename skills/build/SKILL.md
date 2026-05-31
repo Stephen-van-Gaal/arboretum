@@ -175,7 +175,40 @@ Continue the dispatched skill's work. Do not write an escape-hatch block.
    fi
    ```
 
-2. **Test suite green and surface unchanged-or-grown.** Run the project's test suite (the arboretum convention is `bash scripts/ci-checks.sh`; other projects discover via `package.json`, `Makefile`, `pytest.ini`, etc.). If any tier in `test-tiers:` is declared N/A and the build cycle added, modified, or deleted any test file under that tier, surface the contract breach and refuse to exit — the N/A claim is invalidated by mutation.
+2. **Test suite green and surface unchanged-or-grown.** Determine the test command from the project's declared testing shape; **when no declaration exists, fall back to the existing discovery — unchanged from today**:
+
+   ```bash
+   TEST_SPEC="docs/specs/test-infrastructure.spec.md"
+   RTC_ERR=$(mktemp)
+   if CFG=$(bash scripts/read-test-config.sh "$TEST_SPEC" 2>"$RTC_ERR"); then
+     rm -f "$RTC_ERR"
+     TEST_CMD=$(printf '%s\n' "$CFG" | grep -m1 '^default-command=' | cut -d= -f2-)
+     eval "$TEST_CMD"            # exit status IS the gate — non-zero here blocks /build exit
+   else
+     # Spec present but reader failed (exit 2) → warn; absent (exit 1) → silent un-migrated case.
+     [ -f "$TEST_SPEC" ] && echo "WARNING: $TEST_SPEC is present but invalid ($(cat "$RTC_ERR")); falling back to legacy discovery — fix the declaration." >&2
+     rm -f "$RTC_ERR"
+     # Legacy discovery, unchanged from today — the discovered command MUST run
+     # (its exit status is the gate). Fail closed if nothing is discovered, so the
+     # gate can never be cleared without a test command actually running.
+     if [ -f scripts/ci-checks.sh ]; then
+       bash scripts/ci-checks.sh
+     elif [ -f package.json ] && grep -q '"test"' package.json; then
+       npm test
+     elif [ -f Makefile ] && grep -qE '^test:' Makefile; then
+       make test
+     elif [ -f pytest.ini ] || [ -f pyproject.toml ] || [ -f setup.cfg ]; then
+       python3 -m pytest
+     else
+       echo "No test entrypoint found (no declared default-command, no scripts/ci-checks.sh, no package.json test / Makefile test / pytest config). Cannot satisfy the test gate — declare default-command in docs/specs/test-infrastructure.spec.md." >&2
+       exit 1
+     fi
+   fi
+   ```
+
+   The test command's **exit status is the gate** — a non-zero exit (from the declared `default-command` or the legacy-discovered command) means tests failed; do **not** exit `/build` success. The `rm -f "$RTC_ERR"` is done *before* the test command in each branch so it never masks the test exit status. When no declaration and no `ci-checks.sh` exist, the agent must run the `package.json`/`Makefile`/`pytest.ini`-discovered command itself and treat its exit status as the gate.
+
+   Run **only** the default-safe command (declared `default-command` or the legacy-discovered one) — never the `opt-in-commands` (`live`/`costly`) tiers in this automated gate. If any tier in `test-tiers:` is declared N/A and the build cycle added, modified, or deleted any test file under that tier, surface the contract breach and refuse to exit — the N/A claim is invalidated by mutation.
 
 3. **No escape-hatch fired** — confirmed by `$EXIT_STATUS != "escape-hatch"`.
 

@@ -10,7 +10,7 @@
     If your project has its own ARCHITECTURE.md, either replace those
     refs with anchors that exist there, or strip them entirely.
   - Add, remove, or reword principles to match your project's stance.
-    The original nine are a starting set, not a fixed contract.
+    The principles below are a starting set, not a fixed contract.
 
   arboretum-dev itself uses the in-repo copy at this same path
   (`docs/templates/PRINCIPLES.md`) as its authoritative principles
@@ -76,6 +76,17 @@ When arboretum integrates an external skill or tool, it wraps the call with thre
 Arboretum has two customers: the domain expert and the LLM that helps them. Every artifact arboretum produces must be readable and actionable by **both** (dual-audience). The LLM, lacking persistent memory, must be re-grounded in project state at every session start. Treat the LLM's needs as first-class — not as a side effect of serving the human.
 
 **Practices:** Dual-audience artifacts (`docs/ARCHITECTURE.md` §3 #8); Session-start grounding (`docs/ARCHITECTURE.md` §3 #9).
+
+## 10. Tests are classified on two axes
+
+Test classification is two-dimensional, not one:
+
+- **Scope** — `unit` (isolated) → `contract` (conformance to a shared definition) → `integration` (cross-spec interaction). Declared per change in each design spec's `test-tiers:` frontmatter; declare `N/A — <reason>` for inapplicable tiers.
+- **Cost-class** — `default` (free, deterministic, always run) / `live` (hits real services, opt-in) / `costly` (incurs monetary cost, opt-in). Declared once per project in `test-infrastructure.spec.md`.
+
+The two axes are independent: a unit-scope test can be `costly`; an integration-scope test can be `default` when it uses fakes. Automated gates run only the `default` cost-class; `live` and `costly` tiers are opt-in, run by a human on demand.
+
+**Practices:** Two-axis test classification (`docs/specs/test-infrastructure.spec.md`; declared command read by `/build`, `/finish`, `/design` via `scripts/read-test-config.sh`).
 
 ---
 

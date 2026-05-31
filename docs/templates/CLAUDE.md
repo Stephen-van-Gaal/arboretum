@@ -40,6 +40,8 @@ This project uses **test-driven development** (TDD). Red-green-refactor:
 
 Tests are tiered: unit (always) → contract (when shared definitions exist) → integration (when cross-spec dependencies exist). Declare "N/A — [reason]" for inapplicable tiers.
 
+The project's test command and cost-class tiers are declared in `docs/specs/test-infrastructure.spec.md` (read by `/build`, `/finish`, and `/design` via `scripts/read-test-config.sh`). Run the default-safe suite with the declared `default-command`; opt-in `live`/`costly` tiers are run manually.
+
 ## Git Workflow
 
 - **Branch protection:** Never commit directly to `main`. Feature branches: `feat/`, `fix/`, `docs/`, `chore/`.

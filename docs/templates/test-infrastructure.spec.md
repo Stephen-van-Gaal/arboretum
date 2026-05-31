@@ -1,5 +1,30 @@
 ---
+# This is a GOVERNED SPEC. Its frontmatter carries TWO disjoint schemas in one
+# block: (a) governed-spec metadata read by scripts/generate-register.sh
+# (version/name/status/owner/owns), and (b) the testing-shape declaration read
+# by scripts/read-test-config.sh (default-command + optionals). The two parsers
+# read non-overlapping keys and ignore each other's.
+#
+# NOTE: keep explanatory notes on their OWN comment lines. A trailing inline
+# comment after a value (e.g. `tiers-via: markers  # note`) is NOT stripped by
+# the parser — it would be read as part of the value (same as read-s2-frontmatter).
+#
+# ── (a) governed-spec metadata ──
 version: 1
+name: test-infrastructure
+status: draft
+owner: <governing owner, e.g. architecture>
+owns: []
+# ── (b) testing-shape declaration — only default-command is required ──
+default-command: <command that runs the default-safe suite; exit 0 == green>
+# Optional fields are COMMENTED OUT so an unfilled optional enum never trips the
+# parser's enum validation. Uncomment and fill only what applies:
+# runner: pytest
+# layout: by-feature
+# tiers-via: markers
+# opt-in-commands:
+#   live: <command for tests that hit real external services; needs creds>
+#   costly: <command for tests that incur monetary cost (paid API / LLM)>
 ---
 
 # Test Infrastructure
@@ -77,7 +102,25 @@ Define the test framework, runner configuration, directory layout, and shared ut
      - Python: pytest tests/unit && pytest tests/contract && pytest tests/integration
      - Makefile: make test
      - npm: npm test (with script that chains tiers)
--->
+
+     This command is what the frontmatter `default-command:` declares — the
+     single source `/build`, `/finish`, and `/design` read via
+     scripts/read-test-config.sh. -->
+
+### Cost-class (opt-in) tiers
+
+<!-- Scope tiers (unit/contract/integration) above are the WHAT axis. Cost-class
+     is the orthogonal HOW axis — does a test hit a real service or cost money?
+
+     - default — free, deterministic, no external services. Always run by
+       `default-command`. (No declaration needed; it IS the default suite.)
+     - live    — hits real external services; opt-in. Declare the command in
+       frontmatter `opt-in-commands.live` (e.g. `pytest -m live`).
+     - costly  — incurs monetary cost (paid API / LLM); opt-in. Declare in
+       frontmatter `opt-in-commands.costly` (e.g. `pytest -m eval`).
+
+     Automated gates run ONLY default-command. live/costly are run by a human on
+     demand. Most projects have no opt-in tiers and leave those fields commented. -->
 
 ### Shared Test Helpers
 

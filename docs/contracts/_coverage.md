@@ -22,6 +22,7 @@
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
+| scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
 | scripts/refresh-stage-cache.sh | docs/contracts/refresh-stage-cache.contract.md | full |
 | scripts/refresh-update-cache.sh | docs/contracts/refresh-update-cache.contract.md | full |
