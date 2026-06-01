@@ -1,6 +1,6 @@
 ---
 seam: read-pipeline-flag
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: skill
 consumes:
@@ -21,7 +21,7 @@ The seam between `scripts/read-pipeline-flag.sh` (the single source of truth for
 
 `scripts/read-pipeline-flag.sh` — producer-type: `script`.
 
-Reads `roadmap.config.yaml` from the current working directory and prints the active `pipeline.workflow` value to stdout. Uses python3 + PyYAML (a project dep) so all YAML-legal forms — block or flow style, quoted or unquoted, inline comments — parse correctly. Prints `v1` and exits `0` when the `pipeline` block or `workflow` key is absent (back-compat default). Exits `1` with a stderr diagnostic when the config file is missing, the YAML is invalid, or the value is outside the closed set `{v1, v2}`.
+Reads `roadmap.config.yaml` from the current working directory and prints the active `pipeline.workflow` value to stdout. It parses the framework's supported YAML-lite subset through `scripts/lib/yaml-lite.sh`, which uses Python 3 standard library only. Supported forms include block style, simple flow mapping style, quoted and unquoted scalar values, and inline comments. Prints `v1` and exits `0` when the `pipeline` block or `workflow` key is absent (back-compat default). Exits `1` with a stderr diagnostic when the config file is missing, the YAML-lite helper is missing, the YAML-lite input is invalid, or the value is outside the closed set `{v1, v2}`.
 
 ## Consumer
 
@@ -47,13 +47,14 @@ Consumer-type: `skill`. Multiple pipeline-stage skills capture the stdout token 
 
 - stdout: exactly one line, `v1` or `v2` (no trailing decoration).
 - stderr (exit 1 only): a `read-pipeline-flag.sh: …` diagnostic.
-- Exit codes: `0` — value printed (including the `v1` default); `1` — config missing, invalid YAML, or value outside `{v1, v2}`.
+- Exit codes: `0` — value printed (including the `v1` default); `1` — config missing, YAML-lite helper missing, invalid YAML, or value outside `{v1, v2}`.
 
 ### Invariants
 
 - **Closed value set.** stdout on exit 0 is always exactly `v1` or `v2`. A YAML int/bool/other surfaces as exit 1, never as a third printed token.
 - **Default-to-v1.** Absent `pipeline` block, absent `workflow` key, or a `pipeline` that is not a mapping all yield `v1` exit 0 — never exit 1.
 - **No mutation.** Read-only — the script never writes `roadmap.config.yaml` or any file.
+- **Bare-checkout portable.** The script does not require PyYAML, yq, jq, or any package install; the shared YAML-lite helper provides the required parser subset.
 
 ## Test surface
 
@@ -64,7 +65,10 @@ Consumer-type: `skill`. Multiple pipeline-stage skills capture the stdout token 
 - **RPF-5:** out-of-set value (e.g. `v3`) → exit 1, stderr diagnostic, no `v1`/`v2`/`v3` on stdout.
 - **RPF-6:** missing `roadmap.config.yaml` → exit 1, stderr diagnostic.
 - **RPF-7:** read-only — `roadmap.config.yaml` mtime/content unchanged after invocation.
+- **RPF-8:** PyYAML unavailable via import hook still parses a supported `pipeline.workflow` declaration.
+- **RPF-9:** missing `scripts/lib/yaml-lite.sh` helper → exit 1, stderr `yaml-lite helper not found`, no stdout token.
 
 ## Versioning
 
+- **1.1** (2026-06-01) — missing YAML-lite helper emits an explicit dependency diagnostic instead of being reported as invalid YAML-lite.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/read-pipeline-flag.sh` on `main`. Issue #303 (WS5 PR 7a).

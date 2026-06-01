@@ -6,10 +6,8 @@
 # Exits 1 with diagnostic if the config file is missing, YAML is invalid,
 # or the value is not v1/v2.
 #
-# Uses python3 + PyYAML (already a project dep — see check-version-bump.sh)
-# rather than awk so that all YAML-legal forms — block or flow style,
-# quoted or unquoted values, inline comments, nested structures — are
-# handled by a real parser instead of by a single-key regex extractor.
+# Uses scripts/lib/yaml-lite.sh so workflow entrypoints run from a bare
+# checkout without requiring PyYAML, yq, jq, or package installation.
 set -euo pipefail
 
 CONFIG="roadmap.config.yaml"
@@ -18,36 +16,22 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
-VALUE=$(python3 - "$CONFIG" <<'PY'
-import sys
-import yaml
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+YAML_LITE="$SCRIPT_DIR/lib/yaml-lite.sh"
+[ -f "$YAML_LITE" ] || {
+  echo "read-pipeline-flag.sh: yaml-lite helper not found at $YAML_LITE" >&2
+  exit 1
+}
 
-config_path = sys.argv[1]
-try:
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f) or {}
-except yaml.YAMLError as e:
-    print(f"read-pipeline-flag.sh: invalid YAML in {config_path}: {e}", file=sys.stderr)
-    sys.exit(1)
+if ! PARSED=$(bash "$YAML_LITE" file "$CONFIG" 2>&1); then
+  echo "read-pipeline-flag.sh: invalid YAML-lite in $CONFIG" >&2
+  printf '%s\n' "$PARSED" >&2
+  exit 1
+fi
 
-pipeline = cfg.get("pipeline")
-if not isinstance(pipeline, dict):
-    # No pipeline block, or pipeline is not a mapping → back-compat default
-    print("")
-    sys.exit(0)
+VALUE=$(printf '%s\n' "$PARSED" | awk -F= '$1 == "pipeline.workflow" { print substr($0, index($0, "=") + 1); exit }')
 
-value = pipeline.get("workflow")
-if value is None:
-    print("")
-    sys.exit(0)
-
-# yaml.safe_load already strips quotes and resolves comments; coerce to
-# str so a YAML int/bool surfaces as a string the case enum can reject.
-print(str(value))
-PY
-)
-
-# Default to v1 when the block or key is absent — preserves current behaviour
+# Default to v1 when the block or key is absent - preserves current behaviour
 # for any project that hasn't opted in.
 if [ -z "$VALUE" ]; then
   echo "v1"

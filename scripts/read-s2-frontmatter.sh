@@ -15,49 +15,47 @@ set -euo pipefail
 [ "$#" -eq 1 ] || { echo "Usage: $0 <design-spec-file>" >&2; exit 1; }
 [ -f "$1" ] || { echo "design spec not found: $1" >&2; exit 1; }
 
-python3 - "$1" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+YAML_LITE="$SCRIPT_DIR/lib/yaml-lite.sh"
+[ -f "$YAML_LITE" ] || { echo "read-s2-frontmatter: yaml-lite helper not found at $YAML_LITE" >&2; exit 1; }
 
-m = re.match(r"^---\n(.*?\n)---\n", text, re.DOTALL)
-if not m:
-    sys.stderr.write("read-s2-frontmatter: no frontmatter found (file must start with --- block)\n")
-    sys.exit(2)
-fm = m.group(1)
+PARSED_FILE=$(mktemp)
+PARSER_ERR=$(mktemp)
+trap 'rm -f "$PARSED_FILE" "$PARSER_ERR"' EXIT
 
-# Minimalist YAML parse — top-level `key: value` and one level of
-# `key:` then indented sub-keys. Avoids pulling in PyYAML.
-def parse(fm_text):
-    out = {}
-    cur_key = None
-    cur_sub = {}
-    for line in fm_text.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
+if ! bash "$YAML_LITE" frontmatter "$1" >"$PARSED_FILE" 2>"$PARSER_ERR"; then
+  echo "read-s2-frontmatter: invalid or missing frontmatter" >&2
+  sed 's/^/read-s2-frontmatter: /' "$PARSER_ERR" >&2
+  exit 2
+fi
+
+python3 - "$1" "$PARSED_FILE" <<'PY'
+import sys
+
+parsed_path = sys.argv[2]
+
+fm_parsed = {}
+test_tiers = {}
+test_tier_order = []
+
+with open(parsed_path, encoding="utf-8") as parsed:
+    for raw in parsed:
+        line = raw.rstrip("\n")
+        if not line or "=" not in line:
             continue
-        if line.startswith("  ") and cur_key is not None:
-            sub = line.strip()
-            if ":" in sub:
-                k, v = sub.split(":", 1)
-                cur_sub[k.strip()] = v.strip()
-            continue
-        if cur_key is not None and cur_sub:
-            out[cur_key] = cur_sub
-            cur_sub = {}
-            cur_key = None
-        if ":" in line:
-            k, v = line.split(":", 1)
-            k, v = k.strip(), v.strip()
-            if v:
-                out[k] = v
-                cur_key = None
-            else:
-                cur_key = k
-                cur_sub = {}
-    if cur_key is not None and cur_sub:
-        out[cur_key] = cur_sub
-    return out
+        key, value = line.split("=", 1)
+        if key.startswith("test-tiers."):
+            subkey = key.split(".", 1)[1]
+            if subkey not in test_tiers:
+                test_tier_order.append(subkey)
+            test_tiers[subkey] = value
+        elif key == "test-tiers":
+            fm_parsed[key] = value
+        elif key in {"related-issue", "implementation-mode", "triage", "plan"}:
+            fm_parsed[key] = value
 
-fm_parsed = parse(fm)
+if test_tiers:
+    fm_parsed["test-tiers"] = test_tiers
 
 REQUIRED = ["related-issue", "test-tiers", "implementation-mode", "triage", "plan"]
 MODE_ENUM = {"direct", "executing-plans", "subagent-driven-development"}
@@ -141,7 +139,8 @@ if plan != "null":
 for k in REQUIRED:
     v = fm_parsed[k]
     if isinstance(v, dict):
-        for sk, sv in v.items():
+        for sk in test_tier_order:
+            sv = v[sk]
             print(f"{k}.{sk}={sv}")
     else:
         print(f"{k}={v}")

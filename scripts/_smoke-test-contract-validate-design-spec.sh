@@ -39,4 +39,12 @@ if [ "$rc" = 1 ] && grep -q "plan: file not found" "$ERR"; then pass VDS-4; else
 bash "$VALIDATOR" "$FIX/does-not-exist-xyzzy.md" 2>"$ERR"; rc=$?
 if [ "$rc" = 2 ] && grep -q "file not found" "$ERR" && ! grep -q "S2-DRIFT:" "$ERR"; then pass VDS-5; else fail_case VDS-5 "rc=$rc err=$(cat "$ERR")"; fi
 
+# VDS-6 — missing yaml-lite helper → exit 2, clear invocation diagnostic, no S2-DRIFT
+MISSING_HELPER=$(mktemp -d)
+mkdir -p "$MISSING_HELPER/scripts"
+cp "$VALIDATOR" "$MISSING_HELPER/scripts/validate-design-spec.sh"
+bash "$MISSING_HELPER/scripts/validate-design-spec.sh" "$FIX/design-good.md" 2>"$ERR"; rc=$?
+rm -rf "$MISSING_HELPER"
+if [ "$rc" = 2 ] && grep -q "yaml-lite helper not found" "$ERR" && ! grep -q "S2-DRIFT:" "$ERR"; then pass VDS-6; else fail_case VDS-6 "rc=$rc err=$(cat "$ERR")"; fi
+
 [ "$fail" = 0 ] && echo "validate-design-spec contract: ALL PASS" || exit 1

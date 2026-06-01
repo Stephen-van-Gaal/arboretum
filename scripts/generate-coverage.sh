@@ -18,6 +18,14 @@
 set -uo pipefail
 ROOT="$(pwd)"
 OUT="$ROOT/docs/contracts/_coverage.md"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+YAML_LITE="$SCRIPT_DIR/lib/yaml-lite.sh"
+if [ ! -f "$YAML_LITE" ] && [ -f "$ROOT/scripts/lib/yaml-lite.sh" ]; then
+  YAML_LITE="$ROOT/scripts/lib/yaml-lite.sh"
+fi
+[ -f "$YAML_LITE" ] || { echo "generate-coverage: yaml-lite helper not found" >&2; exit 1; }
+# shellcheck source=scripts/lib/yaml-lite.sh
+. "$YAML_LITE"
 mkdir -p "$(dirname "$OUT")"
 
 # Helper: list source files under a root, relative to it, excluding any _* component
@@ -33,58 +41,66 @@ list_sources() {
 scripts=$(list_sources "$ROOT/scripts")
 hooks=$(list_sources "$ROOT/.claude/hooks")
 
-# Delegate all contract parsing and table-row generation to Python.
-# Python reads contracts, checks for duplicate ownership, then for each
-# script/hook path emits a pipe-delimited row: "rel|contract|shape"
-# or "rel|MISSING|—" if uncovered.
-# Exits non-zero on duplicate-ownership.
-table_rows=$(python3 - "$ROOT" "$scripts" "$hooks" <<'PYEOF'
-import sys, os, yaml, glob, re
+contract_rows_tmp=$(mktemp)
+trap 'rm -f "$contract_rows_tmp"' EXIT
 
-root    = sys.argv[1]
+if [ -d "$ROOT/docs/contracts" ]; then
+  for contract_path in "$ROOT"/docs/contracts/*.md; do
+    [ -f "$contract_path" ] || continue
+    case "$contract_path" in
+      *.contract.md) shape="full" ;;
+      *.cli-contract.md) shape="cli" ;;
+      *) continue ;;
+    esac
+    rel_contract=${contract_path#"$ROOT"/}
+    parsed=$(yaml_lite_parse frontmatter "$contract_path" 2>/dev/null) || continue
+    if [ "$shape" = "cli" ]; then
+      script_value=$(printf '%s\n' "$parsed" | awk -F= '$1 == "script" { print substr($0, index($0, "=") + 1); exit }')
+      [ -n "$script_value" ] && printf '%s|%s|%s\n' "$script_value" "$rel_contract" "$shape" >> "$contract_rows_tmp"
+    else
+      printf '%s\n' "$parsed" | awk -F= -v rel="$rel_contract" -v shape="$shape" '
+        $1 == "owns[]" {
+          print substr($0, index($0, "=") + 1) "|" rel "|" shape
+        }
+      ' >> "$contract_rows_tmp"
+    fi
+  done
+fi
+
+# Python handles duplicate detection and table-row generation using the
+# already-normalized line protocol rows from yaml-lite.sh. No external
+# Python packages are imported.
+table_rows=$(python3 - "$ROOT" "$scripts" "$hooks" "$contract_rows_tmp" <<'PYEOF'
+import sys
+
+root = sys.argv[1]
 scripts = [s for s in sys.argv[2].split("\n") if s]
-hooks   = [h for h in sys.argv[3].split("\n") if h]
+hooks = [h for h in sys.argv[3].split("\n") if h]
+contract_rows_path = sys.argv[4]
 
-contracts_dir = os.path.join(root, "docs", "contracts")
-coverage = {}   # path -> (contract_rel, shape)
-errors   = []
+coverage = {}
+errors = []
 
-if os.path.isdir(contracts_dir):
-    for path in sorted(glob.glob(os.path.join(contracts_dir, "*.md"))):
-        if not (path.endswith(".contract.md") or path.endswith(".cli-contract.md")):
+with open(contract_rows_path, encoding="utf-8") as rows:
+    for raw in rows:
+        line = raw.rstrip("\n")
+        if not line:
             continue
-        rel = os.path.relpath(path, root)
         try:
-            with open(path) as f:
-                text = f.read()
-        except OSError:
+            covered, contract_rel, shape = line.split("|", 2)
+        except ValueError:
             continue
-        parts = re.split(r'^---\s*$', text, maxsplit=2, flags=re.MULTILINE)
-        if len(parts) < 3:
-            continue  # malformed frontmatter — validator handles; skip for coverage
-        try:
-            fm = yaml.safe_load(parts[1]) or {}
-        except yaml.YAMLError:
-            continue
-        if not isinstance(fm, dict):
-            continue
-        shape = "cli" if path.endswith(".cli-contract.md") else "full"
-        covered = []
-        if shape == "cli" and "script" in fm and fm["script"]:
-            covered.append(str(fm["script"]))
-        elif shape == "full" and "owns" in fm and isinstance(fm["owns"], list):
-            covered.extend(str(o) for o in fm["owns"] if o)
-        for c in covered:
-            if c in coverage:
-                errors.append(
-                    f"duplicate ownership: '{c}' claimed by both {coverage[c][0]} and {rel}"
-                )
-            coverage[c] = (rel, shape)
+        if covered in coverage:
+            errors.append(
+                f"duplicate ownership: '{covered}' claimed by both {coverage[covered][0]} and {contract_rel}"
+            )
+        coverage[covered] = (contract_rel, shape)
 
 if errors:
-    for e in errors:
-        print(f"DUPLICATE-OWNERSHIP: {e}", file=sys.stderr)
+    for error in errors:
+        print(f"DUPLICATE-OWNERSHIP: {error}", file=sys.stderr)
     sys.exit(1)
+
 
 def row(rel):
     if rel in coverage:
@@ -93,10 +109,11 @@ def row(rel):
         contract, shape = "MISSING", "—"
     print(f"{rel}|{contract}|{shape}")
 
-for s in scripts:
-    row(f"scripts/{s}")
-for h in hooks:
-    row(f".claude/hooks/{h}")
+
+for script in scripts:
+    row(f"scripts/{script}")
+for hook in hooks:
+    row(f".claude/hooks/{hook}")
 PYEOF
 )
 py_rc=$?

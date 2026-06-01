@@ -43,7 +43,7 @@ for tier in unit contract integration; do
   val=$(echo "$tiers_block" | grep -E "^[[:space:]]+${tier}:" | head -1 | sed -E "s/^[[:space:]]+${tier}:[[:space:]]*//")
   # Normalize: strip surrounding YAML quote chars so `unit: "yes"` and
   # `unit: 'yes'` are equivalent to `unit: yes`. validate-design-spec.sh
-  # (via PyYAML) treats them all as the same semantic value; this parser
+  # treats them all as the same semantic value; this parser
   # must agree or specs valid in one tool would be malformed in the other.
   val_norm=${val#\"}; val_norm=${val_norm%\"}
   val_norm=${val_norm#\'}; val_norm=${val_norm%\'}

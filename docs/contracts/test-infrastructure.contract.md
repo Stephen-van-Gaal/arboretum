@@ -1,12 +1,14 @@
 ---
 seam: test-infrastructure
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: skill
-consumes: []
+consumes:
+  - yaml-lite-line-protocol
 produces: []
 related-designs:
   - docs/superpowers/specs/2026-05-30-testing-shape-design.md
+  - docs/superpowers/specs/2026-06-01-runtime-portability-design.md
 owns:
   - scripts/read-test-config.sh
 ---
@@ -20,7 +22,7 @@ The seam between `scripts/read-test-config.sh` (which reads a project's testing-
 
 `scripts/read-test-config.sh` — producer-type: `script`.
 
-Takes exactly one positional argument: the path to a `test-infrastructure.spec.md`. Reads the leading `---`-delimited frontmatter with a minimalist parser (no PyYAML). On success prints one `key=value` line per present field to stdout and exits `0`; the nested `opt-in-commands` object is flattened to `opt-in-commands.<cost-class>=<command>` lines. On a missing required field, bad enum, or malformed/absent frontmatter it writes a `read-test-config: …` diagnostic to stderr and exits `2`. Usage errors (wrong arg count, missing file) exit `1`.
+Takes exactly one positional argument: the path to a `test-infrastructure.spec.md`. Reads the leading `---`-delimited frontmatter through `scripts/lib/yaml-lite.sh` (no PyYAML, yq, jq, or package install). On success prints one `key=value` line per present field to stdout and exits `0`; the nested `opt-in-commands` object is flattened to `opt-in-commands.<cost-class>=<command>` lines. On a missing required field, bad enum, or malformed/absent frontmatter it writes a `read-test-config: …` diagnostic to stderr and exits `2`. Usage errors (wrong arg count, missing file, missing helper) exit `1`.
 
 Fields and rules:
 
@@ -65,7 +67,8 @@ Consumer-type: `skill`. Three downstream consumers:
 - **Unfilled placeholders rejected.** A `default-command` that is an angle-bracket `<placeholder>` (the value the template ships before an adopter fills it) is treated as not-yet-declared → exit 2, so a scaffolded-but-unfilled spec falls back/warns instead of `eval`-ing the literal placeholder.
 - **Scalar-only enums.** A dict-shaped `tiers-via` is rejected (exit 2), never silently flattened to `tiers-via.<subkey>=` lines.
 - **Coexists with governed-spec metadata.** `test-infrastructure.spec.md` is a governed spec; its frontmatter also carries `version`/`name`/`status`/`owner`/`owns` (read by `generate-register.sh`). The reader reads only the test-command keys and ignores the rest, so the two schemas share one block without collision.
-- **Full-line comments only.** Full-line `#` comments inside the frontmatter are ignored (consistent with `read-s2-frontmatter`). A trailing inline comment after a value is **not** stripped — it is read as part of the value — so the template keeps all notes on their own comment lines.
+- **Comment semantics.** Full-line comments are ignored. Inline comments are stripped by `yaml-lite.sh`, while `#` characters inside single-quoted or double-quoted values are preserved.
+- **Bare-checkout portable.** The reader does not require PyYAML, yq, jq, or any package install; it shares parser behavior through `scripts/lib/yaml-lite.sh`.
 - **No mutation.** Read-only — the script never writes the spec or any file.
 
 ## Test surface
@@ -85,4 +88,5 @@ Consumer-type: `skill`. Three downstream consumers:
 
 ## Versioning
 
+- **1.1** (2026-06-01) - parser moved onto shared `yaml-lite.sh` helper for Issue #437.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/read-test-config.sh` on this branch. Design: testing-shape.

@@ -13,6 +13,7 @@
 set -uo pipefail
 ROOT="$(pwd)"
 GEN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/generate-coverage.sh"
+GEN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMMITTED="$ROOT/docs/contracts/_coverage.md"
 
 [ -x "$GEN" ]       || { echo "validate-coverage-manifest: $GEN not executable" >&2; exit 1; }
@@ -54,6 +55,10 @@ cp "$ROOT"/docs/contracts/*.cli-contract.md  "$tmp/docs/contracts/" 2>/dev/null 
 # Place the regenerator outside the scanned scripts/ tree so it does not
 # create a spurious MISSING row in the fresh manifest.
 cp "$GEN" "$tmp/_regen.sh"
+if [ -f "$GEN_DIR/lib/yaml-lite.sh" ]; then
+  mkdir -p "$tmp/lib"
+  cp "$GEN_DIR/lib/yaml-lite.sh" "$tmp/lib/yaml-lite.sh"
+fi
 
 # generate-coverage.sh uses $(pwd) as ROOT, so we invoke it from $tmp so
 # it scans $tmp/scripts and $tmp/.claude/hooks and writes

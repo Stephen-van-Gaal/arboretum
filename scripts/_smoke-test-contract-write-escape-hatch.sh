@@ -110,7 +110,7 @@ m = re.match(r'^---\n(.*?\n)---\n', text, re.DOTALL)
 if not m:
     print('FAIL: no frontmatter'); sys.exit()
 fm = m.group(1)
-# Minimalist parse mirroring read-s2-frontmatter.sh: top-level key:, then
+# Minimalist parse for the escape-hatch fixture shape: top-level key:, then
 # indented sub-keys.
 out, cur_key, cur_sub = {}, None, {}
 for line in fm.splitlines():

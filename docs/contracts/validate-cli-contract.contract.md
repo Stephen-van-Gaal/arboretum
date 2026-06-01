@@ -1,6 +1,6 @@
 ---
 seam: validate-cli-contract
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes:
@@ -21,7 +21,7 @@ The enforcement validator that checks a `*.cli-contract.md` file against the WS5
 
 `scripts/validate-cli-contract.sh` — producer-type: `script`.
 
-Validates the `*.cli-contract.md` file at the positional path argument. A thin bash wrapper handles arg parsing and file existence; an embedded python3 + PyYAML block runs every structural check:
+Validates the `*.cli-contract.md` file at the positional path argument. A thin bash wrapper handles arg parsing and file existence; `scripts/lib/yaml-lite.sh` parses the frontmatter with Python 3 standard library only; an embedded Python block runs every structural check:
 
 - **Frontmatter delimiters** — the file must start with `---` and carry a closing `---`; the leading region before the first delimiter must be empty.
 - **Frontmatter YAML** — must parse as a YAML mapping.
@@ -52,7 +52,7 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 
 - **stdout:** none.
 - **stderr (drift only):** a summary line `CLI-CONTRACT-DRIFT: <N> issue(s) in <path>` followed by one indented bullet per issue, `  - <message>` (e.g. `  - missing required frontmatter field: version`, `  - version must be semver-light (major.minor); got '1'`, `  - invokers[0]: type 'cyborg' not in closed enum (expected one of: developer, hook, plugin, script, skill)`, `  - missing required body section: ## Versioning`, `  - ## Test surface has no bullet-list assertions`).
-- **stderr (invocation error):** `Usage: <script> <path-to-cli-contract.md>` (wrong arg count) or `Not a file: <path>` (path missing/not a regular file).
+- **stderr (invocation error):** `Usage: <script> <path-to-cli-contract.md>` (wrong arg count), `Not a file: <path>` (path missing/not a regular file), or `validate-cli-contract.sh: yaml-lite helper not found at <path>`.
 - **Exit codes:** `0` — contract valid; `1` — one or more schema violations (issues on stderr); `2` — invocation problem (wrong arg count, file missing/unreadable).
 
 ### Invariants
@@ -62,7 +62,8 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 - **Closed invoker-type enum.** `invokers[].type` must be one of `{skill, script, hook, plugin, developer}`; any other value is drift.
 - **Semver-light version.** `version` must match `<major>.<minor>` exactly; a bare integer or a three-segment version is drift.
 - **No mutation.** Read-only — never writes the contract file.
-- **Exit-2 is distinct from exit-1.** An invocation problem (missing file, wrong arg count) exits `2` with a `Usage:`/`Not a file:` message and does NOT emit a `CLI-CONTRACT-DRIFT:` line; schema drift exits `1` and does.
+- **Exit-2 is distinct from exit-1.** An invocation problem (missing file, wrong arg count, missing YAML-lite helper) exits `2` with a `Usage:`/`Not a file:`/`yaml-lite helper not found` message and does NOT emit a `CLI-CONTRACT-DRIFT:` line; schema drift exits `1` and does.
+- **Bare-checkout portable.** The validator does not require PyYAML, yq, jq, or any package install.
 
 ## Test surface
 
@@ -73,7 +74,9 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 - **VCC-5:** missing-body-section fixture (`bad-missing-body-section.cli-contract.md`) → exit 1, stderr `  - missing required body section: ## Versioning`.
 - **VCC-6:** empty-test-surface fixture (`bad-empty-test-surface.cli-contract.md`) → exit 1, stderr `  - ## Test surface has no bullet-list assertions`.
 - **VCC-7:** invocation error — non-existent path → exit 2, stderr `Not a file:`, no `CLI-CONTRACT-DRIFT:` line.
+- **VCC-8:** invocation error — missing `scripts/lib/yaml-lite.sh` helper → exit 2, stderr `yaml-lite helper not found`, no `CLI-CONTRACT-DRIFT:` line.
 
 ## Versioning
 
+- **1.1** (2026-06-01) — missing YAML-lite helper is an invocation error (exit 2) with no `CLI-CONTRACT-DRIFT:` summary.
 - **1.0** (2026-05-30) — initial contract. Validator shape as of `scripts/validate-cli-contract.sh` on `main` (CLI-CONTRACT-DRIFT stderr format, exit 0/1/2). Issue #303 (WS5 PR 7a).

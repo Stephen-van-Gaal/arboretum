@@ -1,6 +1,6 @@
 ---
 seam: validate-design-spec
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes:
@@ -21,13 +21,13 @@ The enforcement validator that checks a `/design`-spec's frontmatter against the
 
 `scripts/validate-design-spec.sh` — producer-type: `script`.
 
-Validates the design spec at the positional path argument. Parses the leading `---`-delimited YAML frontmatter with python3 + PyYAML (matching `read-pipeline-flag.sh`) and checks the five required S2 fields plus the cross-field invariants:
+Validates the design spec at the positional path argument. Parses the leading frontmatter through `scripts/lib/yaml-lite.sh`, then applies S2-specific schema validation in Python 3 standard library code. It checks the five required S2 fields plus the cross-field invariants:
 
 - `related-issue` — positive integer.
 - `triage` — closed enum `{agent-target, everything-else}`.
 - `implementation-mode` — closed enum `{direct, executing-plans, subagent-driven-development}`.
 - `plan` — relative path string or the literal `null`.
-- `test-tiers` — mapping with keys `unit`, `contract`, `integration`; each value `yes` (PyYAML may parse unquoted `yes` to boolean `True` — both accepted) or a string starting `n/a — `.
+- `test-tiers` — mapping with keys `unit`, `contract`, `integration`; each value `yes` (including quoted forms and the legacy normalized `True` spelling) or a reason-bearing `n/a` string.
 
 Cross-field invariants: `plan: null` forbids `implementation-mode: executing-plans`; a `plan:` path must be relative and resolve to an existing file under the repo root (located by walking up for a `.git` dir or `CLAUDE.md`). Emits one summary `S2-DRIFT:` line plus one indented bullet per issue to stderr; never mutates the spec.
 
@@ -50,16 +50,17 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 
 - **stdout:** none.
 - **stderr (drift only):** a summary line `S2-DRIFT: <N> issue(s) in <path>` followed by one indented bullet per issue, `  - <field>: <reason>` (e.g. `  - triage: missing`, `  - implementation-mode: not in ['direct', 'executing-plans', 'subagent-driven-development'] (got '…')`, `  - plan: file not found at <path> (resolved: <abs>)`). A malformed/absent frontmatter block yields a single `frontmatter: …` issue.
-- **stderr (invocation error):** `usage: validate-design-spec.sh <design-spec-path>` or `validate-design-spec.sh: file not found: <path>`.
+- **stderr (invocation error):** `usage: validate-design-spec.sh <design-spec-path>`, `validate-design-spec.sh: file not found: <path>`, or `validate-design-spec.sh: yaml-lite helper not found at <path>`.
 - **Exit codes:** `0` — spec valid; `1` — one or more contract violations (issues on stderr); `2` — invocation problem (wrong arg count, file missing/unreadable).
 
 ### Invariants
 
 - **Drift goes to stderr, never stdout.** stdout stays empty so callers can capture it separately; the `S2-DRIFT:` block is stderr-only.
 - **Whole-schema report, not first-fail.** All five fields plus cross-field invariants are evaluated; the summary `<N>` is the total issue count, not `1`.
-- **`yes`/`True` equivalence.** A `test-tiers` tier of unquoted `yes` (which PyYAML loads as boolean `True`) is accepted identically to the string `"yes"`.
+- **`yes`/`True` equivalence.** A `test-tiers` tier of `yes`, quoted `yes`, or the legacy normalized `True` spelling is accepted identically.
 - **No mutation.** Read-only — never writes the spec or any file other than its own scratch tempfile.
-- **Exit-2 is distinct from exit-1.** An invocation problem (missing file, wrong arg count) exits `2` and does NOT emit an `S2-DRIFT:` line; contract drift exits `1` and does.
+- **Exit-2 is distinct from exit-1.** An invocation problem (missing file, wrong arg count, missing YAML-lite helper) exits `2` and does NOT emit an `S2-DRIFT:` line; contract drift exits `1` and does.
+- **Bare-checkout portable.** The validator does not require PyYAML, yq, jq, or any package install.
 
 ## Test surface
 
@@ -68,7 +69,9 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 - **VDS-3:** out-of-enum `implementation-mode` fixture (`design-bad-enum-implementation-mode.md`) → exit 1, stderr `  - implementation-mode: not in …`.
 - **VDS-4:** `plan:` pointing at a missing file (`design-plan-missing-file.md`) → exit 1, stderr `  - plan: file not found …`.
 - **VDS-5:** invocation error — non-existent path → exit 2, stderr `file not found`, no `S2-DRIFT:` line.
+- **VDS-6:** invocation error — missing `scripts/lib/yaml-lite.sh` helper → exit 2, stderr `yaml-lite helper not found`, no `S2-DRIFT:` line.
 
 ## Versioning
 
+- **1.1** (2026-06-01) — missing YAML-lite helper is an invocation error (exit 2) with no `S2-DRIFT:` summary.
 - **1.0** (2026-05-30) — initial contract. Validator shape as of `scripts/validate-design-spec.sh` on `main` (S2-DRIFT stderr format, exit 0/1/2). Issue #303 (WS5 PR 7a).

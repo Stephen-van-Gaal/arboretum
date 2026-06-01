@@ -123,6 +123,18 @@ Own all project-level configuration that no feature spec should claim: CI/CD pip
      - Claude Code config: .claude/
 -->
 
+### Runtime Portability
+
+Generated governance scripts should run from a bare checkout with Bash,
+POSIX-ish shell tools, and Python 3 standard library only. Contextual
+dependencies such as `git` or a configured provider CLI are acceptable when the
+operation inherently needs them. Optional helpers must have portable fallbacks
+or documented capability-gated diagnostics.
+
+For YAML/frontmatter shapes inside Arboretum's supported YAML-lite subset,
+scripts should share `scripts/lib/yaml-lite.sh` for parsing and keep
+script-specific schema validation in the consumer.
+
 ## Decisions
 
 | ID | Decision | Alternatives Considered | Rationale | Date |
@@ -131,6 +143,7 @@ Own all project-level configuration that no feature spec should claim: CI/CD pip
 | P2 | Pre-push hook (not pre-commit) for local test enforcement | Pre-commit hook, no local enforcement | Pre-commit slows iterative commits and encourages `--no-verify`. Pre-push catches problems at the right boundary — before sharing with others. | <!-- Date --> |
 | P3 | Advisory post-commit + blocking pre-push | Single blocking hook, no hooks | Layered approach: post-commit gives immediate doc feedback (fast, advisory). Pre-push gives comprehensive validation (thorough, blocking). | <!-- Date --> |
 | P4 | <!-- Branch protection rules --> | <!-- Alternatives --> | <!-- Rationale --> | <!-- Date --> |
+| P5 | Bare-checkout runtime portability for generated governance scripts | Require a package install step before governance scripts run | New projects should be able to run the governance framework immediately after checkout/bootstrap, before any project-specific dependency setup. | 2026-06-01 |
 
 ## Tests
 

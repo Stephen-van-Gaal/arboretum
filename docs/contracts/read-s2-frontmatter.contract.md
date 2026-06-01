@@ -1,13 +1,15 @@
 ---
 seam: read-s2-frontmatter
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: skill
 consumes:
   - module-contract-template-file
+  - yaml-lite-line-protocol
 produces: []
 related-designs:
   - docs/superpowers/specs/2026-05-26-pipeline-overhaul-ws5-governance-script-contracts-design.md
+  - docs/superpowers/specs/2026-06-01-runtime-portability-design.md
 owns:
   - scripts/read-s2-frontmatter.sh
 ---
@@ -21,7 +23,7 @@ The seam between `scripts/read-s2-frontmatter.sh` (the strict whole-schema gate 
 
 `scripts/read-s2-frontmatter.sh` — producer-type: `script`.
 
-Takes exactly one positional argument: the path to a design spec. Reads the leading `---`-delimited YAML frontmatter block with a minimalist parser (top-level `key: value` plus one level of indented sub-keys — no PyYAML dependency). Validates the whole schema strictly (per WS1 D5): every required field must be present, and each must satisfy its type/enum rule. On success it prints one `key=value` line per required field to stdout and exits `0`; the nested `test-tiers` object is flattened to `test-tiers.<sub-key>=<value>` lines. On any missing field, bad enum, or malformed input it writes a `read-s2-frontmatter: …` diagnostic to stderr and exits `2`. Usage errors (wrong arg count, missing file) exit `1`.
+Takes exactly one positional argument: the path to a design spec. Reads the leading `---`-delimited YAML frontmatter block through `scripts/lib/yaml-lite.sh` (no PyYAML, yq, jq, or package install), then validates the whole schema strictly (per WS1 D5): every required field must be present, and each must satisfy its type/enum rule. On success it prints one `key=value` line per required field to stdout and exits `0`; the nested `test-tiers` object is flattened to `test-tiers.<sub-key>=<value>` lines. On any missing field, bad enum, or malformed input it writes a `read-s2-frontmatter: …` diagnostic to stderr and exits `2`. Usage errors (wrong arg count, missing file, missing helper) exit `1`.
 
 Required fields and their rules:
 
@@ -61,6 +63,7 @@ Consumer-type: `skill`. One downstream consumer:
 - **Flattened nested object.** The `test-tiers` object is emitted as dot-notation `test-tiers.<sub-key>=<value>` lines — never as a single opaque `test-tiers=…` scalar line.
 - **Plan normalization.** A quoted `plan` value has its surrounding quotes stripped before being printed; `plan=null` is printed verbatim when the field is `null`.
 - **No mutation.** Read-only — the script never writes the spec or any file.
+- **Bare-checkout portable.** The reader does not require PyYAML, yq, jq, or any package install; it shares parser behavior through `scripts/lib/yaml-lite.sh`.
 
 ## Test surface
 
@@ -75,4 +78,5 @@ Consumer-type: `skill`. One downstream consumer:
 
 ## Versioning
 
+- **1.1** (2026-06-01) - parser moved onto shared `yaml-lite.sh` helper for Issue #437.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/read-s2-frontmatter.sh` on this branch. Issue #303 (WS5 PR 7a).

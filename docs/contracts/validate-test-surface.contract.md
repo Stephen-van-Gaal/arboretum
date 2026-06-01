@@ -57,7 +57,7 @@ The validator is also reachable as an S3-6 gate from the `/build`/`/finish` skil
 
 - **Drift goes to stderr, never stdout.** stdout stays empty; the `S3-6:` block is stderr-only.
 - **Exact-token set match, not regex.** The test-surface block is tokenized and compared by exact string membership, so a filename differing by one character (`foo-testXsh` vs `foo-test.sh`) does not match, and a YAML-quoted entry (`- "foo.sh"`) matches its unquoted changed-files counterpart.
-- **`yes`/quoted-`yes` equivalence.** A `test-tiers` tier of `yes`, `"yes"`, or `'yes'` is accepted identically, matching `validate-design-spec.sh`'s PyYAML treatment so a spec valid in one tool is valid in the other.
+- **`yes`/quoted-`yes` equivalence.** A `test-tiers` tier of `yes`, `"yes"`, or `'yes'` is accepted identically, matching `validate-design-spec.sh`'s YAML-lite treatment so a spec valid in one tool is valid in the other.
 - **Reason-bearing entries parse.** The contract-compliant `- tests/foo.sh — <reason>` (and comma / `#`-comment reason forms) tokenize to the bare filename; the reason text is parsed but ignored for membership.
 - **No mutation.** Read-only — never writes the spec, the list, or any file other than its own scratch tempfiles.
 - **Exit-2 carries an `S3-6:` prefix for a missing named file, but `usage:` for wrong arg count.** Unlike the S2/S3/S9 line validators (whose exit-2 path never emits the seam prefix), a missing-file invocation error here is reported as `S3-6: spec not found: …` / `S3-6: changed-files list not found: …`. The `S3-6:` prefix alone therefore does not distinguish exit-1 drift from an exit-2 missing-file error; the exit code is authoritative. A wrong arg count still uses the prefix-free `usage:` form.

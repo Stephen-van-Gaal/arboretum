@@ -17,46 +17,22 @@ set -euo pipefail
 [ "$#" -eq 1 ] || { echo "Usage: $0 <test-infrastructure-spec-file>" >&2; exit 1; }
 [ -f "$1" ] || { echo "test-infrastructure spec not found: $1" >&2; exit 1; }
 
-python3 - "$1" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+YAML_LITE="$SCRIPT_DIR/lib/yaml-lite.sh"
+[ -f "$YAML_LITE" ] || { echo "read-test-config: yaml-lite helper not found at $YAML_LITE" >&2; exit 1; }
 
-m = re.match(r"^---\n(.*?\n)---\n", text, re.DOTALL)
-if not m:
-    sys.stderr.write("read-test-config: no frontmatter found (file must start with --- block)\n")
-    sys.exit(2)
+PARSED_FILE=$(mktemp)
+PARSER_ERR=$(mktemp)
+trap 'rm -f "$PARSED_FILE" "$PARSER_ERR"' EXIT
 
-# Minimalist YAML parse — top-level `key: value` and one level of indented
-# sub-keys. Mirrors scripts/read-s2-frontmatter.sh; avoids a PyYAML dependency.
-def parse(fm_text):
-    out = {}
-    cur_key = None
-    cur_sub = {}
-    for line in fm_text.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if line.startswith("  ") and cur_key is not None:
-            sub = line.strip()
-            if ":" in sub:
-                k, v = sub.split(":", 1)
-                cur_sub[k.strip()] = v.strip()
-            continue
-        if cur_key is not None and cur_sub:
-            out[cur_key] = cur_sub
-            cur_sub = {}
-            cur_key = None
-        if ":" in line:
-            k, v = line.split(":", 1)
-            k, v = k.strip(), v.strip()
-            if v:
-                out[k] = v
-                cur_key = None
-            else:
-                cur_key = k
-                cur_sub = {}
-    if cur_key is not None and cur_sub:
-        out[cur_key] = cur_sub
-    return out
+if ! bash "$YAML_LITE" frontmatter "$1" >"$PARSED_FILE" 2>"$PARSER_ERR"; then
+    echo "read-test-config: invalid or missing frontmatter" >&2
+    sed 's/^/read-test-config: /' "$PARSER_ERR" >&2
+    exit 2
+fi
+
+python3 - "$1" "$PARSED_FILE" <<'PY'
+import sys
 
 def unquote(s):
     s = s.strip()
@@ -64,7 +40,31 @@ def unquote(s):
         return s[1:-1]
     return s
 
-fm = parse(m.group(1))
+parsed_path = sys.argv[2]
+fm = {}
+opt_in = {}
+opt_in_order = []
+
+with open(parsed_path, encoding="utf-8") as parsed:
+    for raw in parsed:
+        line = raw.rstrip("\n")
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.startswith("opt-in-commands."):
+            subkey = key.split(".", 1)[1]
+            if subkey not in opt_in:
+                opt_in_order.append(subkey)
+            opt_in[subkey] = value
+        elif key.startswith("tiers-via."):
+            fm["tiers-via"] = {}
+        elif key == "opt-in-commands":
+            fm[key] = value
+        elif key in {"default-command", "runner", "layout", "tiers-via"}:
+            fm[key] = value
+
+if opt_in:
+    fm["opt-in-commands"] = opt_in
 
 # Required: default-command (non-empty scalar).
 if "default-command" not in fm:
@@ -124,7 +124,8 @@ for k in ORDER:
         continue
     v = fm[k]
     if isinstance(v, dict):
-        for sk, sv in v.items():
+        for sk in opt_in_order:
+            sv = v[sk]
             print(f"{k}.{sk}={unquote(sv)}")
     else:
         print(f"{k}={unquote(v)}")

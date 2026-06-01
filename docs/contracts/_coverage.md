@@ -16,6 +16,7 @@
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
 | scripts/lib/upgrade-classify.sh | docs/contracts/upgrade-classify.contract.md | full |
+| scripts/lib/yaml-lite.sh | docs/contracts/yaml-lite.contract.md | full |
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
 | scripts/parse-plan-checkboxes.sh | docs/contracts/parse-plan-checkboxes.contract.md | full |
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |

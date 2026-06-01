@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-read-pipeline-flag.sh — Contract test for
-# docs/contracts/read-pipeline-flag.contract.md. Asserts RPF-1..RPF-7
+# docs/contracts/read-pipeline-flag.contract.md. Asserts RPF-1..RPF-8
 # against scripts/read-pipeline-flag.sh using a mktemp CWD fixture
 # carrying a roadmap.config.yaml. Picked up automatically by
 # ci-checks.sh's === Smoke tests === loop.
@@ -49,5 +49,29 @@ printf 'pipeline:\n  workflow: v2\n' > "$FIX/roadmap.config.yaml"
 before=$(shasum "$FIX/roadmap.config.yaml" | cut -d' ' -f1); run >/dev/null
 after=$(shasum "$FIX/roadmap.config.yaml" | cut -d' ' -f1)
 [ "$before" = "$after" ] && pass RPF-7 || fail_case RPF-7 "config mutated"
+
+# RPF-8 no PyYAML dependency
+mkdir -p "$FIX/no-yaml"
+cat > "$FIX/no-yaml/sitecustomize.py" <<'PY'
+import builtins
+_orig_import = builtins.__import__
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "yaml" or name.startswith("yaml."):
+        raise ModuleNotFoundError("No module named 'yaml'")
+    return _orig_import(name, globals, locals, fromlist, level)
+builtins.__import__ = guarded_import
+PY
+printf 'pipeline:\n  workflow: v2\n' > "$FIX/roadmap.config.yaml"
+out=$(PYTHONPATH="$FIX/no-yaml" run); rc=$?
+[ "$rc" = 0 ] && [ "$out" = v2 ] && pass RPF-8 || fail_case RPF-8 "rc=$rc out=$out err=$(cat "$FIX/.err")"
+
+# RPF-9 missing yaml-lite helper reports a clear dependency diagnostic.
+MISSING_HELPER="$FIX/missing-helper"
+mkdir -p "$MISSING_HELPER/scripts"
+cp "$PROBE" "$MISSING_HELPER/scripts/read-pipeline-flag.sh"
+printf 'pipeline:\n  workflow: v2\n' > "$MISSING_HELPER/roadmap.config.yaml"
+out=$(cd "$MISSING_HELPER" && bash scripts/read-pipeline-flag.sh 2>"$FIX/.err"); rc=$?
+[ "$rc" = 1 ] && [ -z "$out" ] && grep -q "yaml-lite helper not found" "$FIX/.err" && pass RPF-9 \
+  || fail_case RPF-9 "rc=$rc out=$out err=$(cat "$FIX/.err")"
 
 [ "$fail" = 0 ] && echo "read-pipeline-flag contract: ALL PASS" || exit 1

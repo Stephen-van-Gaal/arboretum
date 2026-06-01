@@ -5,9 +5,9 @@
 # by scripts/read-test-config.sh (default-command + optionals). The two parsers
 # read non-overlapping keys and ignore each other's.
 #
-# NOTE: keep explanatory notes on their OWN comment lines. A trailing inline
-# comment after a value (e.g. `tiers-via: markers  # note`) is NOT stripped by
-# the parser — it would be read as part of the value (same as read-s2-frontmatter).
+# NOTE: keep explanatory notes on their OWN comment lines for readability.
+# The shared yaml-lite parser strips trailing inline comments unless `#` is
+# inside quotes.
 #
 # ── (a) governed-spec metadata ──
 version: 1

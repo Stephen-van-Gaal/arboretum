@@ -47,4 +47,12 @@ if [ "$rc" = 1 ] && grep -q "## Test surface has no bullet-list assertions" "$ER
 bash "$VALIDATOR" "$FIX/does-not-exist-xyzzy.cli-contract.md" 2>"$ERR"; rc=$?
 if [ "$rc" = 2 ] && grep -q "Not a file:" "$ERR" && ! grep -q "CLI-CONTRACT-DRIFT:" "$ERR"; then pass VCC-7; else fail_case VCC-7 "rc=$rc err=$(cat "$ERR")"; fi
 
+# VCC-8 — missing yaml-lite helper → exit 2, clear invocation diagnostic, no CLI-CONTRACT-DRIFT
+MISSING_HELPER=$(mktemp -d)
+mkdir -p "$MISSING_HELPER/scripts"
+cp "$VALIDATOR" "$MISSING_HELPER/scripts/validate-cli-contract.sh"
+bash "$MISSING_HELPER/scripts/validate-cli-contract.sh" "$FIX/good-001.cli-contract.md" 2>"$ERR"; rc=$?
+rm -rf "$MISSING_HELPER"
+if [ "$rc" = 2 ] && grep -q "yaml-lite helper not found" "$ERR" && ! grep -q "CLI-CONTRACT-DRIFT:" "$ERR"; then pass VCC-8; else fail_case VCC-8 "rc=$rc err=$(cat "$ERR")"; fi
+
 [ "$fail" = 0 ] && echo "validate-cli-contract contract: ALL PASS" || exit 1
