@@ -252,6 +252,12 @@ if printf '%s' "$ado_list" | jq -e '.[0].number == 42 and (.[0].labels | map(.na
 else
   fail_case RL-12 "out=[$ado_list] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
 fi
+ado_list_unfiltered=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_list --state open --limit 1 --json number)
+if printf '%s' "$ado_list_unfiltered" | jq -e '.[0].number == 42' >/dev/null; then
+  pass "RL-12 (no label filters)"
+else
+  fail_case "RL-12 (no label filters)" "out=[$ado_list_unfiltered] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
 
 ado_show=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_show 42 --json number,title,body,labels,comments)
 if printf '%s' "$ado_show" | jq -e '.number == 42 and .comments[0].authorAssociation == "MEMBER" and (.labels | map(.name) | index("agent-ready"))' >/dev/null \
@@ -268,6 +274,9 @@ if jq -e '.[] | select(.path == "/fields/System.Tags" and .op == "replace" and (
 else
   fail_case RL-14 "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
 fi
+PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_update 42 --add-label next-up >/dev/null \
+  && pass "RL-14 (add-only labels)" \
+  || fail_case "RL-14 (add-only labels)" "add-only update helper failed"
 
 PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_comment 42 --body "hello from roadmap" >/dev/null \
   || fail_case "RL-15 (comment)" "comment helper failed"

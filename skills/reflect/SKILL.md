@@ -45,14 +45,35 @@ fi
 
 ### Step 1: Set context
 
-Gather context about what just happened. Check:
+Gather context about what just happened. Resolve the configured repo backend
+before reading provider PR state:
 
 ```bash
-# Recent merge?
-git log --oneline -5
+PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "${CLAUDE_PROJECT_DIR:-$PWD}")"
+source "$PROJECT_DIR/scripts/roadmap/lib.sh"
+REFLECT_BACKEND="$(roadmap_backend "$PROJECT_DIR")"
+export REFLECT_BACKEND
+roadmap_require_backend "$REFLECT_BACKEND" || exit 1
+```
 
-# What branch was this?
+Check recent commits:
+
+```bash
+git log --oneline -5
+```
+
+Then read the latest merged/completed PR through the configured backend:
+
+For `github`:
+
+```bash
 gh pr list --state merged --limit 1 --json title,number,body
+```
+
+For `azure-devops`:
+
+```bash
+az repos pr list --status completed --top 1 --output json
 ```
 
 Summarize briefly: "You just merged PR #N: <title>. Let's capture what you learned."
@@ -89,7 +110,7 @@ If the user names follow-ups in their reaction, **or** if the agent's own observ
 
 #### Step 2d — Q5: next-up (preserved, mandatory)
 
-Ask exactly as before: "Which issue should be queued as `next-up` for the next session?" — request an issue number (or 'skip'). If the user gives a number, invoke `/handoff <N> --completed`. The `/handoff` skill is the canonical writer — it manages the GitHub `next-up` label and refreshes the local cache; the `--completed` flag keeps it in completion mode (label only — no note draft, no unchecked-box enforcement). This skill does not call `gh` directly for next-up label or cache writes (Step 1 still uses `gh pr list` for read-only context).
+Ask exactly as before: "Which issue should be queued as `next-up` for the next session?" — request an issue number (or 'skip'). If the user gives a number, invoke `/handoff <N> --completed`. The `/handoff` skill is the canonical writer — it manages the configured tracker backend's `next-up` marker and refreshes the local cache; the `--completed` flag keeps it in completion mode (label only — no note draft, no unchecked-box enforcement). This skill does not call `gh` directly for next-up label, cache writes, or recent-merge context; provider PR reads stay behind the Step 1 backend branch.
 
 If the user skips, **no `next-up` is queued** — declining the reflection is a signal the session is *done*, not that another one is queued. This is also the canonical handoff invocation in the ship tail (D8) — `/finish` and `/cleanup` no longer prompt for next-up separately.
 
@@ -128,7 +149,7 @@ Keep it brief:
 - **This is not a gate.** It's a prompt. If the user doesn't want to reflect, respect that immediately — but the observation report (Step 2a) is the agent's contribution and lands regardless of whether the user reacts.
 - **Keep it lightweight.** 3–5 observations total across all three categories, one reaction prompt, optional follow-up capture, the mandatory Q5. No forms, no required fields, no ceremony.
 - **The agent surfaces; the user reacts.** The asymmetry of attention (D7) is the design — the agent has the build-cycle context the user does not, so the burden of noticing lands with the agent, not the user.
-- **SRP:** This skill handles reflection only. `/cleanup` handles housekeeping. `/handoff` manages the GitHub `next-up` label. They are separate responsibilities — Q5 delegates to `/handoff` rather than duplicating the GH-write logic, and `/reflect` is the single canonical handoff invocation in the ship tail (D8).
+- **SRP:** This skill handles reflection only. `/cleanup` handles housekeeping. `/handoff` manages the configured tracker backend's `next-up` marker. They are separate responsibilities — Q5 delegates to `/handoff` rather than duplicating tracker writes, and `/reflect` is the single canonical handoff invocation in the ship tail (D8).
 - **Complementary to `explanatory-output-style`.** That plugin surfaces inline insights during every response (per-response cadence); this skill is the per-cycle aggregate surface (post-ship cadence). The two are complementary; no code reuse between them.
 
 $ARGUMENTS

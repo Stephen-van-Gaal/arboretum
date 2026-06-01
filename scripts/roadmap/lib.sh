@@ -469,9 +469,11 @@ roadmap_ado_issue_list() {
     *) echo "roadmap_tracker_issue_list: unsupported azure-devops state: $state" >&2; return 2 ;;
   esac
 
-  for clause in "${labels[@]}"; do
-    clauses+=("[System.Tags] CONTAINS $(roadmap_ado_wiql_string "$clause")")
-  done
+  if [ "${#labels[@]}" -gt 0 ]; then
+    for clause in "${labels[@]}"; do
+      clauses+=("[System.Tags] CONTAINS $(roadmap_ado_wiql_string "$clause")")
+    done
+  fi
 
   for token in $search; do
     case "$token" in
@@ -600,8 +602,14 @@ roadmap_ado_issue_update() {
   fi
   if [ "${#add_labels[@]}" -gt 0 ] || [ "${#remove_labels[@]}" -gt 0 ]; then
     current_tags="$(roadmap_ado_current_tags "$issue")" || return $?
-    adds="$(roadmap_ado_normalize_label_args "${add_labels[@]}")"
-    removes="$(roadmap_ado_normalize_label_args "${remove_labels[@]}")"
+    adds=""
+    removes=""
+    if [ "${#add_labels[@]}" -gt 0 ]; then
+      adds="$(roadmap_ado_normalize_label_args "${add_labels[@]}")"
+    fi
+    if [ "${#remove_labels[@]}" -gt 0 ]; then
+      removes="$(roadmap_ado_normalize_label_args "${remove_labels[@]}")"
+    fi
     updated_tags="$(roadmap_ado_merge_tags "$current_tags" "$adds" "$removes")" || return $?
     if [ "$updated_tags" != "$current_tags" ]; then
       op="add"

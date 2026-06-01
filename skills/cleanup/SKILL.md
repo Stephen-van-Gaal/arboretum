@@ -40,7 +40,17 @@ fi
 
 ### Step 1: Detect merged state
 
-Check the current branch and its PR status:
+Resolve the configured repo backend before checking provider PR state:
+
+```bash
+PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "${CLAUDE_PROJECT_DIR:-$PWD}")"
+source "$PROJECT_DIR/scripts/roadmap/lib.sh"
+CLEANUP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"
+export CLEANUP_BACKEND
+roadmap_require_backend "$CLEANUP_BACKEND" || exit 1
+```
+
+Check the current branch:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -52,15 +62,33 @@ If on `main` or `master`, check for stale local branches:
 git branch --merged main | grep -v '^\*\|main\|master'
 ```
 
-If on a feature branch, check if its PR was merged:
+If on a feature branch, check if its PR was merged through the configured
+backend:
+
+For `github`:
+
 ```bash
 gh pr list --head "$BRANCH" --state merged --json number,title,mergedAt
+```
+
+For `azure-devops`:
+
+```bash
+MERGED_PR_JSON="$(az repos pr list \
+  --source-branch "$BRANCH" \
+  --status completed \
+  --output json)"
+MERGED_PR_COUNT="$(printf '%s\n' "$MERGED_PR_JSON" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 ```
 
 If the PR is not merged yet:
 > "PR for branch `<branch>` hasn't been merged yet. Did you mean to run `/finish` to create the PR?"
 
 Stop here — don't clean up an unmerged branch.
+
+On `azure-devops`, `completed` is the merged PR state. If no completed PR is
+found, do not fall back to GitHub or infer from local branch ancestry; stop with
+the same unmerged-branch message.
 
 ### Step 2: Switch to main
 

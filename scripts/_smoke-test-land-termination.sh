@@ -28,6 +28,8 @@ ok()   { echo "PASS: $1"; }
 PR_SKILL="$REPO_ROOT/skills/pr/SKILL.md"
 FINISH_SKILL="$REPO_ROOT/skills/finish/SKILL.md"
 LAND_SKILL="$REPO_ROOT/skills/land/SKILL.md"
+CLEANUP_SKILL="$REPO_ROOT/skills/cleanup/SKILL.md"
+REFLECT_SKILL="$REPO_ROOT/skills/reflect/SKILL.md"
 
 # ── Case 0: Shipping skills dispatch on backend before provider calls ─
 grep -q 'SHIP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$PR_SKILL" \
@@ -76,6 +78,31 @@ if grep -q 'git diff "$BASE"...HEAD' "$LAND_SKILL"; then
   fail "case 0c — /land still classifies ADO PRs from local HEAD"
 fi
 ok "case 0c — /land routes Azure DevOps away from GitHub handler"
+
+grep -q 'CLEANUP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not read the configured backend"
+grep -q 'roadmap_require_backend "$CLEANUP_BACKEND"' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not check selected backend prerequisites"
+grep -q 'az repos pr list' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not document Azure Repos merged-PR lookup"
+grep -q -- '--status completed' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not use Azure Repos completed PR state"
+grep -q 'do not fall back to GitHub' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not guard ADO cleanup from GitHub fallback"
+ok "case 0d — /cleanup has GitHub/Azure backend dispatch"
+
+grep -q 'REFLECT_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$REFLECT_SKILL" \
+  || fail "case 0e — /reflect does not read the configured backend"
+grep -q 'roadmap_require_backend "$REFLECT_BACKEND"' "$REFLECT_SKILL" \
+  || fail "case 0e — /reflect does not check selected backend prerequisites"
+grep -q 'az repos pr list --status completed --top 1 --output json' "$REFLECT_SKILL" \
+  || fail "case 0e — /reflect does not document Azure Repos completed-PR lookup"
+grep -q 'configured tracker backend' "$REFLECT_SKILL" \
+  || fail "case 0e — /reflect does not delegate next-up to the configured tracker backend"
+if grep -q 'manages the GitHub `next-up` label' "$REFLECT_SKILL"; then
+  fail "case 0e — /reflect still describes next-up as GitHub-specific"
+fi
+ok "case 0e — /reflect has GitHub/Azure backend dispatch"
 
 # A gh stub that takes its responses from env vars. The stub uses jq
 # output for "repo view --json nameWithOwner --jq .nameWithOwner" which
