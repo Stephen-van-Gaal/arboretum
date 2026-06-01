@@ -9,8 +9,15 @@ cd "$ROOT" || exit 1
 fail=0
 
 echo "=== ShellCheck ==="
-find scripts .claude/hooks skills -name '*.sh' ! -path '*/_archived/*' \
-  -exec shellcheck --severity=warning {} + || fail=1
+if command -v shellcheck >/dev/null 2>&1; then
+  find scripts .claude/hooks skills -name '*.sh' ! -path '*/_archived/*' \
+    -exec shellcheck --severity=warning {} + || fail=1
+elif [ "${REQUIRE_SHELLCHECK:-0}" = "1" ]; then
+  echo "FAIL: shellcheck is required but was not found on PATH" >&2
+  fail=1
+else
+  echo "SKIP: shellcheck not found on PATH (set REQUIRE_SHELLCHECK=1 to require it)"
+fi
 
 echo "=== Smoke tests ==="
 for f in scripts/_smoke-test-*.sh; do

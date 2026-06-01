@@ -111,6 +111,32 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# CLI-6: ShellCheck capability gate
+# ShellCheck runs when present, skips by default when absent, and fails closed
+# when REQUIRE_SHELLCHECK=1.
+# ---------------------------------------------------------------------------
+if grep -q 'command -v shellcheck' "$TARGET"; then
+  echo "PASS: CLI-6a — shellcheck availability is checked before invocation"
+else
+  echo "FAIL: CLI-6a — shellcheck is not capability-gated with command -v" >&2
+  fail=1
+fi
+
+if grep -q 'REQUIRE_SHELLCHECK' "$TARGET"; then
+  echo "PASS: CLI-6b — REQUIRE_SHELLCHECK strict mode is present"
+else
+  echo "FAIL: CLI-6b — REQUIRE_SHELLCHECK strict mode is not present" >&2
+  fail=1
+fi
+
+if grep -q 'SKIP: shellcheck not found on PATH' "$TARGET"; then
+  echo "PASS: CLI-6c — missing shellcheck default path emits a SKIP diagnostic"
+else
+  echo "FAIL: CLI-6c — missing shellcheck default path has no SKIP diagnostic" >&2
+  fail=1
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 if [ "$fail" -ne 0 ]; then
