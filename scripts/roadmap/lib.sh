@@ -242,16 +242,18 @@ roadmap_tracker_apply_json_options() {
 roadmap_ado_config_get() {
   local key="$1"
   local fallback="${2:-}"
+  local root="${3:-}"
   local value
-  value="$(roadmap_backend_config_get "$key" 2>/dev/null || true)"
+  value="$(roadmap_backend_config_get "$key" "$root" 2>/dev/null || true)"
   [ -n "$value" ] || value="$fallback"
   printf '%s\n' "$value"
 }
 
 roadmap_ado_organization() {
+  local root="${1:-}"
   local value
-  value="$(roadmap_backend_config_get azure_devops_organization 2>/dev/null || true)"
-  [ -n "$value" ] || value="$(roadmap_backend_config_get ado_organization 2>/dev/null || true)"
+  value="$(roadmap_backend_config_get azure_devops_organization "$root" 2>/dev/null || true)"
+  [ -n "$value" ] || value="$(roadmap_backend_config_get ado_organization "$root" 2>/dev/null || true)"
   [ -n "$value" ] || value="${AZURE_DEVOPS_ORG_SERVICE_URL:-${AZURE_DEVOPS_EXT_ORG:-}}"
   if [ -z "$value" ] && command -v az >/dev/null 2>&1; then
     value="$(az devops configure --list 2>/dev/null | awk -F= '
@@ -263,9 +265,10 @@ roadmap_ado_organization() {
 }
 
 roadmap_ado_project() {
+  local root="${1:-}"
   local value
-  value="$(roadmap_backend_config_get azure_devops_project 2>/dev/null || true)"
-  [ -n "$value" ] || value="$(roadmap_backend_config_get ado_project 2>/dev/null || true)"
+  value="$(roadmap_backend_config_get azure_devops_project "$root" 2>/dev/null || true)"
+  [ -n "$value" ] || value="$(roadmap_backend_config_get ado_project "$root" 2>/dev/null || true)"
   [ -n "$value" ] || value="${AZURE_DEVOPS_PROJECT:-${SYSTEM_TEAMPROJECT:-}}"
   if [ -z "$value" ] && command -v az >/dev/null 2>&1; then
     value="$(az devops configure --list 2>/dev/null | awk -F= '
@@ -735,6 +738,115 @@ roadmap_ado_pr_list() {
     esac
   done
   printf '[]\n' | roadmap_tracker_apply_json_options "$json_fields" "$jq_filter"
+}
+
+roadmap_running_in_codex() {
+  [ -n "${CODEX_SANDBOX:-}" ] || [ -n "${CODEX_SHELL:-}" ]
+}
+
+roadmap_print_codex_network_guidance() {
+  local backend="$1"
+  case "$backend" in
+    github)
+      cat >&2 <<'EOF'
+
+This looks like Codex command network access may be blocked for GitHub.
+To let sandboxed Codex commands reach GitHub without repeated escalation, add:
+
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+domains = { "**.github.com" = "allow", "**.githubusercontent.com" = "allow" }
+
+Also check GH_TOKEN and GITHUB_TOKEN. If either is set to a stale token, gh will
+prefer it over keychain auth.
+EOF
+      ;;
+    azure-devops)
+      cat >&2 <<'EOF'
+
+This looks like Codex command network access may be blocked for Azure DevOps.
+To let sandboxed Codex commands reach Azure DevOps without repeated escalation,
+add:
+
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+domains = {
+  "dev.azure.com" = "allow",
+  "**.visualstudio.com" = "allow",
+  "login.microsoftonline.com" = "allow"
+}
+EOF
+      ;;
+  esac
+}
+
+roadmap_probe_github_access() {
+  local root="${1:-}"
+  local err
+  [ -n "$root" ] || root="$(roadmap_project_root)"
+  roadmap_require_backend github || return $?
+  err="$(mktemp)"
+  if ( cd "$root" && gh api 'repos/{owner}/{repo}' --jq .full_name ) >/dev/null 2>"$err"; then
+    rm -f "$err"
+    return 0
+  fi
+  echo "/roadmap can read gh auth, but the GitHub API live-access probe failed in this agent process." >&2
+  if [ -s "$err" ]; then
+    sed 's/^/github probe: /' "$err" >&2
+  fi
+  rm -f "$err"
+  if roadmap_running_in_codex; then
+    roadmap_print_codex_network_guidance github
+  fi
+  return 1
+}
+
+roadmap_probe_ado_access() {
+  local root="${1:-}"
+  local org project err
+  local args=(devops project show --output none --only-show-errors)
+  [ -n "$root" ] || root="$(roadmap_project_root)"
+  roadmap_require_backend azure-devops || return $?
+  org="$(roadmap_ado_organization "$root" 2>/dev/null || true)"
+  project="$(roadmap_ado_project "$root" 2>/dev/null || true)"
+  if [ -z "$org" ] || [ -z "$project" ]; then
+    echo "/roadmap could not resolve Azure DevOps organization/project for backend=azure-devops. Configure azure_devops_organization and azure_devops_project, or set Azure DevOps CLI defaults." >&2
+    return 1
+  fi
+  args+=(--organization "$org" --project "$project")
+  err="$(mktemp)"
+  if az "${args[@]}" >/dev/null 2>"$err"; then
+    rm -f "$err"
+    return 0
+  fi
+  echo "/roadmap can read Azure DevOps CLI defaults, but the Azure DevOps live-access probe failed in this agent process." >&2
+  if [ -s "$err" ]; then
+    sed 's/^/azure-devops probe: /' "$err" >&2
+  fi
+  rm -f "$err"
+  if roadmap_running_in_codex; then
+    roadmap_print_codex_network_guidance azure-devops
+  fi
+  return 1
+}
+
+roadmap_probe_backend_access() {
+  local backend="${1:-$(roadmap_backend)}"
+  local root="${2:-}"
+  case "$backend" in
+    github) roadmap_probe_github_access "$root" ;;
+    azure-devops) roadmap_probe_ado_access "$root" ;;
+    *)
+      echo "/roadmap unsupported backend: $backend" >&2
+      return 1
+      ;;
+  esac
 }
 
 roadmap_require_backend() {

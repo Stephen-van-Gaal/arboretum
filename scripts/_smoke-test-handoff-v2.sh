@@ -54,6 +54,9 @@ install_gh_stub() {
 echo "$@" >> "${GH_STUB_LOG:-/dev/null}"
 case "$1 $2" in
   "auth status")  exit 0 ;;
+  "api repos/{owner}/{repo}")
+    printf 'owner/repo\n'
+    exit 0 ;;
   "issue comment")
     prev=""
     for a in "$@"; do

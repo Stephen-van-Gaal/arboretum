@@ -54,11 +54,17 @@ Supported repo backends:
 For any other value, stop and tell the user:
 > "Unsupported PR backend: <backend>. Supported backends: github, azure-devops."
 
-Run the matching prerequisite guard before creating the PR:
+Run the matching backend-access guard before creating the PR:
 
 ```bash
-roadmap_require_backend "$SHIP_BACKEND" || exit 1
+roadmap_probe_backend_access "$SHIP_BACKEND" "$PROJECT_DIR" || exit 1
 ```
+
+The live-access probe checks local CLI/config prerequisites and confirms this
+agent process can reach the selected provider API from the target project root.
+If the probe fails under Codex, surface its backend-specific network
+configuration guidance before attempting any `gh pr create` or
+`az repos pr create` command.
 
 ### 1. Check branch
 

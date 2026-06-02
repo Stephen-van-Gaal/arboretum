@@ -31,6 +31,9 @@ install_gh_stub() {
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "api repos/{owner}/{repo}")
+    printf 'owner/repo\n'
+    exit 0 ;;
   "issue view")
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null \
       || echo '{"body":"## Context","number":307,"title":"WS9"}'
@@ -138,6 +141,9 @@ cat > "$bindir5/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "api repos/{owner}/{repo}")
+    printf 'owner/repo\n'
+    exit 0 ;;
   "issue view")
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null \
       || echo '{"body":"","number":0,"title":""}'

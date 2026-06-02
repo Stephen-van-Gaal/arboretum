@@ -153,7 +153,7 @@ esac
 
 PROJECT_DIR="${PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 export ROADMAP_BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$PROJECT_DIR")}"
-roadmap_require_backend "$ROADMAP_BACKEND" || exit 1
+roadmap_probe_backend_access "$ROADMAP_BACKEND" "$PROJECT_DIR" || exit 1
 TS="${LOG_STAGE_TS_OVERRIDE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 export LOG_STAGE_TS_OVERRIDE="$TS"  # Pass through to the --emit-log-only recursive invocation (T7).
 

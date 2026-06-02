@@ -126,7 +126,7 @@ fi
 # ── Detect tracker backend ───────────────────────────────────────────
 
 backend_stderr=$(mktemp "$CACHE_DIR/backend.stderr.XXXXXX")
-if ! roadmap_require_backend "$ROADMAP_BACKEND" > /dev/null 2>"$backend_stderr"; then
+if ! roadmap_probe_backend_access "$ROADMAP_BACKEND" "$PROJECT_DIR" > /dev/null 2>"$backend_stderr"; then
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,

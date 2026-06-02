@@ -64,7 +64,7 @@ PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "${CLA
 source "$PROJECT_DIR/scripts/roadmap/lib.sh"
 LAND_BACKEND="${SHIP_BACKEND:-$(roadmap_backend "$PROJECT_DIR")}"
 export LAND_BACKEND
-roadmap_require_backend "$LAND_BACKEND" || exit 1
+roadmap_probe_backend_access "$LAND_BACKEND" "$PROJECT_DIR" || exit 1
 ```
 
 - **`github`** — run the three-phase handler below. This path owns all `gh`

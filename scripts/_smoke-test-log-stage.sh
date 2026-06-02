@@ -23,6 +23,9 @@ install_gh_stub() {
 echo "$@" >> "${GH_STUB_LOG:-/dev/null}"
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "api repos/{owner}/{repo}")
+    printf 'owner/repo\n'
+    exit 0 ;;
   "issue view")
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null || echo '{"body":""}'
     exit 0 ;;
@@ -269,6 +272,7 @@ cat > "$bindir15/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "api repos/{owner}/{repo}") printf 'owner/repo\n'; exit 0 ;;
   "issue view") echo '{"body":""}'; exit 0 ;;
   "issue edit") exit 1 ;;
   *) exit 2 ;;
@@ -291,6 +295,7 @@ cat > "$bindir16/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "api repos/{owner}/{repo}") printf 'owner/repo\n'; exit 0 ;;
   "issue view") echo '{"body":""}'; exit 0 ;;
   "issue edit") exit 0 ;;
   "issue comment") exit 1 ;;

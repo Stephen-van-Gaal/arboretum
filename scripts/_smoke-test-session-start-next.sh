@@ -105,6 +105,10 @@ case "\$1 \$2" in
   "auth status")
     exit 0
     ;;
+  "api repos/{owner}/{repo}")
+    printf 'owner/repo\n'
+    exit 0
+    ;;
   "label create")
     exit 0
     ;;

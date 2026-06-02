@@ -43,7 +43,7 @@ emit_null() {
   write_cache "$(printf '{"issue": null, "stage": null, "ts": "%s"}' "$(now_iso)")"
 }
 
-roadmap_require_backend "$ROADMAP_BACKEND" >/dev/null 2>&1 || { emit_null; exit 0; }
+roadmap_probe_backend_access "$ROADMAP_BACKEND" "$PROJECT_DIR" >/dev/null 2>&1 || { emit_null; exit 0; }
 # python3 is required for JSON shaping; without it the python3 -c calls
 # below would die under set -euo pipefail. Match the header's "Exit: 0
 # always" contract by degrading gracefully to a null cache.

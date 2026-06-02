@@ -49,6 +49,7 @@ fail_case() {
 # The stub responds to:
 #   `gh auth status`              → exit 0 (always; we test gh-unavailable
 #                                   separately, not here)
+#   `gh api repos/{owner}/{repo}` → exit 0 (live-access probe)
 #   `gh issue list ...`           → emit $GH_STUB_ISSUES, exit 0
 #   `gh issue view <N> --json comments`
 #                                 → emit $GH_STUB_COMMENTS, exit $GH_STUB_COMMENTS_EXIT.
@@ -75,6 +76,14 @@ case "$1" in
           printf '%s\n' "${GH_STUB_AUTH_STDERR:-You are not logged into any GitHub hosts.}" >&2
         fi
         exit "$exit_code"
+        ;;
+    esac
+    ;;
+  api)
+    case "$2" in
+      repos/{owner}/{repo})
+        printf 'owner/repo\n'
+        exit 0
         ;;
     esac
     ;;

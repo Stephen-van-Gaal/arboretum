@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.5
+version: 1.7
 producer-type: script
 consumer-type: script
 consumes:
@@ -29,6 +29,7 @@ A side-effect-free-by-default sourceable library (the pulse-*write* helpers muta
 - **`roadmap_config_list KEY`** — echoes a top-level list, one element per line; handles both block (`- item`) and flow (`[a, b, c]`) style.
 - **`roadmap_backend [ROOT]`** — echoes the configured tracker backend. `.arboretum.yml backend:` takes precedence, `roadmap.config.yaml backend:` is accepted for compatibility, and missing/empty defaults to `github`. Normalizes `azure`/`ado`/`azure-devops` to `azure-devops`.
 - **`roadmap_require_backend [BACKEND]`** — validates the selected backend's local prerequisites. `github` requires authenticated `gh`; `azure-devops` requires Azure CLI, the Azure DevOps CLI extension surfaces used by Arboretum (`az devops`, `az boards`, and `az repos`), readable Azure DevOps defaults, and `jq` for JSON normalization.
+- **`roadmap_probe_backend_access [BACKEND] [ROOT]`** — validates that the current agent process can perform one live read through the selected backend after local prerequisites pass. `github` probes `gh api repos/{owner}/{repo} --jq .full_name` from the target repository root so GitHub Enterprise hosts and repo-scoped tokens follow the same repo context as the guarded operation; `azure-devops` probes `az devops project show` using organization/project resolved from the target root before falling back to Azure CLI defaults. On Codex-flavoured network failures, stderr includes scoped `sandbox_workspace_write.network_access` and `features.network_proxy` guidance for the selected provider.
 - **`roadmap_tracker_issue_list`, `roadmap_tracker_issue_show`, `roadmap_tracker_issue_comment`, `roadmap_tracker_issue_update`, `roadmap_tracker_issue_close`, `roadmap_tracker_issue_create`, `roadmap_tracker_issue_comments`, `roadmap_tracker_label_list`, `roadmap_tracker_label_create`, `roadmap_tracker_pr_list`** — backend-neutral tracker operations. The `github` adapter delegates to the corresponding `gh` subcommand. The `azure-devops` adapter maps issues/labels to Azure Boards work items/tags and returns the GitHub-shaped JSON fields consumed by existing roadmap scripts.
 - **`roadmap_pulse_path`** — echoes `<root>/.arboretum/roadmap-pulse.json` (echoes nothing if root unknown).
 - **`roadmap_pulse_bootstrap`** — idempotently seeds the pulse file (no-op if present); bootstrap-as-today so no nag fires on install day.
@@ -61,6 +62,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - `roadmap_config_get KEY` / `roadmap_config_list KEY` — one arg: a top-level key name (must match `^[a-zA-Z_][a-zA-Z0-9_]*$`).
 - `roadmap_backend [ROOT]` — optional project root. Reads `<root>/.arboretum.yml` first, then `<root>/roadmap.config.yaml`.
 - `roadmap_require_backend [BACKEND]` — optional backend string; defaults to `roadmap_backend`.
+- `roadmap_probe_backend_access [BACKEND] [ROOT]` — optional backend string and project root. Backend defaults to `roadmap_backend`; root defaults to `roadmap_project_root`.
 - `roadmap_tracker_issue_list ARGS...`, `roadmap_tracker_issue_show ISSUE ARGS...`, `roadmap_tracker_issue_comment ISSUE ARGS...`, `roadmap_tracker_issue_update ISSUE ARGS...`, `roadmap_tracker_issue_close ISSUE ARGS...`, `roadmap_tracker_issue_create ARGS...`, `roadmap_tracker_issue_comments ISSUE ARGS...`, `roadmap_tracker_label_list ARGS...`, `roadmap_tracker_label_create ARGS...`, `roadmap_tracker_pr_list ARGS...` — pass-through args shaped for the neutral operation. The GitHub adapter preserves existing `gh`-compatible flags. The Azure DevOps adapter supports the subset used by roadmap scripts/skills: `--state`, `--limit`, `--label`, `--search`, `--json`, `--jq`, body/title edits, add/remove label, close/comment/create, label list/create, comment list, and PR list.
 - `roadmap_pulse_get_field KEY`, `roadmap_pulse_get_nag NAME`, `roadmap_pulse_set_nag_fired NAME` — one arg.
 - `roadmap_pulse_update_field KEY VALUE` — two args.
@@ -74,6 +76,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **`roadmap_config_list KEY`** — zero or more lines, one list element each (quotes stripped). Returns 1 when config absent or key malformed.
 - **`roadmap_backend [ROOT]`** — one line: `github`, `azure-devops`, or a caller-visible unsupported backend string. Never empty.
 - **`roadmap_require_backend`** — no stdout on success; stderr diagnostic + nonzero on missing tools/auth or unsupported backend.
+- **`roadmap_probe_backend_access`** — no stdout on success; stderr diagnostic + nonzero on missing tools, auth/config setup, unsupported backend, or live API read failure. If local prerequisites pass but the live read fails while running under Codex (`CODEX_SANDBOX` or `CODEX_SHELL` present), stderr includes a concrete Codex network configuration snippet for the selected backend. GitHub diagnostics mention `GH_TOKEN` / `GITHUB_TOKEN` precedence because stale token env vars can mask keychain auth.
 - **`roadmap_tracker_*` helpers** — stdout/stderr/exit code of the selected backend adapter. For `github`, this is the corresponding `gh` subcommand. For `azure-devops`, issue/work-item responses normalize to objects with `number`, `title`, `url`, `body`, `labels[].name`, `createdAt`, `updatedAt`, `closedAt`, `state`, and `comments[]` when requested.
 - **`roadmap_pulse_path`** — one line: the pulse JSON path; empty when root unknown.
 - **`roadmap_pulse_get_field KEY`** / **`roadmap_pulse_get_nag NAME`** — one line: the field/nag value; empty string when absent, null, or file missing. Always returns 0.
@@ -90,6 +93,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **Backend selection precedence.** `.arboretum.yml backend:` wins over `roadmap.config.yaml backend:`. Missing/empty backend defaults to `github` for backward compatibility.
 - **GitHub adapter preservation.** With `backend: github`, the tracker helpers delegate to `gh` and preserve the existing GitHub output shape for migrated consumers.
 - **Azure DevOps adapter normalization.** With `backend: azure-devops`, work item IDs are exposed as `number`, Azure tags are exposed as `labels[].name`, comments are exposed with `authorAssociation: "MEMBER"`, label creation is a no-op because ADO tags materialize on first use, and PR list returns an empty array so maintain flows degrade gracefully when merged-PR evidence is unavailable.
+- **Cheap setup vs live reachability are distinct.** `roadmap_require_backend` is the cheap local prerequisite guard and may run frequently. `roadmap_probe_backend_access` performs a provider API read and should be used at workflow edges where a clear "this process can reach the backend" diagnostic is worth the extra call; neutral `roadmap_tracker_*` helpers do not call the probe internally.
 - **Pulse fail-silence.** All pulse readers return 0 with empty stdout when the file/field is missing; writers are atomic (`.tmp` + `mv`) and never error out the caller.
 - **Tooling parity.** The `yq`/`jq` paths and the `python3` fallbacks are intended to produce equivalent output regardless of which tool is installed. `roadmap_config_list` captures `yq` output first and falls through to the python3 parser if the installed `yq` rejects the expression dialect, so runners with mikefarah `yq` and machines without `yq` keep the same list protocol.
 
@@ -112,9 +116,13 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-15:** `roadmap_tracker_issue_comment`, `roadmap_tracker_issue_close`, and `roadmap_tracker_pr_list` map to ADO discussion/state updates and empty PR-list degradation.
 - **RL-16:** `roadmap_tracker_label_list` synthesizes the framework/configured label vocabulary for ADO tags.
 - **RL-17:** `roadmap_tracker_issue_create` creates an Azure Boards work item and normalizes the created item response.
+- **RL-18:** `roadmap_probe_backend_access github [ROOT]` delegates to `gh auth status` through `roadmap_require_backend`, then probes `gh api repos/{owner}/{repo} --jq .full_name` from `ROOT`; an auth-ok/live-call-failed Codex path emits GitHub network guidance and mentions token env precedence.
+- **RL-19:** `roadmap_probe_backend_access azure-devops [ROOT]` delegates to `roadmap_require_backend`, resolves organization/project from `ROOT` before CLI defaults/env fallbacks, then probes `az devops project show`; a defaults-ok/live-call-failed Codex path emits Azure DevOps network guidance.
 
 ## Versioning
 
+- **1.7** (2026-06-02) — changes the GitHub probe to the repo-scoped `repos/{owner}/{repo}` endpoint and adds the optional project-root argument so Azure DevOps config resolves from the target project. PR #468 review feedback.
+- **1.6** (2026-06-02) — adds `roadmap_probe_backend_access` so workflow edges can distinguish local CLI setup from live provider reachability in Codex and other agent environments. Issue #465.
 - **1.5** (2026-05-31) — extends the Azure DevOps backend guard to verify the `az repos` surface used by backend-aware PR shipping. Issue #338.
 - **1.4** (2026-05-31) — makes `roadmap_config_list` fall back to python3 when an installed `yq` rejects the list expression.
 - **1.3** (2026-05-31) — implements the Azure DevOps tracker adapter behind the neutral roadmap helper surface.
