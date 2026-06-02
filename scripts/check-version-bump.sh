@@ -41,11 +41,18 @@ merge_base="$(git merge-base "$BASE_REF" HEAD)"
 # A diff confined to these does not reach the public repo and needs no bump.
 # CLAUDE.public.md / README.public.md are deliberately NOT listed: sync-public.yml
 # copies them into the published CLAUDE.md / README.md, so they are shippable.
+# Most of .github/ stays dev-only, but sync-public.yml explicitly copies the
+# Arboretum report issue-form mirrors into the public repo; add those back to
+# shippable below after the broad .github/ denylist.
 # File patterns are $-anchored so e.g. CLAUDE.md does not also exempt a
 # stray CLAUDE.md.bak; directory patterns end in / by design.
 dev_only_regex='^(docs/specs/|docs/plans/|docs/superpowers/|docs/reviews/|docs/reference/|docs/ARCHITECTURE\.md$|docs/REGISTER\.md$|\.github/|\.agents/skills/|\.claude/skills/dev-|\.claude/skills/_archived/|\.claude/projects/|scripts/_archived/|CLAUDE\.md$|README\.md$|\.gitmodules$|\.arboretum\.yml$|contracts\.yaml$)'
+public_issue_form_regex='^\.github/ISSUE_TEMPLATE/arboretum-(problem|enhancement)\.md$'
 
-shippable="$(git diff --name-only "$merge_base" HEAD | grep -Ev "$dev_only_regex" || true)"
+changed_paths="$(git diff --name-only "$merge_base" HEAD)"
+shippable="$(printf '%s\n' "$changed_paths" | sed '/^$/d' | grep -Ev "$dev_only_regex" || true)"
+public_issue_forms="$(printf '%s\n' "$changed_paths" | sed '/^$/d' | grep -E "$public_issue_form_regex" || true)"
+shippable="$(printf '%s\n%s\n' "$shippable" "$public_issue_forms" | sed '/^$/d' | sort -u)"
 
 if [ -z "$shippable" ]; then
   echo "OK: no shippable content changed — version bump not required (version $v_plugin)."

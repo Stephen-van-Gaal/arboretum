@@ -62,7 +62,8 @@ git_fixture() {
   make_manifests "$d" "1.0.0"
   mkdir -p "$d/skills/demo" "$d/docs/specs" \
     "$d/.claude/skills/dev-demo" "$d/.claude/skills/shipped" \
-    "$d/.agents/skills/dev-local" "$d/.agents/plugins"
+    "$d/.agents/skills/dev-local" "$d/.agents/plugins" \
+    "$d/.github/ISSUE_TEMPLATE"
   echo "demo skill" > "$d/skills/demo/SKILL.md"
   echo "demo spec" > "$d/docs/specs/demo.spec.md"
   echo "public claude source" > "$d/CLAUDE.public.md"
@@ -72,6 +73,7 @@ git_fixture() {
   echo "shipped skill" > "$d/.claude/skills/shipped/SKILL.md"
   echo "dev codex skill" > "$d/.agents/skills/dev-local/SKILL.md"
   echo '{"name":"fixture","plugins":[]}' > "$d/.agents/plugins/marketplace.json"
+  echo "report form" > "$d/.github/ISSUE_TEMPLATE/arboretum-problem.md"
   git -C "$d" add -A
   git -C "$d" commit -qm "base"
   git -C "$d" branch -q base-ref
@@ -226,6 +228,14 @@ echo "more" >> "$D/.agents/plugins/marketplace.json"
 git -C "$D" add -A; git -C "$D" commit -qm "edit codex marketplace"
 if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
   fail ".agents/plugins/ change without a bump should fail"
+fi
+
+echo "=== check-version-bump.sh: public report issue form is shippable ==="
+D="$TMP/check-report-form"; git_fixture "$D"
+echo "more" >> "$D/.github/ISSUE_TEMPLATE/arboretum-problem.md"
+git -C "$D" add -A; git -C "$D" commit -qm "edit public report issue form"
+if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+  fail "arboretum report issue-form change without a bump should fail — sync-public.yml copies it to the public repo"
 fi
 
 echo "ALL PASS"

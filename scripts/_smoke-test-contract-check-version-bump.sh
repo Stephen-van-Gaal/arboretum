@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # Smoke test for docs/contracts/check-version-bump.cli-contract.md.
-# Exercises CLI-1..CLI-6 via fixture git repos driven by REPO_ROOT + BASE_REF.
+# Exercises CLI-1..CLI-7 via fixture git repos driven by REPO_ROOT + BASE_REF.
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.
 
 set -uo pipefail
@@ -135,6 +135,32 @@ if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version was not incremented"
   echo "PASS: CLI-4 — shippable content + no bump → exit 1"
 else
   echo "FAIL: CLI-4 — expected exit 1 + 'plugin version was not incremented'; got rc=$rc output: $out" >&2
+  fail=1
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario: CLI-7 — public report issue forms are shippable despite .github/
+# ---------------------------------------------------------------------------
+#   Build: base and HEAD share the same version 1.0.0, but HEAD touches the
+#   issue-form mirror that sync-public.yml copies after excluding .github/.
+#   Expected: exit 1.
+REPO_E="$FIXTURE_ROOT/repo-e"
+init_repo "$REPO_E"
+write_plugin_json "$REPO_E" "1.0.0"
+mkdir -p "$REPO_E/.github/ISSUE_TEMPLATE"
+printf 'problem form\n' > "$REPO_E/.github/ISSUE_TEMPLATE/arboretum-problem.md"
+commit_all "$REPO_E" "base: add plugin json at 1.0.0 + report form"
+
+git -C "$REPO_E" "${GIT_ID[@]}" checkout -q -b pr-branch
+printf 'updated problem form\n' > "$REPO_E/.github/ISSUE_TEMPLATE/arboretum-problem.md"
+commit_all "$REPO_E" "pr: update public report form without bumping version"
+
+rc=0
+out=$(REPO_ROOT="$REPO_E" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version was not incremented"; then
+  echo "PASS: CLI-7 — public report issue-form + no bump → exit 1"
+else
+  echo "FAIL: CLI-7 — expected exit 1 + 'plugin version was not incremented'; got rc=$rc output: $out" >&2
   fail=1
 fi
 

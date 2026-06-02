@@ -1,6 +1,6 @@
 ---
 script: scripts/check-version-bump.sh
-version: 1.1
+version: 1.2
 invokers:
   - type: script
     name: scripts/ci-checks.sh
@@ -14,7 +14,7 @@ related-designs:
 
 ## Surface
 
-Pull-request gate that enforces plugin-version discipline before merge. Reads the plugin version from three locations in `.claude-plugin/` plus `.codex-plugin/plugin.json` and runs two assertions: (1) the four occurrences are mutually equal, and (2) if any shippable content was changed since the merge-base, the version has been incremented. Invoked unconditionally by `scripts/ci-checks.sh` as the final blocking check, and can be run directly by a developer in the repo root. Accepts `BASE_REF` (the comparison ref; defaults to `origin/main`) and `REPO_ROOT` (the repo root path; defaults to the parent of `scripts/`) as environment-variable seams so CI and local test fixtures can override them without patching the script.
+Pull-request gate that enforces plugin-version discipline before merge. Reads the plugin version from three locations in `.claude-plugin/` plus `.codex-plugin/plugin.json` and runs two assertions: (1) the four occurrences are mutually equal, and (2) if any shippable content was changed since the merge-base, the version has been incremented. Invoked unconditionally by `scripts/ci-checks.sh` as the final blocking check, and can be run directly by a developer in the repo root. Accepts `BASE_REF` (the comparison ref; defaults to `origin/main`) and `REPO_ROOT` (the repo root path; defaults to the parent of `scripts/`) as environment-variable seams so CI and local test fixtures can override them without patching the script. Most `.github/` paths are dev-only, but `.github/ISSUE_TEMPLATE/arboretum-problem.md` and `.github/ISSUE_TEMPLATE/arboretum-enhancement.md` are shippable because `sync-public.yml` copies those report forms to the public repo after the broad `.github/` exclusion.
 
 ## Protocol
 
@@ -44,8 +44,10 @@ Read-only — no side effects. The script reads JSON files under `.claude-plugin
 - **CLI-4: Shippable-content + no-bump path exits 1.** When all four version occurrences agree, shippable content is present in the diff, but the current version is not strictly greater than the merge-base version (equal or lower), the script exits 1 and emits `FAIL: shippable content changed but the plugin version was not incremented` to stderr.
 - **CLI-5: BASE_REF seam.** When `BASE_REF` is set in the environment, the script uses it as the comparison ref for `git merge-base` and `git show` instead of `origin/main`. This allows CI and smoke tests to override the comparison target without touching the live remote.
 - **CLI-6: REPO_ROOT seam.** When `REPO_ROOT` is set in the environment, the script `cd`s into that directory instead of deriving the root from `dirname "$0"`. This allows smoke tests to point the script at a temporary git fixture, isolating all file reads and git operations from the live repo.
+- **CLI-7: Public report forms are shippable.** A diff touching `.github/ISSUE_TEMPLATE/arboretum-problem.md` or `.github/ISSUE_TEMPLATE/arboretum-enhancement.md` counts as shippable content even though the broader `.github/` tree is otherwise dev-only.
 
 ## Versioning
 
+- **1.2** — add the public report issue-form exception for `.github/ISSUE_TEMPLATE/arboretum-{problem,enhancement}.md` (2026-06-02).
 - **1.1** — add `.codex-plugin/plugin.json` as the fourth version occurrence (2026-05-31).
 - **1.0** — initial contract (2026-05-30).
