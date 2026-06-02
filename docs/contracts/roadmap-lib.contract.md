@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.7
+version: 1.8
 producer-type: script
 consumer-type: script
 consumes:
@@ -91,6 +91,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **Scalar normalization.** `roadmap_config_get` strips matched surrounding quotes and a trailing inline comment, and maps `''`/`null`/`~` to an empty line.
 - **List line-protocol.** `roadmap_config_list` emits exactly one element per line for both block and flow YAML styles, quotes stripped.
 - **Backend selection precedence.** `.arboretum.yml backend:` wins over `roadmap.config.yaml backend:`. Missing/empty backend defaults to `github` for backward compatibility.
+- **Sourceable shell portability.** Skill snippets may source this library from bash or zsh. Backend selection, CSV helper parsing, ADO closed-state parsing, and pulse read/write helpers MUST preserve the same output contract under both shells.
 - **GitHub adapter preservation.** With `backend: github`, the tracker helpers delegate to `gh` and preserve the existing GitHub output shape for migrated consumers.
 - **Azure DevOps adapter normalization.** With `backend: azure-devops`, work item IDs are exposed as `number`, Azure tags are exposed as `labels[].name`, comments are exposed with `authorAssociation: "MEMBER"`, label creation is a no-op because ADO tags materialize on first use, and PR list returns an empty array so maintain flows degrade gracefully when merged-PR evidence is unavailable.
 - **Cheap setup vs live reachability are distinct.** `roadmap_require_backend` is the cheap local prerequisite guard and may run frequently. `roadmap_probe_backend_access` performs a provider API read and should be used at workflow edges where a clear "this process can reach the backend" diagnostic is worth the extra call; neutral `roadmap_tracker_*` helpers do not call the probe internally.
@@ -107,6 +108,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-6:** `roadmap_pulse_get_field` / `roadmap_pulse_get_nag` against a missing pulse file return empty stdout and exit 0 (fail-silent).
 - **RL-7:** `roadmap_pulse_update_field` followed by `roadmap_pulse_get_field` round-trips a value through the atomically-rewritten pulse JSON.
 - **RL-8:** `roadmap_backend` defaults to `github`, reads `backend: azure-devops` from `roadmap.config.yaml`, and lets `.arboretum.yml backend: github` override the roadmap config.
+- **RL-8z:** When zsh is available, sourcing `roadmap/lib.sh` from zsh preserves backend selection from `roadmap.config.yaml`, `.arboretum.yml` precedence, custom Azure DevOps closed-state parsing, CSV field detection, and pulse read/write helpers.
 - **RL-9:** `roadmap_tracker_issue_list` on `backend: github` delegates to `gh issue list` and returns its JSON unchanged.
 - **RL-10:** Additional GitHub adapter wrappers (`roadmap_tracker_issue_close`, `roadmap_tracker_issue_comments`, `roadmap_tracker_pr_list`) delegate to the expected `gh` subcommands and return their output unchanged.
 - **RL-11:** `roadmap_require_backend azure-devops` accepts a stubbed Azure CLI with the Azure DevOps extension surface and readable defaults.
@@ -121,6 +123,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 
 ## Versioning
 
+- **1.8** (2026-06-02) — pins zsh-sourced roadmap helper behaviour after issue #469 exposed backend fallback from zsh special-parameter and Bash-only CSV parsing gaps.
 - **1.7** (2026-06-02) — changes the GitHub probe to the repo-scoped `repos/{owner}/{repo}` endpoint and adds the optional project-root argument so Azure DevOps config resolves from the target project. PR #468 review feedback.
 - **1.6** (2026-06-02) — adds `roadmap_probe_backend_access` so workflow edges can distinguish local CLI setup from live provider reachability in Codex and other agent environments. Issue #465.
 - **1.5** (2026-05-31) — extends the Azure DevOps backend guard to verify the `az repos` surface used by backend-aware PR shipping. Issue #338.

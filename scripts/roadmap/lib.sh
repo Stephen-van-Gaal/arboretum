@@ -132,17 +132,17 @@ PYEOF
 # mirrors roadmap_config_get's stdlib-only fallback because .arboretum.yml is
 # small and uses only top-level scalar keys for framework settings.
 roadmap_yaml_scalar_get() {
-  local path="$1"
+  local yaml_file="$1"
   local key="$2"
-  [ -f "$path" ] || return 1
+  [ -f "$yaml_file" ] || return 1
   if ! [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
     echo "roadmap_yaml_scalar_get: invalid key name: $key" >&2
     return 1
   fi
   if command -v yq >/dev/null 2>&1; then
-    yq -r ".${key} // \"\"" "$path"
+    yq -r ".${key} // \"\"" "$yaml_file"
   elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$path" "$key" <<'PYEOF'
+    python3 - "$yaml_file" "$key" <<'PYEOF'
 import sys, re
 path, key = sys.argv[1], sys.argv[2]
 with open(path) as f:
@@ -207,13 +207,16 @@ roadmap_trim() {
   printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
+roadmap_csv_lines() {
+  printf '%s\n' "$1" | tr ',' '\n'
+}
+
 roadmap_csv_has_field() {
   local csv="$1" needle="$2" field
-  IFS=',' read -ra fields <<< "$csv"
-  for field in "${fields[@]}"; do
+  while IFS= read -r field; do
     field="$(roadmap_trim "$field")"
     [ "$field" = "$needle" ] && return 0
-  done
+  done < <(roadmap_csv_lines "$csv")
   return 1
 }
 
@@ -289,16 +292,14 @@ roadmap_ado_done_state() {
 
 roadmap_ado_closed_states_joined() {
   local closed state quoted joined
-  local states=()
   local quoted_states=()
   closed="$(roadmap_ado_config_get azure_devops_closed_states "Closed,Done,Removed")"
-  IFS=',' read -ra states <<< "$closed"
-  for state in "${states[@]}"; do
+  while IFS= read -r state; do
     state="$(roadmap_trim "$state")"
     [ -n "$state" ] || continue
     quoted="$(roadmap_ado_wiql_string "$state")"
     quoted_states+=("$quoted")
-  done
+  done < <(roadmap_csv_lines "$closed")
   if [ "${#quoted_states[@]}" -eq 0 ]; then
     quoted_states=("'Closed'" "'Done'" "'Removed'")
   fi
@@ -385,13 +386,11 @@ roadmap_ado_enrich_items_with_comments() {
 
 roadmap_ado_normalize_label_args() {
   local raw part
-  local parts=()
   for raw in "$@"; do
-    IFS=',' read -ra parts <<< "$raw"
-    for part in "${parts[@]}"; do
+    while IFS= read -r part; do
       part="$(roadmap_trim "$part")"
       [ -n "$part" ] && printf '%s\n' "$part"
-    done
+    done < <(roadmap_csv_lines "$raw")
   done
 }
 
@@ -1027,14 +1026,14 @@ roadmap_pulse_path() {
 # Seeds last_*_run = now and pre-populates nag_last_fired with now for all
 # known nag names — "bootstrap-as-today" ensures no nag fires on install day.
 roadmap_pulse_bootstrap() {
-  local path
-  path="$(roadmap_pulse_path)"
-  [ -z "$path" ] && return 0
-  [ -f "$path" ] && return 0
-  mkdir -p "$(dirname "$path")"
+  local pulse_file
+  pulse_file="$(roadmap_pulse_path)"
+  [ -z "$pulse_file" ] && return 0
+  [ -f "$pulse_file" ] && return 0
+  mkdir -p "$(dirname "$pulse_file")"
   local now tmp
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  tmp="${path}.tmp"
+  tmp="${pulse_file}.tmp"
   rm -f "$tmp" 2>/dev/null || true
   if command -v jq >/dev/null 2>&1; then
     jq -n --arg ts "$now" '{
@@ -1051,7 +1050,7 @@ roadmap_pulse_bootstrap() {
       },
       sprint_alerts_fired: {}
     }' > "$tmp" 2>/dev/null \
-      && mv "$tmp" "$path" || true
+      && mv "$tmp" "$pulse_file" || true
   else
     python3 - "$now" "$tmp" <<'PYEOF' 2>/dev/null || true
 import json, sys
@@ -1070,7 +1069,7 @@ with open(tmp, 'w') as f:
     }, f, indent=2)
     f.write('\n')
 PYEOF
-    [ -f "$tmp" ] && mv "$tmp" "$path" 2>/dev/null || true
+    [ -f "$tmp" ] && mv "$tmp" "$pulse_file" 2>/dev/null || true
   fi
 }
 
@@ -1078,13 +1077,13 @@ PYEOF
 # Returns empty string if field is absent, null, or file missing.
 roadmap_pulse_get_field() {
   local key="$1"
-  local path
-  path="$(roadmap_pulse_path)"
-  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  local pulse_file
+  pulse_file="$(roadmap_pulse_path)"
+  [ -z "$pulse_file" ] || [ ! -f "$pulse_file" ] && return 0
   if command -v jq >/dev/null 2>&1; then
-    jq -r --arg k "$key" '.[$k] // empty' "$path" 2>/dev/null || true
+    jq -r --arg k "$key" '.[$k] // empty' "$pulse_file" 2>/dev/null || true
   else
-    python3 - "$path" "$key" <<'PYEOF' 2>/dev/null || true
+    python3 - "$pulse_file" "$key" <<'PYEOF' 2>/dev/null || true
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
@@ -1100,13 +1099,13 @@ PYEOF
 # Read nag_last_fired[<name>]. Returns empty string if not yet fired.
 roadmap_pulse_get_nag() {
   local name="$1"
-  local path
-  path="$(roadmap_pulse_path)"
-  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  local pulse_file
+  pulse_file="$(roadmap_pulse_path)"
+  [ -z "$pulse_file" ] || [ ! -f "$pulse_file" ] && return 0
   if command -v jq >/dev/null 2>&1; then
-    jq -r --arg n "$name" '.nag_last_fired[$n] // empty' "$path" 2>/dev/null || true
+    jq -r --arg n "$name" '.nag_last_fired[$n] // empty' "$pulse_file" 2>/dev/null || true
   else
-    python3 - "$path" "$name" <<'PYEOF' 2>/dev/null || true
+    python3 - "$pulse_file" "$name" <<'PYEOF' 2>/dev/null || true
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
@@ -1123,19 +1122,19 @@ PYEOF
 # Writes atomically via .tmp file; silently skips on any error.
 roadmap_pulse_set_nag_fired() {
   local name="$1"
-  local path
-  path="$(roadmap_pulse_path)"
-  [ -z "$path" ] || [ ! -f "$path" ] && return 0
+  local pulse_file
+  pulse_file="$(roadmap_pulse_path)"
+  [ -z "$pulse_file" ] || [ ! -f "$pulse_file" ] && return 0
   local now tmp
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  tmp="${path}.tmp"
+  tmp="${pulse_file}.tmp"
   rm -f "$tmp" 2>/dev/null || true
   if command -v jq >/dev/null 2>&1; then
     jq --arg n "$name" --arg ts "$now" \
-      '.nag_last_fired[$n] = $ts' "$path" > "$tmp" 2>/dev/null \
-      && mv "$tmp" "$path" || true
+      '.nag_last_fired[$n] = $ts' "$pulse_file" > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$pulse_file" || true
   else
-    python3 - "$path" "$name" "$now" "$tmp" <<'PYEOF' 2>/dev/null || true
+    python3 - "$pulse_file" "$name" "$now" "$tmp" <<'PYEOF' 2>/dev/null || true
 import json, sys
 try:
     with open(sys.argv[1]) as f:
@@ -1147,7 +1146,7 @@ try:
 except Exception:
     pass
 PYEOF
-    [ -f "$tmp" ] && mv "$tmp" "$path" 2>/dev/null || true
+    [ -f "$tmp" ] && mv "$tmp" "$pulse_file" 2>/dev/null || true
   fi
 }
 
@@ -1155,16 +1154,16 @@ PYEOF
 # Usage: roadmap_pulse_update_field last_maintain_run "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 roadmap_pulse_update_field() {
   local key="$1" value="$2"
-  local path
-  path="$(roadmap_pulse_path)"
-  [ -z "$path" ] || [ ! -f "$path" ] && return 0
-  local tmp="${path}.tmp"
+  local pulse_file
+  pulse_file="$(roadmap_pulse_path)"
+  [ -z "$pulse_file" ] || [ ! -f "$pulse_file" ] && return 0
+  local tmp="${pulse_file}.tmp"
   rm -f "$tmp" 2>/dev/null || true
   if command -v jq >/dev/null 2>&1; then
-    jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$path" > "$tmp" 2>/dev/null \
-      && mv "$tmp" "$path" || true
+    jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$pulse_file" > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$pulse_file" || true
   else
-    python3 - "$path" "$key" "$value" "$tmp" <<'PYEOF' 2>/dev/null || true
+    python3 - "$pulse_file" "$key" "$value" "$tmp" <<'PYEOF' 2>/dev/null || true
 import json, sys
 try:
     with open(sys.argv[1]) as f:
@@ -1176,6 +1175,6 @@ try:
 except Exception:
     pass
 PYEOF
-    [ -f "$tmp" ] && mv "$tmp" "$path" 2>/dev/null || true
+    [ -f "$tmp" ] && mv "$tmp" "$pulse_file" 2>/dev/null || true
   fi
 }

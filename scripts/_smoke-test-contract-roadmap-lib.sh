@@ -131,6 +131,72 @@ YAML
 backend_arbo=$(inlib roadmap_backend)
 [ "$backend_arbo" = "github" ] && pass "RL-8 (.arboretum precedence)" || fail_case "RL-8 (.arboretum precedence)" "got=[$backend_arbo]"
 
+# RL-8z — sourceable shell portability: skill snippets may source lib.sh from
+# zsh, so backend selection and small parser helpers must keep their bash
+# contract under zsh too.
+if command -v zsh >/dev/null 2>&1; then
+  rm -f "$FIX/.arboretum.yml"
+  cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+azure_devops_closed_states: Closed,Done
+YAML
+  zsh_backend=$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_backend' _ "$LIB" 2>"$FIX/zsh-backend.err"); rc=$?
+  [ "$rc" = 0 ] && [ "$zsh_backend" = "azure-devops" ] \
+    && pass "RL-8z (zsh roadmap backend)" \
+    || fail_case "RL-8z (zsh roadmap backend)" "rc=$rc got=[$zsh_backend] err=$(cat "$FIX/zsh-backend.err")"
+
+  cat > "$FIX/.arboretum.yml" <<'YAML'
+backend: azure-devops
+YAML
+  cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+YAML
+  zsh_arbo_backend=$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_backend' _ "$LIB" 2>"$FIX/zsh-arbo.err"); rc=$?
+  [ "$rc" = 0 ] && [ "$zsh_arbo_backend" = "azure-devops" ] \
+    && pass "RL-8z (zsh .arboretum precedence)" \
+    || fail_case "RL-8z (zsh .arboretum precedence)" "rc=$rc got=[$zsh_arbo_backend] err=$(cat "$FIX/zsh-arbo.err")"
+
+  cat > "$FIX/roadmap.config.yaml" <<'YAML'
+azure_devops_closed_states: Closed,Done
+YAML
+  zsh_closed=$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_ado_closed_states_joined' _ "$LIB" 2>"$FIX/zsh-closed.err"); rc=$?
+  [ "$rc" = 0 ] && [ "$zsh_closed" = "'Closed','Done'" ] \
+    && pass "RL-8z (zsh closed states)" \
+    || fail_case "RL-8z (zsh closed states)" "rc=$rc got=[$zsh_closed] err=$(cat "$FIX/zsh-closed.err")"
+
+  if (cd "$FIX" && zsh -fc 'source "$1"; roadmap_csv_has_field "number,comments" comments' _ "$LIB" 2>"$FIX/zsh-csv.err"); then
+    pass "RL-8z (zsh CSV field detection)"
+  else
+    fail_case "RL-8z (zsh CSV field detection)" "err=$(cat "$FIX/zsh-csv.err")"
+  fi
+
+  rm -f "$FIX/zsh-csv-marker"
+  zsh_csv_data=$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_ado_normalize_label_args "safe,\$(touch zsh-csv-marker),done"' _ "$LIB" 2>"$FIX/zsh-csv-data.err"); rc=$?
+  if [ "$rc" = 0 ] \
+     && [ "$zsh_csv_data" = $'safe\n$(touch zsh-csv-marker)\ndone' ] \
+     && [ ! -e "$FIX/zsh-csv-marker" ]; then
+    pass "RL-8z (zsh CSV shell-looking data)"
+  else
+    fail_case "RL-8z (zsh CSV shell-looking data)" "rc=$rc got=[$zsh_csv_data] err=$(cat "$FIX/zsh-csv-data.err") marker=$(test -e "$FIX/zsh-csv-marker" && echo present || echo absent)"
+  fi
+
+  mkdir -p "$FIX/.arboretum"
+  cat > "$FIX/.arboretum/roadmap-pulse.json" <<'JSON'
+{"last_maintain_run":"old","nag_last_fired":{"maintain-overdue":"old"}}
+JSON
+  zsh_pulse=$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_pulse_update_field last_maintain_run new; roadmap_pulse_get_field last_maintain_run' _ "$LIB" 2>"$FIX/zsh-pulse.err"); rc=$?
+  [ "$rc" = 0 ] && [ "$zsh_pulse" = "new" ] \
+    && pass "RL-8z (zsh pulse read/write)" \
+    || fail_case "RL-8z (zsh pulse read/write)" "rc=$rc got=[$zsh_pulse] err=$(cat "$FIX/zsh-pulse.err")"
+else
+  echo "SKIP: RL-8z (zsh not available)"
+fi
+
+rm -f "$FIX/.arboretum.yml"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+YAML
+
 # RL-9 — GitHub tracker adapter delegates issue-list through gh while keeping
 # the caller on the backend-neutral function.
 GH_BIN="$FIX/.gh-bin"; mkdir -p "$GH_BIN"
