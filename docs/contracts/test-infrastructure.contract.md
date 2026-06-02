@@ -1,6 +1,6 @@
 ---
 seam: test-infrastructure
-version: 1.1
+version: 1.2
 producer-type: script
 consumer-type: skill
 consumes:
@@ -9,6 +9,7 @@ produces: []
 related-designs:
   - docs/superpowers/specs/2026-05-30-testing-shape-design.md
   - docs/superpowers/specs/2026-06-01-runtime-portability-design.md
+  - docs/superpowers/specs/2026-06-02-adopter-ci-boundary-design.md
 owns:
   - scripts/read-test-config.sh
 ---
@@ -43,10 +44,10 @@ Consumer-type: `skill`. Three downstream consumers:
 **Consumer obligations:**
 
 - Consumers MUST run only `default-command` in automated gates — never the `opt-in-commands` (`live`/`costly`) tiers.
-- Consumers MUST treat a non-zero exit from the reader as "no usable governed declaration" and fall back **to each consumer's own pre-existing behaviour**, so a repo with no spec behaves exactly as before:
-  - `/build` and `/design` fall back to the legacy discovery chain: `bash scripts/ci-checks.sh` convention, else `package.json`/`Makefile`/`pytest.ini`.
-  - `/finish` falls back to its current pre-PR behaviour: run `bash scripts/ci-checks.sh` if present, else **skip** the pre-PR gate. It does **not** introduce `package.json`/`Makefile` discovery — doing so would change today's `/finish` behaviour.
-- Consumers MUST distinguish the two failure modes: exit `1` (spec file absent — the normal un-migrated case) falls back silently; exit `2` (file present but invalid) falls back **and surfaces the reader's diagnostic**, so a broken declaration is visible rather than silently ignored.
+- Consumers MUST distinguish initialized-invalid from uninitialized roots:
+  - A present but invalid declaration MUST fail closed. If `docs/specs/test-infrastructure.spec.md` exists and the reader exits non-zero, consumers surface the reader diagnostic and stop. They MUST NOT substitute Arboretum framework checks for the adopter's product suite.
+  - An absent spec means the repo is uninitialized for testing-shape purposes. `/build` and `/design` coverage-baseline fall back to native product-test discovery: `package.json` with a `test` script, then `Makefile` with `test:`, then pytest config (`pytest.ini`, `pyproject.toml`, or `setup.cfg`).
+  - `/finish` does not introduce native discovery. If the spec is absent, it skips its pre-PR local gate; `/build` remains the stage responsible for proving the product-test command before work exits.
 - A non-zero exit from `default-command` *itself* (once obtained) is a real test failure and MUST block the gate.
 
 ## Protocol shape
@@ -64,7 +65,7 @@ Consumer-type: `skill`. Three downstream consumers:
 - **Optional fields are omitted when absent** — never emitted as empty lines.
 - **Flattened nested object.** `opt-in-commands` is emitted as dot-notation lines — never a bare `opt-in-commands=` scalar.
 - **Closed cost vocabulary.** `opt-in-commands` keys outside `{live, costly}` are rejected (exit 2).
-- **Unfilled placeholders rejected.** A `default-command` that is an angle-bracket `<placeholder>` (the value the template ships before an adopter fills it) is treated as not-yet-declared → exit 2, so a scaffolded-but-unfilled spec falls back/warns instead of `eval`-ing the literal placeholder.
+- **Unfilled placeholders rejected.** A `default-command` that is an angle-bracket `<placeholder>` (the value the template ships before an adopter fills it) is treated as not-yet-declared → exit 2, so a scaffolded-but-unfilled spec blocks the initialized repo's product-test gate until the adopter fills the declaration.
 - **Scalar-only enums.** A dict-shaped `tiers-via` is rejected (exit 2), never silently flattened to `tiers-via.<subkey>=` lines.
 - **Coexists with governed-spec metadata.** `test-infrastructure.spec.md` is a governed spec; its frontmatter also carries `version`/`name`/`status`/`owner`/`owns` (read by `generate-register.sh`). The reader reads only the test-command keys and ignores the rest, so the two schemas share one block without collision.
 - **Comment semantics.** Full-line comments are ignored. Inline comments are stripped by `yaml-lite.sh`, while `#` characters inside single-quoted or double-quoted values are preserved.
@@ -88,5 +89,6 @@ Consumer-type: `skill`. Three downstream consumers:
 
 ## Versioning
 
+- **1.2** (2026-06-02) - present-but-invalid declarations now fail closed; Arboretum `ci-checks.sh` is not a product-test fallback for initialized adopter repos. Design: adopter-ci-boundary.
 - **1.1** (2026-06-01) - parser moved onto shared `yaml-lite.sh` helper for Issue #437.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/read-test-config.sh` on this branch. Design: testing-shape.

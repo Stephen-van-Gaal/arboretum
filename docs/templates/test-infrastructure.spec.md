@@ -16,6 +16,9 @@ status: draft
 owner: <governing owner, e.g. architecture>
 owns: []
 # ── (b) testing-shape declaration — only default-command is required ──
+# Fill this before relying on /build, /design coverage-baseline, or /finish.
+# A scaffolded <placeholder> is intentionally invalid and blocks initialized
+# product-test gates until replaced.
 default-command: <command that runs the default-safe suite; exit 0 == green>
 # Optional fields are COMMENTED OUT so an unfilled optional enum never trips the
 # parser's enum validation. Uncomment and fill only what applies:
@@ -105,7 +108,9 @@ Define the test framework, runner configuration, directory layout, and shared ut
 
      This command is what the frontmatter `default-command:` declares — the
      single source `/build`, `/finish`, and `/design` read via
-     scripts/read-test-config.sh. -->
+     scripts/read-test-config.sh. Arboretum's scripts/ci-checks.sh is framework
+     self-check tooling, not a product-test fallback, unless this project
+     explicitly declares it above. -->
 
 ### Cost-class (opt-in) tiers
 

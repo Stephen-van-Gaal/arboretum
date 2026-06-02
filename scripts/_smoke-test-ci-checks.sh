@@ -135,6 +135,17 @@ grep -qF "SKIP: shellcheck not found on PATH" <<< "$skip_out" || {
 echo "PASS: missing shellcheck is skipped by default"
 
 tmp="$(new_tmp_dir)"
+make_consumer_ci_fixture "$tmp"
+rm -f "$tmp"/repo/scripts/_smoke-test-*.sh
+no_smoke_out="$(run_ci_fixture "$tmp" 2>&1)"
+if grep -qF "sed:" <<< "$no_smoke_out"; then
+  echo "FAIL: consumer roots with no smoke tests should not pass an unmatched glob to sed" >&2
+  echo "$no_smoke_out" >&2
+  exit 1
+fi
+echo "PASS: consumer roots with no smoke tests stay quiet"
+
+tmp="$(new_tmp_dir)"
 make_ci_fixture "$tmp"
 set +e
 strict_out="$(REQUIRE_SHELLCHECK=1 run_ci_fixture "$tmp" 2>&1)"

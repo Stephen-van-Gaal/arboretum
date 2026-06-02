@@ -137,11 +137,11 @@ Check if any changed files are agent-facing:
 
 ### Step 5.5: Pre-PR local CI gate
 
-Determine the local check command from the project's declared testing shape,
-falling back to `/finish`'s **current** behaviour — run `ci-checks.sh` if present,
-else skip (this consumer does **not** add `package.json`/`Makefile` discovery; that
-would change today's `/finish` behaviour — see the `/finish` carve-out in
-`docs/contracts/test-infrastructure.contract.md`):
+Determine the local check command from the project's declared testing shape. If
+the testing-shape spec is present but invalid, stop; do not fall back to
+`scripts/ci-checks.sh`. If the spec is absent, `/finish` keeps its narrow
+pre-PR behaviour and skips this local gate instead of adding package/Makefile
+discovery:
 
 ```bash
 TEST_SPEC="docs/specs/test-infrastructure.spec.md"
@@ -149,16 +149,20 @@ RTC_ERR=$(mktemp)
 if CFG=$(bash scripts/read-test-config.sh "$TEST_SPEC" 2>"$RTC_ERR"); then
   TEST_CMD=$(printf '%s\n' "$CFG" | grep -m1 '^default-command=' | cut -d= -f2-)
 else
-  # Present-but-invalid (exit 2) warns; absent (exit 1) is silent.
-  [ -f "$TEST_SPEC" ] && echo "WARNING: $TEST_SPEC is present but invalid ($(cat "$RTC_ERR")); falling back — fix the declaration." >&2
-  if [ -f scripts/ci-checks.sh ]; then TEST_CMD="bash scripts/ci-checks.sh"; else TEST_CMD=""; fi
+  if [ -f "$TEST_SPEC" ]; then
+    echo "ERROR: $TEST_SPEC is present but invalid; do not fall back to scripts/ci-checks.sh." >&2
+    cat "$RTC_ERR" >&2
+    rm -f "$RTC_ERR"
+    exit 1
+  fi
+  TEST_CMD=""
 fi
 rm -f "$RTC_ERR"
 
 if [ -n "$TEST_CMD" ]; then
   eval "$TEST_CMD"
 else
-  echo "no declared default-command and no scripts/ci-checks.sh — skipping pre-PR gate"
+  echo "no declared default-command — skipping pre-PR gate"
 fi
 ```
 

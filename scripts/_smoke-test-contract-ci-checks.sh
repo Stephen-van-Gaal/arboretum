@@ -174,6 +174,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# CLI-8: Empty smoke-test glob
+# Consumer roots may have no scripts/_smoke-test-*.sh files. The loop must not
+# hand an unmatched literal glob to smoke_test_applicable/sed.
+# ---------------------------------------------------------------------------
+if grep -qF '[ -e "$f" ] || continue' "$TARGET"; then
+  echo "PASS: CLI-8 — smoke-test loop ignores unmatched globs"
+else
+  echo "FAIL: CLI-8 — smoke-test loop can pass an unmatched glob to sed" >&2
+  fail=1
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 if [ "$fail" -ne 0 ]; then

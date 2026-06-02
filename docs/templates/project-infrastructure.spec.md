@@ -36,9 +36,11 @@ Own all project-level configuration that no feature spec should claim: CI/CD pip
 ### CI Pipeline
 
 <!-- Define the CI workflow for your platform. The workflow must:
-     1. Run validation scripts (cross-refs, health check)
-     2. Run the test entry point from test-infrastructure.spec
-     3. Fail the build on any failure — blocking merge
+     1. Run blocking validation scripts (cross-refs, contract checks)
+     2. Report Arboretum health advisory/non-blocking until the project decides
+        it is mature enough to enforce
+     3. Run the product test entry point from test-infrastructure.spec
+     4. Fail the build on blocking validation or product-test failure
 
      Choose your CI platform and adapt:
 
@@ -53,9 +55,10 @@ Own all project-level configuration that no feature spec should claim: CI/CD pip
      Other: adapt to your platform, preserving the validate-then-test order.
 
      Key requirements:
-     - Validation scripts run BEFORE tests (catch doc drift early)
+     - Blocking validation scripts run BEFORE tests (catch doc drift early)
+     - Arboretum health is advisory by default, separate from product-test pass/fail
      - Test tiers run in order via the single entry point
-     - Any failure blocks the PR/MR from merging
+     - Product-test failure blocks the PR/MR from merging
 -->
 
 ### Branch Protection

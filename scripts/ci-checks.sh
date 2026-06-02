@@ -77,6 +77,7 @@ fi
 
 echo "=== Smoke tests ==="
 for f in scripts/_smoke-test-*.sh; do
+  [ -e "$f" ] || continue
   [[ "$f" == *"_smoke-test-ci-checks.sh" ]] && continue  # skip self-referential meta-test
   smoke_test_applicable "$f" || continue
   echo "--- $f ---"
