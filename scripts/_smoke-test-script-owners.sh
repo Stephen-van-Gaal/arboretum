@@ -30,6 +30,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SPECS_DIR="$PROJECT_ROOT/docs/specs"
 
+is_plugin_root() {
+  [ -d "$PROJECT_ROOT/skills" ] \
+    && [ -d "$PROJECT_ROOT/hooks" ] \
+    && [ -d "$PROJECT_ROOT/docs/contracts" ] \
+    && [ -d "$PROJECT_ROOT/tests/contracts" ] \
+    && [ -d "$PROJECT_ROOT/scripts/_fixtures/roadmap" ] \
+    && [ -f "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/agent-ready.md" ]
+}
+
+if ! is_plugin_root; then
+  echo "SKIP: script owner validation requires the Arboretum plugin-root layout"
+  exit 0
+fi
+
 [ -d "$SPECS_DIR" ] || { echo "FAIL: docs/specs/ not found at $SPECS_DIR" >&2; exit 1; }
 
 # Build the search list: all *.sh under scripts/ (excluding _archived/
@@ -89,7 +103,11 @@ if [ -d "$PROJECT_ROOT/bin" ]; then
     if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
       fail "$rel: declared owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
     fi
-  done < <(find "$PROJECT_ROOT/bin" -type f -print)
+  done < <(
+    find "$PROJECT_ROOT/bin" \
+      -type d -name __pycache__ -prune -o \
+      -type f ! -name '*.pyc' -print
+  )
 fi
 
 # skills/*/SKILL.md — YAML frontmatter `owner:` key.

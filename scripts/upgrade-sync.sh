@@ -47,6 +47,12 @@ write_manifest_entry() { # path version sha
   jq --arg p "$1" --arg v "$2" --arg s "$3" \
      '.files[$p] = {version:$v, sha256:$s}' "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST" || rm -f "$tmp"
 }
+remove_manifest_entry() { # path
+  need_jq
+  [ -f "$MANIFEST" ] || return 0
+  local tmp; tmp="$(mktemp "$(dirname "$MANIFEST")/.manifest.XXXXXX")"
+  jq --arg p "$1" 'del(.files[$p])' "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST" || rm -f "$tmp"
+}
 
 sha() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
 
@@ -55,8 +61,21 @@ sha() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
 is_excluded() {
   case "$1" in
     scripts/bootstrap-project.sh) return 0 ;;
+    scripts/_smoke-test-*.sh) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+obsolete_removal_safe() {
+  local rel="$1" proot="$2"
+  local ours base theirs=""
+  [ -f "$PROJECT_DIR/$rel" ] || return 1
+  ours="$(sha "$PROJECT_DIR/$rel")"
+  base="$(read_manifest_sha "$rel")"
+  [ -f "$proot/$rel" ] && theirs="$(sha "$proot/$rel")"
+  [ -n "$base" ] && [ "$ours" = "$base" ] && return 0
+  [ -n "$theirs" ] && [ "$ours" = "$theirs" ] && return 0
+  return 1
 }
 
 # Managed categories: glob (relative to root) -> policy(3way|report-only)
@@ -107,7 +126,13 @@ cmd_plan() {
     local rel
     for rel in $rels; do
       [ -z "$rel" ] && continue
-      is_excluded "$rel" && continue
+      if is_excluded "$rel"; then
+        if obsolete_removal_safe "$rel" "$proot"; then
+          actions="$(echo "$actions" | jq --arg k "$rel" '. + {($k):"remove-obsolete"}')"
+          policy_map="$(echo "$policy_map" | jq --arg k "$rel" '. + {($k):"obsolete"}')"
+        fi
+        continue
+      fi
       local in_plugin=no in_tree=no base ours theirs action
       [ -f "$proot/$rel" ] && in_plugin=yes
       [ -f "$PROJECT_DIR/$rel" ] && in_tree=yes
@@ -173,6 +198,12 @@ cmd_apply() {
           else
             echo "upgrade-sync: cp failed for $rel — base not recorded" >&2
           fi
+        fi ;;
+      remove-obsolete)
+        if rm -f "$PROJECT_DIR/$rel"; then
+          remove_manifest_entry "$rel"
+        else
+          echo "upgrade-sync: rm failed for $rel — obsolete file left in place" >&2
         fi ;;
     esac
   done < <(echo "$plan" | jq -r '.actions | to_entries[] | "\(.key)\t\(.value)"')

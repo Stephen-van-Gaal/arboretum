@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # Smoke test for docs/contracts/check-version-bump.cli-contract.md.
-# Exercises CLI-1..CLI-7 via fixture git repos driven by REPO_ROOT + BASE_REF.
+# Exercises CLI-1..CLI-8 via fixture git repos driven by REPO_ROOT + BASE_REF.
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.
 
 set -uo pipefail
@@ -206,6 +206,47 @@ if [ "$rc" -eq 0 ]; then
   echo "PASS: CLI-5+CLI-6 — BASE_REF + REPO_ROOT seams honoured → exit 0"
 else
   echo "FAIL: CLI-5+CLI-6 — expected exit 0 with both seams set; got rc=$rc output: $out" >&2
+  fail=1
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario: CLI-8 — no plugin manifests means consumer/not-plugin root
+# ---------------------------------------------------------------------------
+REPO_F="$FIXTURE_ROOT/repo-f"
+init_repo "$REPO_F"
+mkdir -p "$REPO_F/scripts"
+printf '#!/usr/bin/env bash\n' > "$REPO_F/scripts/example.sh"
+commit_all "$REPO_F" "base: no plugin manifests"
+
+git -C "$REPO_F" "${GIT_ID[@]}" checkout -q -b pr-branch
+printf 'changed\n' > "$REPO_F/scripts/example.sh"
+commit_all "$REPO_F" "pr: script edit in consumer root"
+
+rc=0
+out=$(REPO_ROOT="$REPO_F" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+if [ "$rc" -eq 0 ] && echo "$out" | grep -q "plugin version manifests not found"; then
+  echo "PASS: CLI-8a — no plugin manifests → consumer skip"
+else
+  echo "FAIL: CLI-8a — expected exit 0 + consumer skip; got rc=$rc output: $out" >&2
+  fail=1
+fi
+
+REPO_G="$FIXTURE_ROOT/repo-g"
+init_repo "$REPO_G"
+mkdir -p "$REPO_G/.codex-plugin"
+printf '{"version":"1.0.0"}' > "$REPO_G/.codex-plugin/plugin.json"
+commit_all "$REPO_G" "base: partial plugin manifests"
+
+git -C "$REPO_G" "${GIT_ID[@]}" checkout -q -b pr-branch
+printf '{"version":"1.0.1"}' > "$REPO_G/.codex-plugin/plugin.json"
+commit_all "$REPO_G" "pr: partial plugin manifest edit"
+
+rc=0
+out=$(REPO_ROOT="$REPO_G" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version manifest set is incomplete"; then
+  echo "PASS: CLI-8b — partial plugin manifest set fails"
+else
+  echo "FAIL: CLI-8b — expected partial manifest failure; got rc=$rc output: $out" >&2
   fail=1
 fi
 

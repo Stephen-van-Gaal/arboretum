@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-contract-coverage.sh — Contract test for
-# docs/contracts/contract-coverage.contract.md. Asserts CC-1..CC-7 from
+# docs/contracts/contract-coverage.contract.md. Asserts CC-1..CC-8 from
 # the contract's ## Test surface against scripts/generate-coverage.sh and
 # scripts/validate-coverage-manifest.sh current behaviour.
 #
@@ -47,6 +47,14 @@ new_fixture() {
   d=$(mktemp -d)
   FIXTURES+=("$d")
   mkdir -p "$d/scripts" "$d/.claude/hooks" "$d/docs/contracts"
+  echo "$d"
+}
+
+new_bare_fixture() {
+  local d
+  d=$(mktemp -d)
+  FIXTURES+=("$d")
+  mkdir -p "$d/scripts" "$d/.claude/hooks"
   echo "$d"
 }
 cleanup() { for d in "${FIXTURES[@]:-}"; do [ -n "$d" ] && rm -rf "$d"; done; }
@@ -217,9 +225,35 @@ else
   fail_case "CC-7: scan-scope exclusion failed (manifest missing scripts/foo.sh, or excluded paths leaked)" "$(cat "$COV" 2>/dev/null || echo '(no _coverage.md produced)')"
 fi
 
+# ── CC-8: no-contract bootstrap ──────────────────────────────────────
+# Consumer roots may not have docs/contracts at all. That is still a
+# bootstrap/no-contract state, so validation exits 0 before requiring
+# _coverage.md to exist. Plugin-capable roots, however, must not silently
+# pass if their contract scaffolding disappeared.
+F=$(new_bare_fixture)
+: > "$F/scripts/foo.sh"
+out_no_contracts=$( cd "$F" && bash "$VALIDATOR" 2>&1 ); rc_no_contracts=$?
+if [ "$rc_no_contracts" -eq 0 ] \
+   && echo "$out_no_contracts" | grep -qF "docs/contracts/ not found"; then
+  pass "CC-8: no-contract bootstrap — missing docs/contracts exits 0 before requiring _coverage.md"
+else
+  fail_case "CC-8: no-contract bootstrap did not trigger (rc=$rc_no_contracts)" "$out_no_contracts"
+fi
+
+F=$(new_bare_fixture)
+mkdir -p "$F/.codex-plugin"
+printf '{"version":"0.0.0"}\n' > "$F/.codex-plugin/plugin.json"
+out_missing_contracts=$( cd "$F" && bash "$VALIDATOR" 2>&1 ); rc_missing_contracts=$?
+if [ "$rc_missing_contracts" -ne 0 ] \
+   && echo "$out_missing_contracts" | grep -qF "missing in plugin-capable root"; then
+  pass "CC-8b: plugin-capable root fails when docs/contracts is absent"
+else
+  fail_case "CC-8b: plugin-capable root did not fail for missing docs/contracts (rc=$rc_missing_contracts)" "$out_missing_contracts"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 if [ $fail -eq 0 ]; then
-  echo "All contract-coverage contract assertions passed (CC-1..CC-7)."
+  echo "All contract-coverage contract assertions passed (CC-1..CC-8)."
   exit 0
 else
   echo "contract-coverage contract test FAILED" >&2

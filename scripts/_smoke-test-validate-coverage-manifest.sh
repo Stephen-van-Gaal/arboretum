@@ -143,4 +143,23 @@ else
   fail_case "case 6 — bootstrap mode should exit 0 when no cli-contracts present"
 fi
 
+# Case 7: bootstrap mode triggers when docs/contracts does not exist
+bare="$ROOT_TMP/bare"
+mkdir -p "$bare/scripts"
+if ( cd "$bare" && bash "$VAL" ) 2>/dev/null; then
+  pass "case 7 — bootstrap mode triggers when docs/contracts is absent"
+else
+  fail_case "case 7 — bootstrap mode should exit 0 when docs/contracts is absent"
+fi
+
+# Case 8: missing docs/contracts fails in a plugin-capable root
+pluginish="$ROOT_TMP/pluginish"
+mkdir -p "$pluginish/scripts" "$pluginish/.codex-plugin"
+printf '{"version":"0.0.0"}\n' > "$pluginish/.codex-plugin/plugin.json"
+if ( cd "$pluginish" && bash "$VAL" ) >/dev/null 2>&1; then
+  fail_case "case 8 — plugin-capable root should fail when docs/contracts is absent"
+else
+  pass "case 8 — plugin-capable root fails when docs/contracts is absent"
+fi
+
 [ $fail -eq 0 ] && echo "All validate-coverage-manifest smoke cases passed." || exit 1

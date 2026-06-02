@@ -46,12 +46,17 @@ CLAUDE_PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
 CLAUDE_MARKETPLACE_JSON="$ROOT/.claude-plugin/marketplace.json"
 CODEX_PLUGIN_JSON="$ROOT/.codex-plugin/plugin.json"
 CODEX_MARKETPLACE_JSON="$ROOT/.agents/plugins/marketplace.json"
+INIT_SKILL="$ROOT/skills/init/SKILL.md"
 
 for f in "$CLAUDE_PLUGIN_JSON" "$CLAUDE_MARKETPLACE_JSON" "$CODEX_PLUGIN_JSON" "$CODEX_MARKETPLACE_JSON"; do
   [ -f "$f" ] || fail "manifest not found: $f"
   python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f" \
     || fail "invalid JSON: $f"
 done
+
+[ -f "$INIT_SKILL" ] || fail "init skill not found: $INIT_SKILL"
+grep -qF '_smoke-test-*.sh) continue ;;' "$INIT_SKILL" \
+  || fail "/init must not copy plugin smoke tests into consumer roots"
 
 # Path-field check on plugin.json — names the offending field+value on failure.
 python3 - "$CLAUDE_PLUGIN_JSON" <<'PY' || fail "plugin.json failed manifest path-field checks (see above)"
@@ -143,4 +148,4 @@ if bad:
     sys.exit(1)
 PY
 
-echo "PASS: plugin metadata — valid JSON; Claude paths './'-prefixed; hooks not duplicated; Codex marketplace points at repo root"
+echo "PASS: plugin metadata — valid JSON; Claude paths './'-prefixed; hooks not duplicated; Codex marketplace points at repo root; /init excludes plugin smoke tests"

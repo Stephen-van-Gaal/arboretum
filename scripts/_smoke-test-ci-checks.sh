@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # _smoke-test-ci-checks.sh — assert ci-checks.sh exists, is executable, and
-# emits a section header per check. Does not assert checks pass (that depends
-# on repo state) — only that the entrypoint runs and reports structure.
+# emits a section header per check against a stubbed fixture. Does not assert
+# checks pass in the live repo — only that the entrypoint runs and reports
+# structure.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CI="$SCRIPT_DIR/ci-checks.sh"
@@ -50,12 +51,74 @@ make_ci_fixture() {
   done
 }
 
+make_consumer_ci_fixture() {
+  local tmp="$1"
+  local repo="$tmp/repo"
+  local bin="$tmp/bin"
+  local tool
+
+  mkdir -p "$bin" "$repo/scripts" "$repo/.claude/hooks" "$repo/docs/specs"
+  cp "$CI" "$repo/scripts/ci-checks.sh"
+  chmod +x "$repo/scripts/ci-checks.sh"
+
+  for tool in bash dirname find grep head sed touch; do
+    ln -s "$(command -v "$tool")" "$bin/$tool"
+  done
+
+  cat > "$bin/shellcheck" <<'INNER'
+#!/usr/bin/env bash
+exit 0
+INNER
+  chmod +x "$bin/shellcheck"
+
+  touch "$repo/docs/specs/project-infrastructure.spec.md"
+
+  cat > "$repo/scripts/_smoke-test-project-owned.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: project-infrastructure
+# scope: consumer
+touch "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/project-smoke-ran"
+exit 0
+INNER
+  chmod +x "$repo/scripts/_smoke-test-project-owned.sh"
+
+  cat > "$repo/scripts/_smoke-test-framework-owned.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: pipeline-contracts-template
+echo "framework smoke test should be skipped in a consumer root" >&2
+exit 42
+INNER
+  chmod +x "$repo/scripts/_smoke-test-framework-owned.sh"
+
+  cat > "$repo/scripts/_smoke-test-reserved-framework-owned.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: project-infrastructure
+echo "reserved-owner framework smoke test should require an explicit consumer scope" >&2
+exit 43
+INNER
+  chmod +x "$repo/scripts/_smoke-test-reserved-framework-owned.sh"
+
+  cp "$SCRIPT_DIR/check-version-bump.sh" "$repo/scripts/check-version-bump.sh"
+  chmod +x "$repo/scripts/check-version-bump.sh"
+
+  for tool in \
+    "validate-cross-refs.sh" \
+    "validate-coverage-manifest.sh" \
+    "health-check.sh"
+  do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/$tool"
+    chmod +x "$repo/scripts/$tool"
+  done
+}
+
 run_ci_fixture() {
   local tmp="$1"
   PATH="$tmp/bin" "$(command -v bash)" "$tmp/repo/scripts/ci-checks.sh"
 }
 
-out=$(bash "$CI" 2>&1 || true)
+tmp="$(new_tmp_dir)"
+make_ci_fixture "$tmp"
+out="$(REQUIRE_SHELLCHECK='' run_ci_fixture "$tmp" 2>&1)"
 for section in "ShellCheck" "Smoke tests" "Cross-reference" "Contract coverage" "Health check" "Version bump"; do
   grep -qF "$section" <<< "$out" || {
     echo "FAIL: ci-checks.sh output missing section '$section'" >&2; exit 1; }
@@ -110,3 +173,28 @@ grep -qF -- "--severity=warning" "$tmp/shellcheck.log" || {
   exit 1
 }
 echo "PASS: shellcheck findings remain blocking when shellcheck is present"
+
+tmp="$(new_tmp_dir)"
+make_consumer_ci_fixture "$tmp"
+consumer_out="$(run_ci_fixture "$tmp" 2>&1)"
+if [ ! -f "$tmp/repo/project-smoke-ran" ]; then
+  echo "FAIL: consumer-owned smoke tests should still run in consumer roots" >&2
+  echo "$consumer_out" >&2
+  exit 1
+fi
+grep -qF "SKIP: scripts/_smoke-test-framework-owned.sh" <<< "$consumer_out" || {
+  echo "FAIL: framework-owned smoke test did not print a SKIP line in consumer root" >&2
+  echo "$consumer_out" >&2
+  exit 1
+}
+grep -qF "SKIP: scripts/_smoke-test-reserved-framework-owned.sh (no consumer-applicable scope declared)" <<< "$consumer_out" || {
+  echo "FAIL: reserved-owner framework smoke test without consumer scope was not skipped" >&2
+  echo "$consumer_out" >&2
+  exit 1
+}
+grep -qF "SKIP: plugin version manifests not found" <<< "$consumer_out" || {
+  echo "FAIL: real version-bump gate did not skip cleanly in consumer root" >&2
+  echo "$consumer_out" >&2
+  exit 1
+}
+echo "PASS: consumer roots skip inapplicable framework smoke tests without requiring plugin dirs"

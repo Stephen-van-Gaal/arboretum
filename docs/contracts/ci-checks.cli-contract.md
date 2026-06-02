@@ -1,6 +1,6 @@
 ---
 script: scripts/ci-checks.sh
-version: 1.1
+version: 1.3
 invokers:
   - type: skill
     name: /finish
@@ -16,7 +16,7 @@ related-designs:
 
 ## Surface
 
-CI orchestrator and pre-PR local gate. Runs six stages in sequence — capability-gated ShellCheck linting, smoke-test loop, cross-reference validation, contract-coverage validation, non-blocking health check, and version-bump check — accumulating a `fail` flag, then exits `$fail`. Invoked by `/finish` before opening a pull request and by `.github/workflows/ci.yml` on every PR and push to main, ensuring the local gate and CI cannot drift. Takes no arguments and exposes no `ROOT` override — the repository root is recomputed unconditionally from the script's own location (`BASH_SOURCE[0]`), so a caller-supplied `ROOT` is ignored and the checks always run against the script's own tree.
+CI orchestrator and pre-PR local gate. Runs six stages in sequence — capability-gated ShellCheck linting, smoke-test loop, cross-reference validation, contract-coverage validation, non-blocking health check, and version-bump check — accumulating a `fail` flag, then exits `$fail`. Invoked by `/finish` before opening a pull request and by `.github/workflows/ci.yml` on every PR and push to main, ensuring the local gate and CI cannot drift. Takes no arguments and exposes no `ROOT` override — the repository root is recomputed unconditionally from the script's own location (`BASH_SOURCE[0]`), so a caller-supplied `ROOT` is ignored and the checks always run against the script's own tree. The orchestrator is layout-aware: Arboretum plugin roots run the full plugin smoke-test set, while consumer roots skip framework-owned smoke tests whose owning specs are not installed in the host project.
 
 ## Protocol
 
@@ -43,8 +43,8 @@ The health-check stage is non-blocking: a non-zero return from `scripts/health-c
 
 Spawns subprocesses — one per stage:
 
-1. `command -v shellcheck` gates the ShellCheck stage. If present, `find … -exec shellcheck …` runs ShellCheck against all `*.sh` files under `scripts/`, `.claude/hooks/`, and `skills/`, excluding `_archived/` subtrees; findings remain blocking. If absent, the stage prints `SKIP: shellcheck not found on PATH …` and continues by default, or prints `FAIL: shellcheck is required but was not found on PATH` and sets `fail=1` when `REQUIRE_SHELLCHECK=1`. Read-only.
-2. `bash "$f"` for each `scripts/_smoke-test-*.sh` file (excluding `_smoke-test-ci-checks.sh` by name to prevent self-referential recursion). Each smoke-test script may create and clean up its own temporary fixtures; the orchestrator does not manage them.
+1. `command -v shellcheck` gates the ShellCheck stage. If present, `find … -exec shellcheck …` runs ShellCheck against all `*.sh` files under the existing roots among `scripts/`, `.claude/hooks/`, and `skills/`, excluding `_archived/` subtrees; findings remain blocking. Missing roots are not passed to `find`, so consumer repositories without top-level `skills/` do not fail this stage solely because the plugin development tree is absent. If absent, the stage prints `SKIP: shellcheck not found on PATH …` and continues by default, or prints `FAIL: shellcheck is required but was not found on PATH` and sets `fail=1` when `REQUIRE_SHELLCHECK=1`. Read-only.
+2. `bash "$f"` for each applicable `scripts/_smoke-test-*.sh` file (excluding `_smoke-test-ci-checks.sh` by name to prevent self-referential recursion). A root is treated as an Arboretum plugin root when it has top-level `skills/`, top-level `hooks/`, `docs/contracts/`, `tests/contracts/`, `scripts/_fixtures/roadmap/`, and `.github/ISSUE_TEMPLATE/agent-ready.md`; plugin roots run every smoke test. In non-plugin roots, smoke tests run only when their first eight lines include `# scope: consumer` or `# scope: any`. `# scope: plugin-only`, missing owning specs, or no consumer-applicable scope produce `SKIP` diagnostics. This prevents reserved seeded specs (for example `project-infrastructure`) from making plugin-only smoke tests look consumer-applicable. Each smoke-test script may create and clean up its own temporary fixtures; the orchestrator does not manage them.
 3. `bash scripts/validate-cross-refs.sh` — read-only cross-reference check.
 4. `bash scripts/validate-coverage-manifest.sh` — read-only contract-coverage check.
 5. `bash scripts/health-check.sh "$ROOT"` — non-blocking; may emit diagnostic output.
@@ -60,8 +60,11 @@ No files are written or modified by the orchestrator itself. The repository work
 - **CLI-4: Smoke-test self-exclusion.** The smoke-test loop skips any file matching `*_smoke-test-ci-checks.sh` to prevent infinite recursion when the contract smoke test for ci-checks itself is present in `scripts/`.
 - **CLI-5: Root resolution.** The script derives `ROOT` from its own path (`$(dirname "${BASH_SOURCE[0]}")/../`), not from `$PWD`, so it is location-independent and may be invoked from any directory.
 - **CLI-6: ShellCheck capability gate.** The ShellCheck stage checks `command -v shellcheck` before invoking it. When present, ShellCheck runs with `--severity=warning` and its findings remain blocking. When absent, default mode prints a `SKIP` diagnostic and continues; `REQUIRE_SHELLCHECK=1` prints a `FAIL` diagnostic and sets `fail=1`.
+- **CLI-7: Consumer-root applicability.** The ShellCheck stage builds its `find` root list from directories that actually exist. The smoke-test stage detects the Arboretum plugin-root layout; plugin roots run all smoke tests, while consumer roots run only smoke tests explicitly scoped `consumer` or `any`. Consumer roots skip `plugin-only`, owner-missing, and unscoped smoke tests with `SKIP` diagnostics.
 
 ## Versioning
 
+- **1.3** — consumer smoke-test applicability is scope-declared (`# scope: consumer` / `# scope: any`) so reserved seeded specs cannot leak plugin-only smoke tests into consumer roots (2026-06-02).
+- **1.2** — ShellCheck filters missing roots, and consumer roots skip framework-owned smoke tests whose owning specs are not installed (2026-06-02).
 - **1.1** — ShellCheck stage is capability-gated with default skip and `REQUIRE_SHELLCHECK=1` strict mode (2026-06-01).
 - **1.0** — initial contract (2026-05-30).

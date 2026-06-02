@@ -65,6 +65,38 @@ echo 'boot' > "$PLG/scripts/bootstrap-project.sh"
 plan_x="$(PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
 check "plan: bootstrap-project.sh excluded" null "$(echo "$plan_x" | jq -r '.actions["scripts/bootstrap-project.sh"] // "null"')"
 
+# Plugin self-tests must also stay in the plugin/dev root, not land in
+# initialized or upgraded consumer projects.
+echo 'self-test' > "$PLG/scripts/_smoke-test-framework.sh"
+plan_smoke="$(PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
+check "plan: plugin smoke tests excluded" null "$(echo "$plan_smoke" | jq -r '.actions["scripts/_smoke-test-framework.sh"] // "null"')"
+
+# Existing consumer repos may already have received plugin self-tests. When a
+# copy is still byte-identical to the plugin file, /upgrade should clean it up.
+cp "$PLG/scripts/_smoke-test-framework.sh" "$PRJ/scripts/_smoke-test-framework.sh"
+plan_obsolete="$(PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
+check "plan: copied plugin smoke test marked obsolete" remove-obsolete "$(echo "$plan_obsolete" | jq -r '.actions["scripts/_smoke-test-framework.sh"] // "null"')"
+PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.2.1 bash "$SYNC" --apply >/dev/null
+if [ -e "$PRJ/scripts/_smoke-test-framework.sh" ]; then
+  echo "FAIL: apply removed copied plugin smoke test — file still present"; fail=1
+else
+  echo "ok: apply removed copied plugin smoke test"
+fi
+
+# A locally edited excluded file is not safe to delete silently.
+echo 'locally edited self-test' > "$PRJ/scripts/_smoke-test-framework.sh"
+plan_local_smoke="$(PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
+check "plan: locally edited smoke test not auto-removed" null "$(echo "$plan_local_smoke" | jq -r '.actions["scripts/_smoke-test-framework.sh"] // "null"')"
+PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.2.2 bash "$SYNC" --apply >/dev/null
+if [ -f "$PRJ/scripts/_smoke-test-framework.sh" ]; then
+  echo "ok: apply preserved locally edited smoke test"
+else
+  echo "FAIL: apply preserved locally edited smoke test — file was deleted"; fail=1
+fi
+rm -f "$PRJ/scripts/_smoke-test-framework.sh"
+
 # Fix 1: --plan must be read-only — no manifest created when none exists
 PRJ_NOMNF="$TMP/proj-nomanifest"
 mkdir -p "$PRJ_NOMNF/scripts"

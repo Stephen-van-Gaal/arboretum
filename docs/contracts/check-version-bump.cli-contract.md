@@ -1,6 +1,6 @@
 ---
 script: scripts/check-version-bump.sh
-version: 1.2
+version: 1.3
 invokers:
   - type: script
     name: scripts/ci-checks.sh
@@ -14,7 +14,7 @@ related-designs:
 
 ## Surface
 
-Pull-request gate that enforces plugin-version discipline before merge. Reads the plugin version from three locations in `.claude-plugin/` plus `.codex-plugin/plugin.json` and runs two assertions: (1) the four occurrences are mutually equal, and (2) if any shippable content was changed since the merge-base, the version has been incremented. Invoked unconditionally by `scripts/ci-checks.sh` as the final blocking check, and can be run directly by a developer in the repo root. Accepts `BASE_REF` (the comparison ref; defaults to `origin/main`) and `REPO_ROOT` (the repo root path; defaults to the parent of `scripts/`) as environment-variable seams so CI and local test fixtures can override them without patching the script. Most `.github/` paths are dev-only, but `.github/ISSUE_TEMPLATE/arboretum-problem.md` and `.github/ISSUE_TEMPLATE/arboretum-enhancement.md` are shippable because `sync-public.yml` copies those report forms to the public repo after the broad `.github/` exclusion.
+Pull-request gate that enforces plugin-version discipline before merge. Reads the plugin version from three locations in `.claude-plugin/` plus `.codex-plugin/plugin.json` and runs two assertions: (1) the four occurrences are mutually equal, and (2) if any shippable content was changed since the merge-base, the version has been incremented. Invoked unconditionally by `scripts/ci-checks.sh` as the final blocking check, and can be run directly by a developer in the repo root. Accepts `BASE_REF` (the comparison ref; defaults to `origin/main`) and `REPO_ROOT` (the repo root path; defaults to the parent of `scripts/`) as environment-variable seams so CI and local test fixtures can override them without patching the script. Most `.github/` paths are dev-only, but `.github/ISSUE_TEMPLATE/arboretum-problem.md` and `.github/ISSUE_TEMPLATE/arboretum-enhancement.md` are shippable because `sync-public.yml` copies those report forms to the public repo after the broad `.github/` exclusion. Consumer roots that have no plugin manifests at all skip this gate because plugin-version discipline is not applicable there; partial plugin-manifest sets still fail.
 
 ## Protocol
 
@@ -27,8 +27,8 @@ No positional arguments and no flags. All configuration is via environment varia
 
 ### Exit codes
 
-- `0` — one of two success conditions: (a) all four version occurrences agree AND no shippable content changed since the merge-base (`OK: no shippable content changed`); or (b) all four occurrences agree AND shippable content changed AND the version is strictly greater than the merge-base version (`OK: shippable content changed; version bumped`).
-- `1` — one of two failure conditions: (a) the four version occurrences disagree (`FAIL: plugin version occurrences disagree`); or (b) shippable content changed but the version was not incremented (`FAIL: shippable content changed but the plugin version was not incremented`). Both failure messages are emitted to stderr with the specific values that disagreed.
+- `0` — one of three success conditions: (a) no plugin manifests exist (`SKIP: plugin version manifests not found`); (b) all four version occurrences agree AND no shippable content changed since the merge-base (`OK: no shippable content changed`); or (c) all four occurrences agree AND shippable content changed AND the version is strictly greater than the merge-base version (`OK: shippable content changed; version bumped`).
+- `1` — one of three failure conditions: (a) only some plugin manifests exist (`FAIL: plugin version manifest set is incomplete`); (b) the four version occurrences disagree (`FAIL: plugin version occurrences disagree`); or (c) shippable content changed but the version was not incremented (`FAIL: shippable content changed but the plugin version was not incremented`). Failure messages are emitted to stderr with the specific values or missing paths.
 
 No other exit codes. `python3` parse errors or `git` invocation failures propagate as non-zero under `set -euo pipefail` but are not part of the documented contract surface.
 
@@ -45,9 +45,11 @@ Read-only — no side effects. The script reads JSON files under `.claude-plugin
 - **CLI-5: BASE_REF seam.** When `BASE_REF` is set in the environment, the script uses it as the comparison ref for `git merge-base` and `git show` instead of `origin/main`. This allows CI and smoke tests to override the comparison target without touching the live remote.
 - **CLI-6: REPO_ROOT seam.** When `REPO_ROOT` is set in the environment, the script `cd`s into that directory instead of deriving the root from `dirname "$0"`. This allows smoke tests to point the script at a temporary git fixture, isolating all file reads and git operations from the live repo.
 - **CLI-7: Public report forms are shippable.** A diff touching `.github/ISSUE_TEMPLATE/arboretum-problem.md` or `.github/ISSUE_TEMPLATE/arboretum-enhancement.md` counts as shippable content even though the broader `.github/` tree is otherwise dev-only.
+- **CLI-8: Consumer-root manifest absence.** When none of `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, or `.codex-plugin/plugin.json` exists, the script exits 0 with `SKIP: plugin version manifests not found`. When only some of those manifests exist, the script exits 1 with `FAIL: plugin version manifest set is incomplete`.
 
 ## Versioning
 
+- **1.3** — skip cleanly in consumer roots with no plugin manifests, but fail incomplete plugin-manifest sets (2026-06-02).
 - **1.2** — add the public report issue-form exception for `.github/ISSUE_TEMPLATE/arboretum-{problem,enhancement}.md` (2026-06-02).
 - **1.1** — add `.codex-plugin/plugin.json` as the fourth version occurrence (2026-05-31).
 - **1.0** — initial contract (2026-05-30).

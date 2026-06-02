@@ -1,6 +1,6 @@
 ---
 script: scripts/upgrade-sync.sh
-version: 1.1
+version: 1.3
 invokers:
   - type: skill
     name: arboretum:/upgrade (project-upgrade)
@@ -23,7 +23,7 @@ CLI helper invoked by the `/upgrade` skill to sync vendored framework files from
 | Subcommand | Purpose | Args |
 |---|---|---|
 | `--plan` | Emit a JSON plan describing every managed file's required action. Pure read — no writes. | none |
-| `--apply` | Run `--plan` internally, apply all non-interactive-safe actions (`add`, `overwrite-safe`, `overwrite-local`, `converged`), merge the plugin's settings template into `.claude/settings.json`, bump `framework_version` in the install manifest, then echo the full plan JSON so the caller can surface `conflict` and `report-only` entries. | none |
+| `--apply` | Run `--plan` internally, apply all non-interactive-safe actions (`add`, `overwrite-safe`, `overwrite-local`, `converged`, `remove-obsolete`), merge the plugin's settings template into `.claude/settings.json`, bump `framework_version` in the install manifest, then echo the full plan JSON so the caller can surface `conflict` and `report-only` entries. | none |
 | `--bootstrap-manifest` | Populate `.arboretum/install-manifest.json` for a project that was installed before the manifest existed. Walks every 3-way-managed glob in the tree; records a base entry only when the tree copy matches the plugin copy (diverged files get no base, so the next `--plan` sees them as `overwrite-local` under the plugin-wins policy). | none |
 | `--read-manifest-sha <path>` | Print the `sha256` recorded for `<path>` in the install manifest, or empty string if absent. | `<path>` — repo-root-relative POSIX path |
 | `--read-manifest-version` | Print the `framework_version` stored in the install manifest, or empty string. | none |
@@ -50,7 +50,7 @@ CLI helper invoked by the `/upgrade` skill to sync vendored framework files from
 
 - `plugin_root` — absolute path to the resolved arboretum plugin directory.
 - `actions` — map of repo-root-relative path → action (one of the closed enum below). `unchanged` entries are omitted.
-- `policy` — map of repo-root-relative path → policy (`3way` or `report-only`). Keys mirror `actions`.
+- `policy` — map of repo-root-relative path → policy (`3way`, `report-only`, or `obsolete`). Keys mirror `actions`.
 - `removal_detection` — `active` when the install manifest has a baseline (≥1 tracked file) and `report-removed` detection is meaningful; `inconclusive` when the manifest is empty or absent, so removal detection is disabled and the absence of `report-removed` entries is NOT a guarantee that no framework files are stale (#407). Callers must not present an inconclusive plan as "zero removals".
 
 ### Action enum (closed)
@@ -63,11 +63,16 @@ CLI helper invoked by the `/upgrade` skill to sync vendored framework files from
 | `keep-local` | Project deleted a tracked framework file that the plugin still ships unchanged. Deletion respected — not re-added. (Plugin-wins governs edits, not deletions.) |
 | `conflict` | Project deleted a tracked framework file that the plugin has since changed. Requires human resolution. |
 | `converged` | Both modified to the same content. Safe to accept as-is (records the new base). |
+| `remove-obsolete` | Project tree contains a file that now matches an excluded framework path (for example `scripts/_smoke-test-*.sh`) and is safe to delete because it either still matches the recorded install-manifest base or exactly matches the current plugin copy. Applied by `--apply`; also removes that path from the install manifest when present. |
 | `unchanged` | No change from any party. Omitted from `actions` map by `--plan`. |
 | `report-removed` | File existed in manifest but is no longer in the plugin. Surfaced for human review; never auto-deleted. Only meaningful when `removal_detection` is `active`. |
 | `report-only` | File is under a `report-only` policy (e.g. `CLAUDE.md`). Surfaced for human review; never auto-applied. |
 
 No other action values are emitted. Any value outside this set is a contract violation.
+
+### Managed file set
+
+Default managed globs cover operational framework files under `scripts/*.sh`, `scripts/lib/*`, `scripts/roadmap/*`, `.claude/hooks/*`, `.githooks/*`, `docs/templates/*`, `docs/definitions/*`, and `workflows/*`. Exclusions apply after the glob union is computed: `scripts/bootstrap-project.sh` is legacy bootstrap-only, and `scripts/_smoke-test-*.sh` are plugin/dev self-tests. Neither path class is propagated by `/upgrade`, including when `UPGRADE_MANAGED_GLOBS` is set for tests. If such an excluded file already exists in a project and is safe framework residue (manifest-base match or current-plugin-copy match), `--plan` emits `remove-obsolete` and `--apply` deletes it. Locally edited excluded files are left in place.
 
 ### Exit codes
 
@@ -82,6 +87,7 @@ No other exit codes. `1` is never emitted by this script.
 
 `--apply` writes:
 - Copies managed files for `add`, `overwrite-safe`, `overwrite-local`, `converged` actions.
+- Deletes safe obsolete excluded framework files for `remove-obsolete` actions and drops their manifest entries.
 - Merges plugin's `docs/templates/settings.json.template` into `.claude/settings.json` (via `seed-settings.sh`; degrades gracefully if `jq` absent).
 - Rewrites `.arboretum/install-manifest.json` via `bump_manifest_version`.
 
@@ -104,5 +110,7 @@ This script consumes `definitions/install-manifest-schema.md @v1` — the schema
 
 ## Versioning
 
+- **1.3** — adds `remove-obsolete` so `/upgrade --apply` cleans up already-copied excluded framework files, such as plugin self-tests, when they are safe to delete (2026-06-02).
+- **1.2** — excludes plugin/dev self-tests (`scripts/_smoke-test-*.sh`) from managed upgrade propagation, matching `/init`'s consumer packaging boundary (2026-06-02).
 - **1.1** — plugin-wins policy + removal-detection honesty (2026-05-30, issues #394/#407). Adds the `overwrite-local` action: a divergent local copy of a framework file present in both tree and plugin now resolves to plugin-wins (applied, discards local edits) instead of `keep-local`/`conflict` — adopters do not fork framework code. Redefines `keep-local`/`conflict` as deletion-only cases. Adds the `removal_detection` plan field (`active`|`inconclusive`) so an empty-manifest plan is not misread as "zero removals". `--bootstrap-manifest` divergent files now classify `overwrite-local` on the next `--plan`.
 - **1.0** — initial contract (2026-05-29). Ships with `upgrade-sync.sh` Task 6 (WS5 PR6, issue #316). Documents the `--plan`/`--apply`/`--bootstrap-manifest`/manifest-I/O subcommands, closed action enum, plan JSON shape, exit codes, and test-only env overrides.

@@ -16,6 +16,29 @@ cd "$REPO_ROOT"
 
 BASE_REF="${BASE_REF:-origin/main}"
 
+manifest_paths=(
+  ".claude-plugin/plugin.json"
+  ".claude-plugin/marketplace.json"
+  ".codex-plugin/plugin.json"
+)
+manifest_count=0
+for manifest_path in "${manifest_paths[@]}"; do
+  [ -f "$manifest_path" ] && manifest_count=$((manifest_count + 1))
+done
+if [ "$manifest_count" -eq 0 ]; then
+  echo "SKIP: plugin version manifests not found; version-bump gate is not applicable in this root."
+  exit 0
+fi
+if [ "$manifest_count" -ne "${#manifest_paths[@]}" ]; then
+  {
+    echo "FAIL: plugin version manifest set is incomplete."
+    for manifest_path in "${manifest_paths[@]}"; do
+      [ -f "$manifest_path" ] || echo "  missing: $manifest_path"
+    done
+  } >&2
+  exit 1
+fi
+
 v_plugin="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')"
 v_market="$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["version"])')"
 v_market_plugin="$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["version"])')"

@@ -14,7 +14,7 @@ done
 rd="$(echo "$plan" | jq -r '.removal_detection')"
 case "$rd" in active|inconclusive) ;; *) echo "FAIL: removal_detection outside enum: $rd"; fail=1 ;; esac
 # every action value is in the closed enum
-bad="$(echo "$plan" | jq -r '.actions[]' | grep -Evx 'add|overwrite-safe|overwrite-local|keep-local|conflict|converged|unchanged|report-removed|report-only' || true)"
+bad="$(echo "$plan" | jq -r '.actions[]' | grep -Evx 'add|overwrite-safe|overwrite-local|keep-local|conflict|converged|remove-obsolete|unchanged|report-removed|report-only' || true)"
 [ -z "$bad" ] || { echo "FAIL: action outside enum: $bad"; fail=1; }
 [ "$fail" = 0 ] && echo "ok: contract upgrade-sync"
 exit "$fail"

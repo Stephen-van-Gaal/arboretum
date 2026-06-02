@@ -125,13 +125,14 @@ chmod +x .githooks/* 2>/dev/null || true
 # Governance scripts (health-check, generate-register, validate-cross-refs,
 # sync-contracts). These are the plumbing that /finish, /pr, /health-check,
 # /consolidate, and /init-project shell out to. Skip bootstrap-project.sh
-# (legacy bootstrap CLI superseded by this very skill).
+# (legacy bootstrap CLI superseded by this very skill) and plugin self-tests.
 mkdir -p scripts
 for script in "$PLUGIN_ROOT/scripts/"*.sh; do
   [ -f "$script" ] || continue
   name="$(basename "$script")"
   case "$name" in
     bootstrap-project.sh) continue ;;
+    _smoke-test-*.sh) continue ;;
   esac
   copy_if_missing "$script" "scripts/$name"
 done

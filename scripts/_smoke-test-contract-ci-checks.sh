@@ -137,6 +137,43 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# CLI-7: Consumer-root applicability
+# Consumer roots may not have the plugin development tree. ShellCheck must
+# build its root list from existing directories, and smoke tests whose owning
+# spec is not installed in the host root must be skipped with a diagnostic.
+# ---------------------------------------------------------------------------
+if grep -q 'shellcheck_roots=()' "$TARGET" \
+  && grep -q '\[ -d "$root" \] && shellcheck_roots' "$TARGET"; then
+  echo "PASS: CLI-7a — ShellCheck roots are filtered to existing directories"
+else
+  echo "FAIL: CLI-7a — ShellCheck roots are not filtered to existing directories" >&2
+  fail=1
+fi
+
+if grep -q '^is_plugin_root()' "$TARGET" \
+  && grep -q '^smoke_test_applicable()' "$TARGET"; then
+  echo "PASS: CLI-7b — plugin-root detection and smoke-test applicability helpers are present"
+else
+  echo "FAIL: CLI-7b — plugin-root/applicability helpers are missing" >&2
+  fail=1
+fi
+
+if grep -q "owner '.*' spec is not installed in this root" "$TARGET"; then
+  echo "PASS: CLI-7c — inapplicable framework smoke tests emit a SKIP diagnostic"
+else
+  echo "FAIL: CLI-7c — inapplicable smoke-test skip diagnostic is missing" >&2
+  fail=1
+fi
+
+if grep -q 'scope_re=' "$TARGET" \
+  && grep -q 'no consumer-applicable scope declared' "$TARGET"; then
+  echo "PASS: CLI-7d — consumer roots require explicit consumer/any smoke-test scope"
+else
+  echo "FAIL: CLI-7d — consumer-root scope declaration gate is missing" >&2
+  fail=1
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 if [ "$fail" -ne 0 ]; then

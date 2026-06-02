@@ -14,10 +14,10 @@ set -uo pipefail
 ROOT="$(pwd)"
 GEN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/generate-coverage.sh"
 GEN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMMITTED="$ROOT/docs/contracts/_coverage.md"
+CONTRACTS_DIR="$ROOT/docs/contracts"
+COMMITTED="$CONTRACTS_DIR/_coverage.md"
 
 [ -x "$GEN" ]       || { echo "validate-coverage-manifest: $GEN not executable" >&2; exit 1; }
-[ -f "$COMMITTED" ] || { echo "validate-coverage-manifest: $COMMITTED missing" >&2; exit 1; }
 
 # Bootstrap state — allowed only when docs/contracts/ has zero CLI-contract files.
 # WS5 introduces *.cli-contract.md; pre-WS5 seam contracts (e.g. WS3b's
@@ -27,13 +27,27 @@ COMMITTED="$ROOT/docs/contracts/_coverage.md"
 # exists, bootstrap is structurally unreachable: deleting all rows from
 # _coverage.md cannot re-enter it, because the cli-contract file remains on
 # disk.
-cli_contract_count=$(find "$ROOT/docs/contracts" -maxdepth 1 -type f \
+if [ ! -d "$CONTRACTS_DIR" ]; then
+  if [ -f "$ROOT/.claude-plugin/plugin.json" ] \
+    || [ -f "$ROOT/.codex-plugin/plugin.json" ] \
+    || [ -d "$ROOT/skills" ] \
+    || [ -d "$ROOT/hooks" ]; then
+    echo "validate-coverage-manifest: $CONTRACTS_DIR missing in plugin-capable root" >&2
+    exit 1
+  fi
+  echo "validate-coverage-manifest: bootstrap state — docs/contracts/ not found; no cli-contracts to validate" >&2
+  exit 0
+fi
+
+cli_contract_count=$(find "$CONTRACTS_DIR" -maxdepth 1 -type f \
                        -name '*.cli-contract.md' 2>/dev/null | wc -l)
 cli_contract_count=$(echo "$cli_contract_count" | tr -d ' ')
 if [ "$cli_contract_count" -eq 0 ]; then
   echo "validate-coverage-manifest: bootstrap state — no cli-contracts in docs/contracts/ (PR-1 of WS5 only)" >&2
   exit 0
 fi
+
+[ -f "$COMMITTED" ] || { echo "validate-coverage-manifest: $COMMITTED missing" >&2; exit 1; }
 
 # Build an isolated mirror layout in a temp dir so the regenerator's writes
 # stay sandboxed. The `scripts/` and `.claude/` directories are symlinked
