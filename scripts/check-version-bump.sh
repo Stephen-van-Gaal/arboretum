@@ -69,7 +69,7 @@ merge_base="$(git merge-base "$BASE_REF" HEAD)"
 # shippable below after the broad .github/ denylist.
 # File patterns are $-anchored so e.g. CLAUDE.md does not also exempt a
 # stray CLAUDE.md.bak; directory patterns end in / by design.
-dev_only_regex='^(docs/specs/|docs/plans/|docs/superpowers/|docs/reviews/|docs/reference/|docs/ARCHITECTURE\.md$|docs/REGISTER\.md$|\.github/|\.agents/skills/|\.claude/skills/dev-|\.claude/skills/_archived/|\.claude/projects/|scripts/_archived/|CLAUDE\.md$|README\.md$|\.gitmodules$|\.arboretum\.yml$|contracts\.yaml$)'
+dev_only_regex='^(docs/specs/|docs/plans/|docs/superpowers/|docs/reviews/|docs/customer-validation/|docs/reference/|docs/ARCHITECTURE\.md$|docs/REGISTER\.md$|docs/contracts/prepare-customer-testbed\.cli-contract\.md$|customer-testbeds/|\.github/|\.agents/skills/|\.claude/skills/dev-|\.claude/skills/_archived/|\.claude/projects/|scripts/_archived/|scripts/prepare-customer-testbed\.sh$|scripts/_smoke-test-customer-testbed\.sh$|CLAUDE\.md$|README\.md$|\.gitmodules$|\.arboretum\.yml$|contracts\.yaml$)'
 public_issue_form_regex='^\.github/ISSUE_TEMPLATE/arboretum-(problem|enhancement)\.md$'
 
 changed_paths="$(git diff --name-only "$merge_base" HEAD)"

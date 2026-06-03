@@ -22,6 +22,10 @@ venv/
 .arboretum/update-cache.json
 .arboretum/update-cache.json.tmp
 
+# Local customer-validation generated copies. These are prepared from sibling
+# customer checkouts and must never be tracked.
+.arboretum/customer-testbeds/
+
 # Session-handoff transient markers (issue #251).
 .arboretum/handoff-done
 .arboretum/handoff-nudged
