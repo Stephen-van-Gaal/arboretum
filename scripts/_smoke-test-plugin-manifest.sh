@@ -19,11 +19,10 @@
 # check-version-bump.sh only checks version fields, so neither malformed
 # value tripped any other gate.
 #
-#   Codex marketplace — the public GitHub contents API does not traverse the
-#   previous plugins/arboretum -> .. symlink, making the root plugin look
-#   broken even though local filesystem resolution worked. Because this repo is
-#   itself the Codex plugin root, the marketplace must point at "." directly
-#   and avoid a symlink-only package path.
+#   Codex marketplace — Codex's local marketplace resolver ignores repo-root
+#   source paths ("." or "./") even though the marketplace itself registers.
+#   The entry must use the package path shape Codex lists:
+#   "./plugins/arboretum", which resolves back to this plugin root.
 #
 # Asserts:
 #   1. Claude and Codex plugin.json/marketplace.json files parse as JSON.
@@ -33,8 +32,10 @@
 #      (valid for hooks/mcpServers/lspServers) carry no path and are skipped.
 #   3. The `hooks` field, if a string, does not reference the auto-loaded
 #      standard hooks file (hooks/hooks.json) — that would duplicate-load it.
-#   4. The Codex marketplace points the `arboretum` plugin at the repo root
-#      source path and does not rely on a symlinked plugins/arboretum path.
+#   4. The Codex marketplace points the `arboretum` plugin at the resolver-
+#      visible `./plugins/arboretum` package path.
+#   5. When the `codex` CLI is available, an isolated marketplace list command
+#      can see `arboretum@arboretum`.
 
 set -euo pipefail
 
@@ -129,17 +130,23 @@ else:
         bad.append(f"arboretum marketplace source.source is {source.get('source')!r}, expected 'local'")
 
     source_path = source.get("path")
-    if source_path != ".":
-        bad.append(f"arboretum marketplace source.path is {source_path!r}, expected '.'")
+    expected_source_path = "./plugins/arboretum"
+    if source_path != expected_source_path:
+        bad.append(
+            f"arboretum marketplace source.path is {source_path!r}, "
+            f"expected {expected_source_path!r}"
+        )
     else:
         resolved = os.path.normpath(os.path.join(root, source_path))
         manifest = os.path.join(resolved, ".codex-plugin", "plugin.json")
         if not os.path.isfile(manifest):
             bad.append(f"arboretum marketplace source.path does not resolve to a Codex plugin manifest: {manifest}")
 
-symlink_path = os.path.join(root, "plugins", "arboretum")
-if os.path.lexists(symlink_path):
-    bad.append("plugins/arboretum must not exist; use the repo-root Codex source path instead of a symlink")
+    symlink_path = os.path.join(root, "plugins", "arboretum")
+    if not os.path.lexists(symlink_path):
+        bad.append("plugins/arboretum must exist and resolve to the Codex plugin root")
+    elif not os.path.isdir(symlink_path):
+        bad.append("plugins/arboretum must resolve to a directory containing the plugin root")
 
 if bad:
     print("Codex marketplace violations:", file=sys.stderr)
@@ -148,4 +155,18 @@ if bad:
     sys.exit(1)
 PY
 
-echo "PASS: plugin metadata — valid JSON; Claude paths './'-prefixed; hooks not duplicated; Codex marketplace points at repo root; /init excludes plugin smoke tests"
+if command -v codex >/dev/null 2>&1; then
+  CODEX_SMOKE_HOME="$(mktemp -d)"
+  cleanup_codex_smoke() { rm -rf "$CODEX_SMOKE_HOME"; }
+  trap cleanup_codex_smoke EXIT
+
+  CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin marketplace add "$ROOT" >/dev/null \
+    || fail "Codex marketplace resolver could not add the Arboretum marketplace"
+  CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin list --marketplace arboretum \
+    | grep -q 'arboretum@arboretum' \
+    || fail "Codex marketplace resolver did not list arboretum@arboretum"
+else
+  echo "SKIP: codex CLI not found; skipped Codex marketplace resolver smoke"
+fi
+
+echo "PASS: plugin metadata — valid JSON; Claude paths './'-prefixed; hooks not duplicated; Codex marketplace lists arboretum@arboretum when codex is available; /init excludes plugin smoke tests"
