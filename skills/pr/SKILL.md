@@ -144,8 +144,10 @@ GitHub PRs. If the candidate is an epic, or if multiple issues would be
 referenced, separate close intent from reference-only intent and ask before
 using any closing keyword. Do not auto-close epics.
 
-For `azure-devops`, keep the existing work-item link behaviour but treat closure
-verification as unsupported in this Arboretum slice.
+For `azure-devops`, keep the existing work-item link behaviour and make the
+closure state explicitly post-merge/read-only: `/pr` links the work item, but it
+does not claim that linkage closes the item. `/cleanup` verifies the linked work
+item state after merge.
 
 ### 6. Suggest security review
 
@@ -270,7 +272,7 @@ When Step 5.5 resolved one issue, the Tracker section MUST be:
 ```markdown
 ## Tracker
 Linked work item: #<issue>
-Closure verification: unsupported by this Arboretum slice
+Closure verification: pending post-merge cleanup
 ```
 
 When no tracker issue is resolved, render:

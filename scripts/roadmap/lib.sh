@@ -375,6 +375,26 @@ roadmap_ado_closed_states_joined() {
   printf '%s\n' "$joined"
 }
 
+roadmap_ado_state_is_closed() {
+  local state="$1"
+  local closed configured
+  local closed_states=()
+  state="$(roadmap_trim "$state")"
+  configured="$(roadmap_ado_config_get azure_devops_closed_states "Closed,Done,Removed")"
+  while IFS= read -r closed; do
+    closed="$(roadmap_trim "$closed")"
+    [ -n "$closed" ] || continue
+    closed_states+=("$closed")
+  done < <(roadmap_csv_lines "$configured")
+  if [ "${#closed_states[@]}" -eq 0 ]; then
+    closed_states=(Closed Done Removed)
+  fi
+  for closed in "${closed_states[@]}"; do
+    [ "$state" = "$closed" ] && return 0
+  done
+  return 1
+}
+
 roadmap_ado_wiql_string() {
   local escaped
   escaped="$(printf '%s' "$1" | sed "s/'/''/g")"
@@ -807,6 +827,18 @@ roadmap_ado_pr_list() {
   printf '[]\n' | roadmap_tracker_apply_json_options "$json_fields" "$jq_filter"
 }
 
+roadmap_ado_pr_work_items_json() {
+  local pr="$1"
+  local org project raw
+  local args=(repos pr work-item list --id "$pr" --output json --only-show-errors)
+  project="$(roadmap_ado_project)"
+  org="$(roadmap_ado_organization)"
+  [ -n "$org" ] && args+=(--organization "$org")
+  [ -n "$project" ] && args+=(--project "$project")
+  raw="$(az "${args[@]}")" || return $?
+  printf '%s' "$raw" | roadmap_ado_normalize_work_items
+}
+
 roadmap_ado_normalize_pull_request() {
   jq '
     {
@@ -898,15 +930,52 @@ PYEOF
 roadmap_ado_pr_closure_status() {
   local pr="$1"
   local issue="$2"
+  local linked linked_item shown state
   [ -n "$pr" ] && [ -n "$issue" ] || {
     echo "roadmap_tracker_pr_closure_status: pr and issue are required" >&2
     return 2
   }
-  printf '%s\n' \
-    "provider=azure-devops" \
-    "intent=unknown" \
-    "verification=unsupported" \
-    "evidence=Azure DevOps closure verification is not implemented in this slice"
+  if ! linked="$(roadmap_ado_pr_work_items_json "$pr")"; then
+    printf '%s\n' \
+      "provider=azure-devops" \
+      "intent=unknown" \
+      "verification=unknown" \
+      "evidence=Azure DevOps PR #$pr linked work-item lookup failed"
+    return 0
+  fi
+  linked_item="$(printf '%s' "$linked" | jq -c --arg issue "$issue" '
+    [.[] | select((.number | tostring) == $issue)][0] // empty
+  ')" || return $?
+  if [ -z "$linked_item" ]; then
+    printf '%s\n' \
+      "provider=azure-devops" \
+      "intent=none" \
+      "verification=unknown" \
+      "evidence=Azure DevOps PR #$pr does not link work item #$issue"
+    return 0
+  fi
+  if ! shown="$(roadmap_ado_issue_show "$issue" --json number,state)"; then
+    printf '%s\n' \
+      "provider=azure-devops" \
+      "intent=unknown" \
+      "verification=unknown" \
+      "evidence=Azure DevOps work item #$issue state lookup failed"
+    return 0
+  fi
+  state="$(printf '%s' "$shown" | jq -r '.state // ""')" || return $?
+  if roadmap_ado_state_is_closed "$state"; then
+    printf '%s\n' \
+      "provider=azure-devops" \
+      "intent=close" \
+      "verification=supported" \
+      "evidence=Azure DevOps PR #$pr links work item #$issue and the work item is closed"
+  else
+    printf '%s\n' \
+      "provider=azure-devops" \
+      "intent=unknown" \
+      "verification=unknown" \
+      "evidence=Azure DevOps PR #$pr links work item #$issue but the work item is not closed"
+  fi
 }
 
 roadmap_running_in_codex() {

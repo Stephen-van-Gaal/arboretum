@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.10
+version: 1.11
 producer-type: script
 consumer-type: script
 consumes:
@@ -8,6 +8,7 @@ consumes:
 produces: []
 related-designs:
   - docs/superpowers/specs/2026-05-26-pipeline-overhaul-ws5-governance-script-contracts-design.md
+  - docs/superpowers/specs/2026-06-03-ado-closure-verification-design.md
 owns:
   - scripts/roadmap/lib.sh
 ---
@@ -31,7 +32,7 @@ A side-effect-free-by-default sourceable library (the pulse-*write* helpers muta
 - **`roadmap_backend_config_get KEY [ROOT]`** — echoes backend-specific scalar config. For Azure DevOps, accepts both legacy flat `azure_devops_*` keys and the preferred namespaced `azure_devops:` block (`organization`, `project`, `default_work_item_type`, `done_state`, `closed_states`, etc.).
 - **`roadmap_require_backend [BACKEND]`** — validates the selected backend's local prerequisites. `github` requires authenticated `gh`; `azure-devops` requires Azure CLI, the Azure DevOps CLI extension surfaces used by Arboretum (`az devops`, `az boards`, and `az repos`), readable Azure DevOps defaults, and `jq` for JSON normalization.
 - **`roadmap_probe_backend_access [BACKEND] [ROOT]`** — validates that the current agent process can perform one live read through the selected backend after local prerequisites pass. `github` probes `gh api repos/{owner}/{repo} --jq .full_name` from the target repository root so GitHub Enterprise hosts and repo-scoped tokens follow the same repo context as the guarded operation; `azure-devops` probes `az devops project show` using organization/project resolved from the target root before falling back to Azure CLI defaults. On Codex-flavoured network failures, stderr includes scoped `sandbox_workspace_write.network_access` and `features.network_proxy` guidance for the selected provider.
-- **`roadmap_tracker_issue_list`, `roadmap_tracker_issue_show`, `roadmap_tracker_issue_comment`, `roadmap_tracker_issue_update`, `roadmap_tracker_issue_close`, `roadmap_tracker_issue_create`, `roadmap_tracker_issue_comments`, `roadmap_tracker_label_list`, `roadmap_tracker_label_create`, `roadmap_tracker_pr_list`, `roadmap_tracker_pr_show`, `roadmap_tracker_pr_closure_status`** — backend-neutral tracker operations. The `github` adapter delegates to the corresponding `gh` subcommand for issue/label/PR operations and classifies PR-body closure intent for a specific issue. The `azure-devops` adapter maps issues/labels to Azure Boards work items/tags, returns the GitHub-shaped JSON fields consumed by existing roadmap scripts, supports a normalized PR-show subset, and returns `intent=unknown` / `verification=unsupported` for closure-status in this slice.
+- **`roadmap_tracker_issue_list`, `roadmap_tracker_issue_show`, `roadmap_tracker_issue_comment`, `roadmap_tracker_issue_update`, `roadmap_tracker_issue_close`, `roadmap_tracker_issue_create`, `roadmap_tracker_issue_comments`, `roadmap_tracker_label_list`, `roadmap_tracker_label_create`, `roadmap_tracker_pr_list`, `roadmap_tracker_pr_show`, `roadmap_tracker_pr_closure_status`** — backend-neutral tracker operations. The `github` adapter delegates to the corresponding `gh` subcommand for issue/label/PR operations and classifies PR-body closure intent for a specific issue. The `azure-devops` adapter maps issues/labels to Azure Boards work items/tags, returns the GitHub-shaped JSON fields consumed by existing roadmap scripts, supports a normalized PR-show subset, and verifies whether the target work item linked to a completed PR is already in a configured closed state without mutating it.
 - **`roadmap_pulse_path`** — echoes `<root>/.arboretum/roadmap-pulse.json` (echoes nothing if root unknown).
 - **`roadmap_pulse_bootstrap`** — idempotently seeds the pulse file (no-op if present); bootstrap-as-today so no nag fires on install day.
 - **`roadmap_pulse_get_field KEY`** / **`roadmap_pulse_get_nag NAME`** — echo a scalar pulse field / `nag_last_fired[NAME]`; empty string when absent/null/file-missing.
@@ -86,7 +87,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
   - `intent=close|reference|none|unknown`
   - `verification=supported|unsupported|unknown`
   - `evidence=<controlled string>`
-  For GitHub, `Closes #N` / `Fixes #N` / `Resolves #N` variants classify as `intent=close`; a bare `#N` classifies as `intent=reference`; no mention classifies as `intent=none`. For Azure DevOps in this slice, the output is `provider=azure-devops`, `intent=unknown`, `verification=unsupported`, and `evidence=Azure DevOps closure verification is not implemented in this slice`.
+  For GitHub, `Closes #N` / `Fixes #N` / `Resolves #N` variants classify as `intent=close`; a bare `#N` classifies as `intent=reference`; no mention classifies as `intent=none`. For Azure DevOps, the helper lists PR-linked work items, finds the requested issue/work-item, reads its current state, and returns `intent=close` / `verification=supported` only when that work item is already in the configured closed-state set. Linked-but-open work items return `intent=unknown` / `verification=unknown`; absent links and provider read failures also return non-close results with controlled evidence.
 - **`roadmap_pulse_path`** — one line: the pulse JSON path; empty when root unknown.
 - **`roadmap_pulse_get_field KEY`** / **`roadmap_pulse_get_nag NAME`** — one line: the field/nag value; empty string when absent, null, or file missing. Always returns 0.
 - **`roadmap_pulse_set_nag_fired` / `roadmap_pulse_update_field`** — no stdout; side effect is an atomic rewrite of the pulse JSON. Always returns 0 (fail-silent).
@@ -105,7 +106,9 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **GitHub adapter preservation.** With `backend: github`, the tracker helpers delegate to `gh` and preserve the existing GitHub output shape for migrated consumers.
 - **Azure DevOps adapter normalization.** With `backend: azure-devops`, work item IDs are exposed as `number`, Azure tags are exposed as `labels[].name`, comments are exposed with `authorAssociation: "MEMBER"`, label creation is a no-op because ADO tags materialize on first use, PR show normalizes Azure Repos fields to the neutral PR shape, and PR list returns an empty array so maintain flows degrade gracefully when merged-PR evidence is unavailable.
 - **Closure evidence is controlled.** `roadmap_tracker_pr_closure_status` MUST NOT echo raw PR titles or body text. Evidence strings are generated from provider, PR number, issue number, and classification only.
-- **ADO closure verification is explicit.** Until an Azure DevOps closure-status contract exists, ADO returns `intent=unknown` and `verification=unsupported`; callers MUST surface that limitation instead of silently assuming a linked work item will close.
+- **ADO closure verification is read-only.** Azure DevOps closure-status verification MUST NOT transition or close work items. It may report supported close evidence only for the specific linked work item whose current state is already in the configured closed-state set.
+- **ADO linkage is not closure.** A linked Azure DevOps work item whose current state is not closed MUST return `intent=unknown` / `verification=unknown`; callers MUST surface the manual follow-up instead of assuming PR linkage closed the tracker item.
+- **ADO closed-state config reuse.** Azure DevOps closure verification MUST compare trimmed `System.State` values against trimmed `azure_devops.closed_states` / `azure_devops_closed_states` entries with the existing default `Closed,Done,Removed`. If the configured value is effectively empty after CSV splitting and trimming, the helper falls back to that default set.
 - **Cheap setup vs live reachability are distinct.** `roadmap_require_backend` is the cheap local prerequisite guard and may run frequently. `roadmap_probe_backend_access` performs a provider API read and should be used at workflow edges where a clear "this process can reach the backend" diagnostic is worth the extra call; neutral `roadmap_tracker_*` helpers do not call the probe internally.
 - **Pulse fail-silence.** All pulse readers return 0 with empty stdout when the file/field is missing; writers are atomic (`.tmp` + `mv`) and never error out the caller.
 - **Tooling parity.** The `yq`/`jq` paths and the `python3` fallbacks are intended to produce equivalent output regardless of which tool is installed. `roadmap_config_list` captures `yq` output first and falls through to the python3 parser if the installed `yq` rejects the expression dialect, so runners with mikefarah `yq` and machines without `yq` keep the same list protocol.
@@ -135,10 +138,15 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-20:** Cedar-shaped Azure DevOps config with no `.arboretum.yml`, root-level `backend: azure-devops`, and a namespaced `azure_devops:` block resolves backend, organization URL, project, and default work-item type.
 - **RL-21:** `roadmap_tracker_pr_show` delegates to `gh pr view` on GitHub and normalizes `az repos pr show` output on Azure DevOps.
 - **RL-22:** `roadmap_tracker_pr_closure_status` on GitHub classifies merged PR bodies as `intent=close`, `intent=reference`, or `intent=none`, with `verification=supported` and controlled evidence.
-- **RL-23:** `roadmap_tracker_pr_closure_status` on Azure DevOps returns `intent=unknown` and `verification=unsupported` with explicit fast-follow evidence.
+- **RL-23:** `roadmap_tracker_pr_closure_status` on Azure DevOps returns `intent=unknown` / `verification=unknown` for a PR-linked target work item whose current state is still open.
+- **RL-24:** The same helper returns `intent=close` / `verification=supported` only when the linked target work item is already in a configured closed state.
+- **RL-25:** The same helper returns `intent=none` / `verification=unknown` when the PR has linked work items but not the requested target issue.
+- **RL-26:** The same helper returns `intent=unknown` / `verification=unknown` when ADO PR work-item lookup fails.
+- **RL-27:** ADO closure verification trims work item states and falls back to default closed states when `azure_devops.closed_states` / `azure_devops_closed_states` is effectively empty.
 
 ## Versioning
 
+- **1.11** (2026-06-03) — implements read-only Azure DevOps closure-status verification for the target linked work item and pins open/closed/missing/failure/defaulted-state cases. Issue #489.
 - **1.10** (2026-06-03) — adds neutral PR detail and closure-status helpers so the ship tail can record and verify tracker closure intent without embedding provider-specific tracker commands in skills. Issue #484.
 - **1.9** (2026-06-03) — accepts Cedar-shaped namespaced Azure DevOps config and bare organization slugs while retaining flat `azure_devops_*` aliases. Issue #485.
 - **1.8** (2026-06-02) — pins zsh-sourced roadmap helper behaviour after issue #469 exposed backend fallback from zsh special-parameter and Bash-only CSV parsing gaps.

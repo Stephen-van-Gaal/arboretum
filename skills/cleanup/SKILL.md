@@ -146,23 +146,26 @@ CLOSURE_STATUS="$(roadmap_tracker_pr_closure_status "$MERGED_PR_NUMBER" "$ISSUE"
 
 Interpret the key/value result:
 
-- `intent=close` and `verification=supported`: read current issue state with
-  `roadmap_tracker_issue_show "$ISSUE" --json state`. If the issue is still
-  open, close it through:
+- `provider=github`, `intent=close`, and `verification=supported`: read current
+  issue state with `roadmap_tracker_issue_show "$ISSUE" --json state`. If the
+  issue is still open, close it through:
   ```bash
   roadmap_tracker_issue_close "$ISSUE" --reason completed --comment "Closed after merged PR #$MERGED_PR_NUMBER declared close intent."
   ```
+- `provider=azure-devops`, `intent=close`, and `verification=supported`: report
+  that the linked work item was already observed in a configured closed state.
+  Do not transition or close it from `/cleanup`; ADO closure verification is
+  read-only in this slice.
 - `intent=reference` or `intent=none`: leave the tracker issue open and report
   that the PR did not declare close intent.
 - `verification=unsupported`: leave the tracker issue open and report the
-  provider limitation explicitly. For this slice, Azure DevOps falls here.
+  provider limitation explicitly.
 - `verification=unknown`: leave the tracker issue open and report that manual
   follow-up is needed.
 
-Never call `gh issue close` or `az boards work-item update` directly for
+Never call provider-specific close or work-item mutation commands directly for
 ship-tail closure. `/cleanup` closes only through
-`roadmap_tracker_issue_close`, and only when the neutral closure-status helper
-reports a supported close intent.
+`roadmap_tracker_issue_close`, and only for the GitHub supported-close path.
 
 ### Step 2: Verify spec status before local cleanup
 

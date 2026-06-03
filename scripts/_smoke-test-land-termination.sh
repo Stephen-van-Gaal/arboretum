@@ -50,8 +50,8 @@ grep -q 'scripts/refresh-stage-cache.sh' "$PR_SKILL" \
   || fail "case 0a — /pr does not reuse the stage-cache branch slug convention"
 grep -q 'Closes #<issue>' "$PR_SKILL" \
   || fail "case 0a — /pr does not render GitHub close intent in the Tracker section"
-grep -q 'Closure verification: unsupported by this Arboretum slice' "$PR_SKILL" \
-  || fail "case 0a — /pr does not surface unsupported ADO closure verification"
+grep -q 'Closure verification: pending post-merge cleanup' "$PR_SKILL" \
+  || fail "case 0a — /pr does not surface pending ADO cleanup verification"
 grep -q 'Do not auto-close epics' "$PR_SKILL" \
   || fail "case 0a — /pr does not guard epics from automatic close intent"
 ok "case 0a — /pr has GitHub/Azure backend dispatch"

@@ -194,9 +194,9 @@ Tracker closure intent:
 
 For `github`, provider verification is `supported` when exactly one closeable
 issue will be rendered with a GitHub closing keyword in `/pr`'s `## Tracker`
-section. For `azure-devops`, provider verification is `unsupported` in this
-Arboretum slice; `/pr` will link the work item but must not claim automatic
-closure verification.
+section. For `azure-devops`, provider verification is `unknown` until
+post-merge `/cleanup`: `/pr` will link the work item, but Arboretum must not
+claim closure until the read-only linked-work-item state check runs.
 
 If no tracker issue is resolved, warn clearly but continue when the user wants
 a trackerless PR.

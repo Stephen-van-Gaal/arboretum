@@ -351,6 +351,16 @@ if [ "$1 $2" = "boards query" ]; then
   exit 0
 fi
 if [ "$1 $2 $3" = "boards work-item show" ]; then
+  if printf '%s\n' "$*" | grep -q -- '--id 484'; then
+    printf '%s\n' '{"id":484,"fields":{"System.Title":"Open linked ADO work item","System.State":"Active","System.ChangedDate":"2026-06-03T12:00:00Z"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/484"}}}'
+    exit 0
+  elif printf '%s\n' "$*" | grep -q -- '--id 485'; then
+    printf '%s\n' '{"id":485,"fields":{"System.Title":"Closed linked ADO work item","System.State":"Closed","Microsoft.VSTS.Common.ClosedDate":"2026-06-03T12:00:00Z"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/485"}}}'
+    exit 0
+  elif printf '%s\n' "$*" | grep -q -- '--id 486'; then
+    printf '%s\n' '{"id":486,"fields":{"System.Title":"Whitespace-normalized ADO work item","System.State":" Done "},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/486"}}}'
+    exit 0
+  fi
   if printf '%s\n' "$*" | grep -q -- '--fields System.Tags'; then
     printf '%s\n' '{"id":42,"fields":{"System.Tags":"agent-ready; horizon:next"}}'
   else
@@ -382,6 +392,28 @@ fi
 if [ "$1 $2 $3" = "repos pr show" ]; then
   printf '%s\n' '{"pullRequestId":42,"title":"ADO PR","description":"Linked work item: #484","status":"completed","closedDate":"2026-06-03T00:00:00Z"}'
   exit 0
+fi
+if [ "$1 $2 $3 $4" = "repos pr work-item list" ]; then
+  if printf '%s\n' "$*" | grep -q -- '--id 42'; then
+    printf '%s\n' '[{"id":484,"fields":{"System.Title":"Open linked ADO work item","System.State":"Active"},"url":"https://dev.azure.com/example/Demo/_apis/wit/workItems/484"}]'
+    exit 0
+  fi
+  if printf '%s\n' "$*" | grep -q -- '--id 43'; then
+    printf '%s\n' '[{"id":485,"fields":{"System.Title":"Closed linked ADO work item","System.State":"Closed"},"url":"https://dev.azure.com/example/Demo/_apis/wit/workItems/485"}]'
+    exit 0
+  fi
+  if printf '%s\n' "$*" | grep -q -- '--id 44'; then
+    printf '%s\n' '[]'
+    exit 0
+  fi
+  if printf '%s\n' "$*" | grep -q -- '--id 45'; then
+    echo "simulated work-item list failure" >&2
+    exit 1
+  fi
+  if printf '%s\n' "$*" | grep -q -- '--id 46'; then
+    printf '%s\n' '[{"id":486,"fields":{"System.Title":"Whitespace-normalized ADO work item","System.State":" Done "},"url":"https://dev.azure.com/example/Demo/_apis/wit/workItems/486"}]'
+    exit 0
+  fi
 fi
 echo "unexpected az call: $*" >&2
 exit 2
@@ -491,14 +523,64 @@ else
   fail_case "RL-21 (azure-devops pr show)" "out=[$ado_pr_show] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
 fi
 
-ado_closure_out=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 42 484)
-if printf '%s\n' "$ado_closure_out" | grep -qx 'provider=azure-devops' \
-   && printf '%s\n' "$ado_closure_out" | grep -qx 'intent=unknown' \
-   && printf '%s\n' "$ado_closure_out" | grep -qx 'verification=unsupported' \
-   && printf '%s\n' "$ado_closure_out" | grep -qx 'evidence=Azure DevOps closure verification is not implemented in this slice'; then
-  pass RL-23
+ado_closure_open=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 42 484)
+if printf '%s\n' "$ado_closure_open" | grep -qx 'provider=azure-devops' \
+   && printf '%s\n' "$ado_closure_open" | grep -qx 'intent=unknown' \
+   && printf '%s\n' "$ado_closure_open" | grep -qx 'verification=unknown' \
+   && printf '%s\n' "$ado_closure_open" | grep -qx 'evidence=Azure DevOps PR #42 links work item #484 but the work item is not closed' \
+   && grep -q 'repos pr work-item list --id 42' "$AZ_STUB_LOG" \
+   && grep -q 'boards work-item show --id 484' "$AZ_STUB_LOG"; then
+  pass "RL-23 (ADO linked work item open)"
 else
-  fail_case RL-23 "out=[$ado_closure_out]"
+  fail_case "RL-23 (ADO linked work item open)" "out=[$ado_closure_open] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
+
+ado_closure_closed=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 43 485)
+if printf '%s\n' "$ado_closure_closed" | grep -qx 'provider=azure-devops' \
+   && printf '%s\n' "$ado_closure_closed" | grep -qx 'intent=close' \
+   && printf '%s\n' "$ado_closure_closed" | grep -qx 'verification=supported' \
+   && printf '%s\n' "$ado_closure_closed" | grep -qx 'evidence=Azure DevOps PR #43 links work item #485 and the work item is closed'; then
+  pass "RL-24 (ADO linked work item closed)"
+else
+  fail_case "RL-24 (ADO linked work item closed)" "out=[$ado_closure_closed]"
+fi
+
+ado_closure_none=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 44 484)
+if printf '%s\n' "$ado_closure_none" | grep -qx 'provider=azure-devops' \
+   && printf '%s\n' "$ado_closure_none" | grep -qx 'intent=none' \
+   && printf '%s\n' "$ado_closure_none" | grep -qx 'verification=unknown' \
+   && printf '%s\n' "$ado_closure_none" | grep -qx 'evidence=Azure DevOps PR #44 does not link work item #484'; then
+  pass "RL-25 (ADO no linked target work item)"
+else
+  fail_case "RL-25 (ADO no linked target work item)" "out=[$ado_closure_none]"
+fi
+
+ado_closure_failure=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 45 484)
+if printf '%s\n' "$ado_closure_failure" | grep -qx 'provider=azure-devops' \
+   && printf '%s\n' "$ado_closure_failure" | grep -qx 'intent=unknown' \
+   && printf '%s\n' "$ado_closure_failure" | grep -qx 'verification=unknown' \
+   && printf '%s\n' "$ado_closure_failure" | grep -qx 'evidence=Azure DevOps PR #45 linked work-item lookup failed'; then
+  pass "RL-26 (ADO PR work-item list failure unknown)"
+else
+  fail_case "RL-26 (ADO PR work-item list failure unknown)" "out=[$ado_closure_failure]"
+fi
+
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+azure_devops:
+  organization: VCH-DataAnalytics
+  project: Advanced_Data_Analytics
+  default_work_item_type: Issue
+  closed_states: " , , "
+YAML
+ado_closure_trimmed_default=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 46 486)
+if printf '%s\n' "$ado_closure_trimmed_default" | grep -qx 'provider=azure-devops' \
+   && printf '%s\n' "$ado_closure_trimmed_default" | grep -qx 'intent=close' \
+   && printf '%s\n' "$ado_closure_trimmed_default" | grep -qx 'verification=supported' \
+   && printf '%s\n' "$ado_closure_trimmed_default" | grep -qx 'evidence=Azure DevOps PR #46 links work item #486 and the work item is closed'; then
+  pass "RL-27 (ADO closed-state trim + empty-config fallback)"
+else
+  fail_case "RL-27 (ADO closed-state trim + empty-config fallback)" "out=[$ado_closure_trimmed_default]"
 fi
 
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

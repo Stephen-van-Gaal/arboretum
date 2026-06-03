@@ -285,4 +285,19 @@ for f in CLAUDE.md CLAUDE.public.md docs/templates/CLAUDE.md docs/templates/PRIN
 done
 ok "case 31 — no Path A/B references in project memory or architecture docs"
 
+# Case 32: /cleanup consumes closure-status helper results without mutating ADO
+# work items during verification.
+CLEANUP="skills/cleanup/SKILL.md"
+grep -q 'roadmap_tracker_pr_closure_status' "$CLEANUP" \
+  || fail "case 32 — /cleanup does not consume neutral closure-status helper"
+grep -q 'provider=azure-devops' "$CLEANUP" \
+  || fail "case 32 — /cleanup does not branch ADO closure interpretation by provider"
+grep -q 'ADO closure verification is[[:space:]]*$' "$CLEANUP" \
+  || grep -q 'read-only in this slice' "$CLEANUP" \
+  || fail "case 32 — /cleanup does not state ADO verification is read-only"
+if grep -q 'az boards work-item update' "$CLEANUP"; then
+  fail "case 32 — /cleanup leaks direct ADO work-item mutation"
+fi
+ok "case 32 — /cleanup closure verification keeps ADO read-only"
+
 echo "ALL PASS: skill-prose v2 invariants"
