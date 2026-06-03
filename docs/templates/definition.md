@@ -4,6 +4,11 @@ version: 1
 
 # [Definition Name]
 
+<!-- Definitions are shared nouns. Use a definition when multiple specs need to
+     agree on the meaning, shape, states, or invariants of a data structure or
+     domain concept. Behaviour belongs in specs; producer/consumer protocols
+     belong in contracts. -->
+
 ## Status
 <!-- draft | stable | deprecated -->
 
@@ -13,7 +18,8 @@ version: 1
      All consuming specs must review and re-pin. -->
 
 ## Description
-<!-- What this definition represents and why it exists as a shared contract. -->
+<!-- What this definition represents and why it exists as a shared contract.
+     Name the specs, groups, or external systems that need this shared noun. -->
 
 ## Schema
 <!-- The canonical structure. Use the notation natural to the project:
@@ -23,6 +29,18 @@ version: 1
 ## Constraints
 <!-- Validation rules, invariants, allowed ranges, nullability,
      anything a consumer or provider must respect. -->
+
+## Examples
+<!-- Optional but recommended. Include one valid minimal example and one edge
+     case when that would help non-expert readers use the definition correctly. -->
+
+## Consumers And Providers
+<!-- Which specs provide canonical instances of this definition, and which specs
+     consume it? The register may summarize this, but the definition should
+     explain the human-readable meaning of each relationship. -->
+
+| Spec | Role | Notes |
+|------|------|-------|
 
 ## Changelog
 <!-- Date, version, what changed, which specs are affected. -->

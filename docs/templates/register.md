@@ -6,18 +6,23 @@ version: 1
 
 ## Definitions Index
 
-| Definition | Version | Status | Primary Implementor | Required By |
-|------------|---------|--------|---------------------|-------------|
+| Name | Version | Status | Provided By | Required By |
+|------|---------|--------|-------------|-------------|
 
-<!-- Primary Implementor: the spec whose code is the canonical expression
-     of this definition. Use "external (description)" for definitions
-     representing interfaces outside the project. This does not imply
-     ownership — all definitions are owned by the architecture. -->
+<!-- Provided By: the spec whose code is the canonical expression of this
+     definition. Use "external (<description>)" for definitions representing
+     interfaces outside the project.
+
+     Required By: specs that consume the definition. -->
 
 ## Spec Index
 
-| Spec | Status | Owns (files/directories) | Depends On |
-|------|--------|--------------------------|------------|
+| Spec | Status | Owner | Owns (files/directories) |
+|------|--------|-------|--------------------------|
+
+<!-- Owner: the group, architecture area, or workflow family responsible for the
+     spec. Owns: files/directories governed by the spec. Use "—" only for
+     active narrative specs that also declare governs-narrative in frontmatter. -->
 
 ## Unowned Code
 <!-- This section should always be empty. If it is not, something

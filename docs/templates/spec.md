@@ -19,9 +19,46 @@ owns: []
 
 <!-- HUMAN — Why does this exist? What problem does it solve? One paragraph. -->
 
+## Boundaries (non-goals)
+
+<!-- HUMAN — What this module deliberately does NOT own. Use this to keep specs
+     from becoming junk drawers. Each non-goal should point to the spec, group,
+     external system, or future issue that does own the concern. -->
+
 ## Behaviour
 
 <!-- HUMAN — What should the system do? Be as detailed as you want. This is how you steer the AI. -->
+
+## Requires
+
+<!-- HUMAN or AUTO — Shared definitions, contracts, specs, or external systems
+     this spec depends on. Governance scripts scan this section for shared
+     definition version pins. Prefer one row per dependency.
+
+     For shared definitions, cite the parser-visible pin in the Definition
+     column as `definitions/<name>.md@vN` (no `docs/` prefix). The
+     `sync-contracts.sh` and `validate-cross-refs.sh` scripts scan for that
+     exact form. For spec-to-spec dependencies, cite the spec path. If there
+     are no dependencies, write "N/A — no inbound dependencies." -->
+
+| Dependency | Source | Definition |
+|------------|--------|------------|
+
+## Provides
+
+<!-- HUMAN or AUTO — Public surfaces this spec provides to other specs or
+     external consumers: exported functions, commands, events, files, schemas,
+     adapters, or behaviours. Governance scripts scan this section for shared
+     definition version pins.
+
+     For shared definitions, use the exact parser-visible pin
+     `definitions/<name>.md@vN` in the Definition column.
+
+     If the module has no public surface beyond its own behaviour, write
+     "N/A — no outbound contracts." -->
+
+| Export | Type | Definition |
+|--------|------|------------|
 
 ## Tests
 
