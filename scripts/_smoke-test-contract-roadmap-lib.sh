@@ -24,6 +24,21 @@ trap 'rm -rf "$FIX"' EXIT
 fail=0
 pass() { echo "PASS: $1"; }
 fail_case() { echo "FAIL: $1" >&2; [ -n "${2:-}" ] && echo "  $2" >&2; fail=1; }
+assert_raw_ado_tags() {
+  local label="$1" tags="$2" rc="${3:-0}" rc2="${4:-0}" detail="${5:-}"
+  local reason=""
+  [ "$rc" = 0 ] || reason="${reason} normalize_rc=$rc"
+  [ "$rc2" = 0 ] || reason="${reason} merge_rc=$rc2"
+  case "$tags" in *\"*) reason="${reason} contains_double_quote" ;; esac
+  case "$tags" in *"component:docs"*) ;; *) reason="${reason} missing_component" ;; esac
+  case "$tags" in *"horizon:later"*) ;; *) reason="${reason} missing_horizon" ;; esac
+  case "$tags" in *";"*) ;; *) reason="${reason} missing_semicolon" ;; esac
+  if [ -z "$reason" ]; then
+    pass "$label"
+  else
+    fail_case "$label" "tags=[$tags]$reason ${detail}"
+  fi
+}
 
 # Build a git-repo fixture with a block-style config.
 git -C "$FIX" init -q
@@ -131,6 +146,12 @@ YAML
 backend_arbo=$(inlib roadmap_backend)
 [ "$backend_arbo" = "github" ] && pass "RL-8 (.arboretum precedence)" || fail_case "RL-8 (.arboretum precedence)" "got=[$backend_arbo]"
 
+# RL-8b — ADO tag merging emits raw System.Tags text in the normal bash path.
+# This pins the #506 regression even on systems without zsh.
+ado_label_args="$(inlib roadmap_ado_normalize_label_args "horizon:later,component:docs")"; rc=$?
+ado_tags="$(inlib roadmap_ado_merge_tags "" "$ado_label_args" "")"; rc2=$?
+assert_raw_ado_tags "RL-8b (ADO merged tags are raw)" "$ado_tags" "$rc" "$rc2"
+
 # RL-8z — sourceable shell portability: skill snippets may source lib.sh from
 # zsh, so backend selection and small parser helpers must keep their bash
 # contract under zsh too.
@@ -179,6 +200,10 @@ YAML
   else
     fail_case "RL-8z (zsh CSV shell-looking data)" "rc=$rc got=[$zsh_csv_data] err=$(cat "$FIX/zsh-csv-data.err") marker=$(test -e "$FIX/zsh-csv-marker" && echo present || echo absent)"
   fi
+
+  ado_label_args="$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_ado_normalize_label_args "horizon:later,component:docs"' _ "$LIB" 2>"$FIX/zsh-ado-labels.err")"; rc=$?
+  ado_tags="$(cd "$FIX" && zsh -fc 'source "$1"; roadmap_ado_merge_tags "" "$2" ""' _ "$LIB" "$ado_label_args" 2>"$FIX/zsh-ado-tags.err")"; rc2=$?
+  assert_raw_ado_tags "RL-8z (zsh ADO merged tags are raw)" "$ado_tags" "$rc" "$rc2" "labels_err=$(cat "$FIX/zsh-ado-labels.err") tags_err=$(cat "$FIX/zsh-ado-tags.err")"
 
   mkdir -p "$FIX/.arboretum"
   cat > "$FIX/.arboretum/roadmap-pulse.json" <<'JSON'

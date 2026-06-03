@@ -486,7 +486,7 @@ roadmap_ado_merge_tags() {
   local current="$1"
   local adds="$2"
   local removes="$3"
-  jq -Rn --arg current "$current" --arg adds "$adds" --arg removes "$removes" '
+  jq -Rrn --arg current "$current" --arg adds "$adds" --arg removes "$removes" '
     def trim: gsub("^[[:space:]]+|[[:space:]]+$"; "");
     def split_semis($s): ($s | split(";") | map(trim) | map(select(length > 0)));
     def split_lines($s): ($s | split("\n") | map(trim) | map(select(length > 0)));

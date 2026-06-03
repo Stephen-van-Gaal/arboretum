@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.11
+version: 1.12
 producer-type: script
 consumer-type: script
 consumes:
@@ -105,6 +105,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **Sourceable shell portability.** Skill snippets may source this library from bash or zsh. Backend selection, CSV helper parsing, ADO closed-state parsing, and pulse read/write helpers MUST preserve the same output contract under both shells.
 - **GitHub adapter preservation.** With `backend: github`, the tracker helpers delegate to `gh` and preserve the existing GitHub output shape for migrated consumers.
 - **Azure DevOps adapter normalization.** With `backend: azure-devops`, work item IDs are exposed as `number`, Azure tags are exposed as `labels[].name`, comments are exposed with `authorAssociation: "MEMBER"`, label creation is a no-op because ADO tags materialize on first use, PR show normalizes Azure Repos fields to the neutral PR shape, and PR list returns an empty array so maintain flows degrade gracefully when merged-PR evidence is unavailable.
+- **ADO tag merge output is raw.** The Azure DevOps tag-merge helper emits the semicolon-delimited `System.Tags` scalar as raw text, never as a JSON-encoded string. Callers may pass the value directly to `System.Tags=...` without stripping quotes.
 - **Closure evidence is controlled.** `roadmap_tracker_pr_closure_status` MUST NOT echo raw PR titles or body text. Evidence strings are generated from provider, PR number, issue number, and classification only.
 - **ADO closure verification is read-only.** Azure DevOps closure-status verification MUST NOT transition or close work items. It may report supported close evidence only for the specific linked work item whose current state is already in the configured closed-state set.
 - **ADO linkage is not closure.** A linked Azure DevOps work item whose current state is not closed MUST return `intent=unknown` / `verification=unknown`; callers MUST surface the manual follow-up instead of assuming PR linkage closed the tracker item.
@@ -123,7 +124,8 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-6:** `roadmap_pulse_get_field` / `roadmap_pulse_get_nag` against a missing pulse file return empty stdout and exit 0 (fail-silent).
 - **RL-7:** `roadmap_pulse_update_field` followed by `roadmap_pulse_get_field` round-trips a value through the atomically-rewritten pulse JSON.
 - **RL-8:** `roadmap_backend` defaults to `github`, reads `backend: azure-devops` from `roadmap.config.yaml`, and lets `.arboretum.yml backend: github` override the roadmap config.
-- **RL-8z:** When zsh is available, sourcing `roadmap/lib.sh` from zsh preserves backend selection from `roadmap.config.yaml`, `.arboretum.yml` precedence, custom Azure DevOps closed-state parsing, CSV field detection, and pulse read/write helpers.
+- **RL-8b:** `roadmap_ado_merge_tags` emits raw semicolon-delimited `System.Tags` text in the normal bash path: no JSON quote characters, both expected tags present, and at least one semicolon separator.
+- **RL-8z:** When zsh is available, sourcing `roadmap/lib.sh` from zsh preserves backend selection from `roadmap.config.yaml`, `.arboretum.yml` precedence, custom Azure DevOps closed-state parsing, CSV field detection, raw ADO tag merging, and pulse read/write helpers.
 - **RL-9:** `roadmap_tracker_issue_list` on `backend: github` delegates to `gh issue list` and returns its JSON unchanged.
 - **RL-10:** Additional GitHub adapter wrappers (`roadmap_tracker_issue_close`, `roadmap_tracker_issue_comments`, `roadmap_tracker_pr_list`) delegate to the expected `gh` subcommands and return their output unchanged.
 - **RL-11:** `roadmap_require_backend azure-devops` accepts a stubbed Azure CLI with the Azure DevOps extension surface and readable defaults.
@@ -146,6 +148,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 
 ## Versioning
 
+- **1.12** (2026-06-03) — pins raw Azure DevOps `System.Tags` merge output so ADO labels created through `/idea` and roadmap helper paths do not store JSON quote characters. Issue #506.
 - **1.11** (2026-06-03) — implements read-only Azure DevOps closure-status verification for the target linked work item and pins open/closed/missing/failure/defaulted-state cases. Issue #489.
 - **1.10** (2026-06-03) — adds neutral PR detail and closure-status helpers so the ship tail can record and verify tracker closure intent without embedding provider-specific tracker commands in skills. Issue #484.
 - **1.9** (2026-06-03) — accepts Cedar-shaped namespaced Azure DevOps config and bare organization slugs while retaining flat `azure_devops_*` aliases. Issue #485.
