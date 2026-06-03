@@ -20,6 +20,8 @@
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
 | scripts/parse-plan-checkboxes.sh | docs/contracts/parse-plan-checkboxes.contract.md | full |
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
+| scripts/read-doc-profile.sh | docs/contracts/read-doc-profile.cli-contract.md | cli |
+| scripts/read-doc-section.sh | docs/contracts/read-doc-section.cli-contract.md | cli |
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |

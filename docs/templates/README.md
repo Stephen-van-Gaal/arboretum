@@ -19,6 +19,28 @@ tooling later). The templates here are fallback and adapter guidance, not a
 schema Arboretum owns end-to-end. Arboretum should be graceful about provider
 output and consume only the fields or evidence its workflow contracts require.
 
+## Optional Read Profiles
+
+Documents may declare read profiles in frontmatter when a workflow or skill can
+safely consume named sections instead of the whole file. Profiles are optional;
+absence of a profile means callers should fall back to an explicit section read
+or a whole-file read when that is still justified.
+
+The v1 shape is deliberately small:
+
+```yaml
+read_profiles:
+  compact:
+    sections:
+      - Purpose
+      - Behaviour
+      - 'Edge Cases: punctuation & symbols?'
+```
+
+Section names are exact, case-sensitive Markdown heading names. Quote section
+names that contain YAML metacharacters such as `:` so the shared YAML-lite
+parser treats them as scalar list items.
+
 ## Core Rule
 
 Each document type answers one kind of question.
