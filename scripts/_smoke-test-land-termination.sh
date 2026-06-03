@@ -30,6 +30,8 @@ FINISH_SKILL="$REPO_ROOT/skills/finish/SKILL.md"
 LAND_SKILL="$REPO_ROOT/skills/land/SKILL.md"
 CLEANUP_SKILL="$REPO_ROOT/skills/cleanup/SKILL.md"
 REFLECT_SKILL="$REPO_ROOT/skills/reflect/SKILL.md"
+SETTINGS_JSON="$REPO_ROOT/.claude/settings.json"
+SETTINGS_TEMPLATE="$REPO_ROOT/docs/templates/settings.json.template"
 
 # ── Case 0: Shipping skills dispatch on backend before provider calls ─
 grep -q 'SHIP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$PR_SKILL" \
@@ -113,6 +115,16 @@ grep -q 'roadmap_tracker_issue_close "$ISSUE" --reason completed' "$CLEANUP_SKIL
   || fail "case 0d — /cleanup does not close through the neutral issue helper"
 grep -q 'verification=unsupported' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not surface unsupported closure verification"
+grep -q 'cleanup-merged-session.sh' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not delegate local destructive cleanup to helper"
+grep -q 'git pull --ff-only' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not require ff-only main sync"
+grep -q 'active session worktree' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not document active worktree terminal behavior"
+grep -Fq '"Bash(bash scripts/cleanup-merged-session.sh *)"' "$SETTINGS_JSON" \
+  || fail "case 0d — project settings do not allow the cleanup helper"
+grep -Fq '"Bash(bash scripts/cleanup-merged-session.sh *)"' "$SETTINGS_TEMPLATE" \
+  || fail "case 0d — settings template does not allow the cleanup helper"
 ok "case 0d — /cleanup has GitHub/Azure backend dispatch"
 
 grep -q 'REFLECT_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$REFLECT_SKILL" \

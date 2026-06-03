@@ -1,7 +1,7 @@
 ---
 name: cleanup
 owner: workflow-unification
-description: Post-merge cleanup — switch to main, pull latest, delete the merged feature branch, and verify spec status. Use after a PR has been merged.
+description: Post-merge cleanup — verify merge state, safely remove the merged local branch/session worktree, and verify spec status. Use after a PR has been merged.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob
 layer: 0
@@ -50,16 +50,20 @@ export CLEANUP_BACKEND
 roadmap_require_backend "$CLEANUP_BACKEND" || exit 1
 ```
 
-Check the current branch:
+Capture the exact session worktree and branch before any checkout or cleanup command:
 
 ```bash
+SESSION_WORKTREE="$(git rev-parse --show-toplevel)"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "Session worktree: $SESSION_WORKTREE"
 echo "Current branch: $BRANCH"
 ```
 
 If on `main` or `master`, check for stale local branches:
 ```bash
-git branch --merged main | grep -v '^\*\|main\|master'
+DEFAULT_BRANCH="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+git branch --merged "$DEFAULT_BRANCH" | grep -v '^\*\|main\|master'
 ```
 
 If on a feature branch, check if its PR was merged through the configured
@@ -120,7 +124,7 @@ the same unmerged-branch message.
 
 ### Step 1.5: Verify tracker closure after merge
 
-After merge/completion is confirmed and before switching to main, read the
+After merge/completion is confirmed and before switching to the default branch, read the
 merged PR metadata through the configured backend:
 
 ```bash
@@ -160,29 +164,7 @@ ship-tail closure. `/cleanup` closes only through
 `roadmap_tracker_issue_close`, and only when the neutral closure-status helper
 reports a supported close intent.
 
-### Step 2: Switch to main
-
-```bash
-git checkout main
-git pull
-```
-
-Report what was pulled (new commits, if any).
-
-### Step 3: Delete the feature branch
-
-```bash
-git branch -d <branch-name>
-```
-
-Use `-d` (not `-D`) — this is safe because the branch is already merged. If it fails, the branch wasn't fully merged and something may be wrong.
-
-If there's a remote tracking branch:
-```bash
-git remote prune origin
-```
-
-### Step 4: Verify spec status
+### Step 2: Verify spec status before local cleanup
 
 If `docs/REGISTER.md` exists:
 
@@ -191,21 +173,59 @@ If `docs/REGISTER.md` exists:
 3. If any spec is still at `draft`, suggest running `/consolidate` to flip it to `active`. If any spec is at `stale`, suggest running `/consolidate` to reconcile drift.
 4. No manual promotion needed — `/consolidate` handles status flips automatically.
 
-### Step 5: Suggest reflection
+Do this before invoking the local cleanup helper, because the helper may remove
+the active session worktree as its final action.
+
+### Step 3: Run local cleanup helper
+
+Do not delete branches or worktrees directly in the skill. Delegate the local
+destructive action to the audited helper:
+
+```bash
+bash scripts/cleanup-merged-session.sh --branch "$BRANCH" --worktree "$SESSION_WORKTREE" --remove-active-worktree
+```
+
+The helper switches an appropriate control worktree to the remote default branch, runs
+`git pull --ff-only`, verifies provider merge proof plus local SHA containment,
+tries `git branch -d` first, and only then may use `git branch -D` for a
+provider-proven squash-merged local branch.
+
+The helper may force-delete only a provider-proven squash-merged local branch.
+It must never delete remote branches, protected branches, dirty/locked
+worktrees, or unrelated session worktrees.
+
+If the helper prints:
+
+```text
+session=terminal reason=active-worktree-removed action=end-or-reopen-session
+```
+
+the active session worktree was removed. This is the final filesystem action.
+Tell the user to end this session or open a fresh session from a valid checkout;
+do not run further commands from the removed path.
+
+### Step 4: Suggest reflection
 
 > "Before moving on — want to run `/reflect` to capture what you learned from this work?"
 
 If the user declines, move on immediately. Do not push.
 
-### Step 6: Suggest next steps
+Skip this step when the active session worktree was removed; the final response
+should instead tell the user to end or reopen the session.
 
-> "Cleanup complete. On main with latest changes.
+### Step 5: Suggest next steps
+
+> "Cleanup complete. On the default branch with latest changes.
 >
 > Ready for the next task? Start with a change request and I'll route you through the workflow."
 
+Skip this step when the active session worktree was removed.
+
 ## Important
 
-- **Safe deletion only.** Use `git branch -d`, not `-D`. If the branch wasn't fully merged, something is wrong — don't force-delete.
+- **Helper owns local destructive cleanup.** Do not run raw branch/worktree deletion commands in the skill. Use `scripts/cleanup-merged-session.sh`.
+- **Force-delete exemption is narrow.** The helper may use `git branch -D` only after provider-merged state and local-SHA-contained-by-provider-head proof. A `[gone]` upstream is never proof.
+- **Active session worktree removal is terminal.** If the active session worktree is removed, stop and tell the user to end or reopen the session before doing more work.
 - **Check before deleting.** Always verify the PR was actually merged before cleaning up.
 - **Spec status is automatic.** The state machine has only three states (`draft / active / stale`); flips happen via `/consolidate` and `/health-check`. No manual promotion step exists.
 - This skill can be auto-invoked by Claude (via SessionStart) if it detects the user is on a branch whose PR was merged.

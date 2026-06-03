@@ -10,6 +10,7 @@
 | scripts/check-version-bump.sh | docs/contracts/check-version-bump.cli-contract.md | cli |
 | scripts/ci-checks.sh | docs/contracts/ci-checks.cli-contract.md | cli |
 | scripts/classify-pr-change.sh | docs/contracts/classify-pr-change.contract.md | full |
+| scripts/cleanup-merged-session.sh | docs/contracts/cleanup-merged-session.cli-contract.md | cli |
 | scripts/generate-coverage.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/generate-register.sh | docs/contracts/register-pipeline.contract.md | full |
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
