@@ -91,6 +91,51 @@ info() {
   echo "  · $1"
 }
 
+is_plugin_root() {
+  [ -d "$PROJECT_DIR/skills" ] \
+    && [ -d "$PROJECT_DIR/hooks" ] \
+    && [ -d "$PROJECT_DIR/docs/contracts" ] \
+    && [ -d "$PROJECT_DIR/tests/contracts" ] \
+    && [ -d "$PROJECT_DIR/scripts/_fixtures/roadmap" ] \
+    && [ -f "$PROJECT_DIR/.github/ISSUE_TEMPLATE/agent-ready.md" ]
+}
+
+manifest_manages_path() {
+  local rel="$1"
+  local manifest="$PROJECT_DIR/.arboretum/install-manifest.json"
+
+  [ -f "$manifest" ] || return 1
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$manifest" "$rel" <<'PYEOF'
+import json
+import sys
+
+try:
+    with open(sys.argv[1]) as f:
+        manifest = json.load(f)
+except Exception:
+    sys.exit(1)
+
+files = manifest.get("files")
+if isinstance(files, dict) and sys.argv[2] in files:
+    sys.exit(0)
+sys.exit(1)
+PYEOF
+  else
+    grep -Fq "\"$rel\"" "$manifest"
+  fi
+}
+
+missing_owner_spec_is_applicable() {
+  local rel="$1"
+
+  if ! is_plugin_root && manifest_manages_path "$rel"; then
+    return 1
+  fi
+  return 0
+}
+
 # O(N) membership test. Kept linear (not an associative array) because
 # macOS ships bash 3.2, which lacks `declare -A`. N is typically <10
 # (status states / active_states), so linear scan is fine.
@@ -645,12 +690,17 @@ skill_owner_re='^owner:[[:space:]]*([a-z][a-z0-9-]+)[[:space:]]*$'
 # plus bin/* — all use the line-2 `# owner:` convention.
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  rel="${f#$PROJECT_DIR/}"
+  rel="${f#"$PROJECT_DIR"/}"
   line2=$(sed -n '2p' "$f")
   if [[ "$line2" =~ $owner_re ]]; then
-    if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
-      warn "Unowned: $rel — owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
-      ((unowned_count++)) || true
+    owner_name="${BASH_REMATCH[1]}"
+    if [ ! -f "$SPECS_DIR/$owner_name.spec.md" ]; then
+      if missing_owner_spec_is_applicable "$rel"; then
+        warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md"
+        ((unowned_count++)) || true
+      else
+        info "$rel: framework owner '$owner_name' spec is not installed in this root"
+      fi
     fi
   else
     warn "Unowned: $rel — no '# owner:' header on line 2"
@@ -670,12 +720,17 @@ done < <(
 if [ -d "$PROJECT_DIR/skills" ]; then
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    rel="${f#$PROJECT_DIR/}"
+    rel="${f#"$PROJECT_DIR"/}"
     owner_line=$(awk '/^---[[:space:]]*$/{n++; next} n>=2{exit} n==1 && /^owner:/{print; exit}' "$f")
     if [[ "$owner_line" =~ $skill_owner_re ]]; then
-      if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
-        warn "Unowned: $rel — owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
-        ((unowned_count++)) || true
+      owner_name="${BASH_REMATCH[1]}"
+      if [ ! -f "$SPECS_DIR/$owner_name.spec.md" ]; then
+        if missing_owner_spec_is_applicable "$rel"; then
+          warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md"
+          ((unowned_count++)) || true
+        else
+          info "$rel: framework owner '$owner_name' spec is not installed in this root"
+        fi
       fi
     else
       warn "Unowned: $rel — no 'owner:' key in YAML frontmatter"
@@ -700,7 +755,7 @@ else
     [ -z "$src_dir" ] && continue
     [ ! -d "$PROJECT_DIR/$src_dir" ] && continue
     while IFS= read -r file; do
-      rel_path="${file#$PROJECT_DIR/}"
+      rel_path="${file#"$PROJECT_DIR"/}"
       [[ "$rel_path" == *"__pycache__"* ]] && continue
       [[ "$rel_path" == *.pyc ]] && continue
       owned=false
@@ -781,7 +836,9 @@ else
     pinned_version=$(echo "$pinned_version" | xargs)
     [ -z "$pinned_version" ] && continue
 
-    def_file="$PROJECT_DIR/docs/$def_path"
+    def_file_path="$def_path"
+    [[ "$def_file_path" == *.md ]] || def_file_path="${def_file_path}.md"
+    def_file="$PROJECT_DIR/docs/$def_file_path"
     if [ ! -f "$def_file" ]; then
       warn "Definition not found: $def_path (pinned at $pinned_version in contracts.yaml)"
       ((stale_count++)) || true
@@ -1003,7 +1060,7 @@ while IFS='|' read -r _ spec status _ owns _; do
 
     for owned_file in $file_list; do
       # Convert to repo-relative for git pathspec
-      owned_rel="${owned_file#$PROJECT_DIR/}"
+      owned_rel="${owned_file#"$PROJECT_DIR"/}"
       owned_last_commit=$(git -C "$PROJECT_DIR" log -1 --format=%H -- "$owned_rel" 2>/dev/null)
       [ -z "$owned_last_commit" ] && continue
       [ "$owned_last_commit" = "$spec_last_commit" ] && continue

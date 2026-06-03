@@ -68,7 +68,7 @@ else
     # a real reference, and `<name>.md` will never resolve on disk. With
     # `<` excluded the regex simply fails to match at `definitions/<…`,
     # so the placeholder contributes no reference at all.
-    def_refs=$(grep -oE 'definitions/[^@|<>[:space:],)`]+' "$spec_file" 2>/dev/null \
+    def_refs=$(grep -oE 'definitions/[^@|<>:[:space:],)`]+' "$spec_file" 2>/dev/null \
       | sort -u || true)
 
     while IFS= read -r ref; do
@@ -137,7 +137,11 @@ else
     # Get requires pins from contracts.yaml for this spec
     yaml_section=$(sed -n "/^  ${short_name}:/,/^  [^ ]/p" "$CONTRACTS" 2>/dev/null || true)
     yaml_requires=$(echo "$yaml_section" \
-      | sed -n '/requires:/,/provides:\|^  [^ ]/p' \
+      | awk '
+          /^    requires:/ { in_requires = 1; next }
+          /^    [^ ]/ { in_requires = 0 }
+          in_requires { print }
+        ' \
       | grep -oE 'definitions/[^:[:space:]]+: *v[0-9]+' 2>/dev/null \
       | sed 's/: */:/; s/:/\@/' | sort -u || true)
 
@@ -164,7 +168,11 @@ else
       | grep -oE 'definitions/[^@|[:space:]]+@v[0-9]+' 2>/dev/null | sort -u || true)
 
     yaml_provides=$(echo "$yaml_section" \
-      | sed -n '/provides:/,/^  [^ ]/p' \
+      | awk '
+          /^    provides:/ { in_provides = 1; next }
+          /^    [^ ]/ { in_provides = 0 }
+          in_provides { print }
+        ' \
       | grep -oE 'definitions/[^:[:space:]]+: *v[0-9]+' 2>/dev/null \
       | sed 's/: */:/; s/:/\@/' | sort -u || true)
 

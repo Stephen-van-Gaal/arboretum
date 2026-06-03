@@ -27,8 +27,9 @@ CHECK="$SCRIPT_DIR/health-check.sh"
 [ -f "$GEN" ]   || { echo "FAIL: $GEN not found"   >&2; exit 1; }
 [ -f "$CHECK" ] || { echo "FAIL: $CHECK not found" >&2; exit 1; }
 
-FIXTURE=$(mktemp -d)
-trap 'rm -rf "$FIXTURE"' EXIT
+FIXTURE_PARENT=$(mktemp -d)
+FIXTURE="$FIXTURE_PARENT/project[portable]"
+trap 'rm -rf "$FIXTURE_PARENT"' EXIT
 
 fail() {
   echo "FAIL: $1" >&2
@@ -41,6 +42,8 @@ fail() {
 mkdir -p "$FIXTURE/workflows" \
          "$FIXTURE/docs/specs" \
          "$FIXTURE/docs/definitions" \
+         "$FIXTURE/.arboretum" \
+         "$FIXTURE/scripts" \
          "$FIXTURE/src" \
          "$FIXTURE/tests"
 
@@ -48,7 +51,11 @@ mkdir -p "$FIXTURE/workflows" \
 echo "# fixture" > "$FIXTURE/workflows/README.md"
 echo "# fixture" > "$FIXTURE/CLAUDE.md"
 echo "# fixture" > "$FIXTURE/docs/ARCHITECTURE.md"
-echo "# fixture" > "$FIXTURE/contracts.yaml"
+cat > "$FIXTURE/contracts.yaml" <<'EOF'
+specs:
+  foo:
+    definitions/pubmed-record: v2
+EOF
 
 # foo.spec.md — active, owns two files. Exercises the standard
 # Check 2 path-resolution and Check 3 ownership-coverage paths.
@@ -101,6 +108,35 @@ EOF
 echo "# owner: foo" > "$FIXTURE/src/foo.py"
 echo "# owner: bar" > "$FIXTURE/src/bar.py"
 echo "# owner: foo" > "$FIXTURE/tests/test_foo.py"
+
+cat > "$FIXTURE/docs/definitions/pubmed-record.md" <<'EOF'
+# PubMed Record
+
+## Version
+v2
+EOF
+
+# Consumer-upgrade fixture: a framework-managed script may carry an
+# Arboretum owner spec that is not installed in the consumer project.
+# health-check Check 3 must not report that vendored file as unowned
+# when .arboretum/install-manifest.json identifies it as framework
+# material.
+cat > "$FIXTURE/scripts/ci-checks.sh" <<'EOF'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+EOF
+cat > "$FIXTURE/.arboretum/install-manifest.json" <<'EOF'
+{
+  "schema_version": 1,
+  "framework_version": "fixture",
+  "files": {
+    "scripts/ci-checks.sh": {
+      "version": "fixture",
+      "sha256": "fixture"
+    }
+  }
+}
+EOF
 
 # health-check Check 7 (drift detection) calls `git log` on owned
 # files. A non-git fixture causes git to exit 128, which propagates
@@ -156,6 +192,29 @@ echo "$HEALTH_OUT" | grep -q 'file missing' \
 # would slip through ownership matching and surface here.
 echo "$HEALTH_OUT" | grep -q 'Unowned:' \
   && fail "health-check flagged unowned files" "$(echo "$HEALTH_OUT" | grep 'Unowned:')"
+
+# Check 3 Half A: framework-managed files listed in the install manifest
+# should not fail just because their Arboretum-internal owner specs are
+# absent from a consumer root.
+echo "$HEALTH_OUT" | grep -q 'Unowned: scripts/ci-checks.sh' \
+  && fail "health-check flagged a manifest-managed framework script" \
+          "$(echo "$HEALTH_OUT" | grep 'scripts/ci-checks.sh')"
+
+# But the same missing-owner-spec condition must remain a drift finding
+# for local scripts that are not framework-managed.
+cat > "$FIXTURE/scripts/local-tool.sh" <<'EOF'
+#!/usr/bin/env bash
+# owner: local-tooling
+EOF
+set +e
+LOCAL_OUT=$(bash "$CHECK" "$FIXTURE" 2>&1)
+LOCAL_RC=$?
+set -e
+echo "$LOCAL_OUT" | grep -q "Unowned: scripts/local-tool.sh — owner 'local-tooling' has no spec" \
+  || fail "Check 3 Half A did not flag a non-managed script with a missing owner spec" "$LOCAL_OUT"
+[ "$LOCAL_RC" -ne 0 ] \
+  || fail "health-check.sh exit 0 despite a non-managed script with a missing owner spec" "$LOCAL_OUT"
+rm -f "$FIXTURE/scripts/local-tool.sh"
 
 # The consumer's defensive skip path ("schema not compatible") must
 # not trigger when the fresh producer output is fed straight to it.

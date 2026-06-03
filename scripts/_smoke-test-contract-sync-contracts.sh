@@ -167,16 +167,8 @@ rm -rf "$DRY_FIX"
 
 # ── SC-7: round trip — generated contracts.yaml passes validate Check 3 ──
 #
-# Uses a REQUIRES-ONLY fixture deliberately. validate-cross-refs.sh Check 3
-# splits the per-spec yaml section with `sed -n '/requires:/,/provides:\|^  [^ ]/p'`;
-# the `\|` alternation is GNU-sed-only, so on BSD/macOS sed the provides block
-# bleeds into the requires comparison and Check 3 reports a spurious
-# "spec does not require it" for any spec carrying BOTH requires and provides.
-# That is a pre-existing consumer (validator) quirk, not a generator-schema
-# mismatch — the generator emits the correct shape (asserted by SC-2/SC-3).
-# The round-trip guarantee this contract pins is "generator output is what the
-# validator parses", which a requires-only spec exercises cleanly on every
-# platform without tripping the BSD-sed split bug.
+# The round-trip fixture carries both requires and provides pins so the
+# generator/validator contract covers block isolation in both directions.
 if [ -f "$VALIDATE" ]; then
   FIX_RT=$(mktemp -d)
   mkdir -p "$FIX_RT/docs/specs" "$FIX_RT/docs/definitions"
@@ -193,9 +185,16 @@ status: active
 |---|---|
 | `definitions/widget.md` | definitions/widget.md@v1 |
 
+## Provides
+
+| Definition | Version |
+|---|---|
+| `definitions/gadget.md` | definitions/gadget.md@v2 |
+
 ## Body
 SPEC
   printf '# widget\n\n## Version\nv1\n' > "$FIX_RT/docs/definitions/widget.md"
+  printf '# gadget\n\n## Version\nv2\n' > "$FIX_RT/docs/definitions/gadget.md"
   bash "$SYNC" "$FIX_RT" >/dev/null 2>&1
   validate_out=$(bash "$VALIDATE" "$FIX_RT" 2>&1 || true)
   # Isolate Check 3 region and confirm no ✗ within it.

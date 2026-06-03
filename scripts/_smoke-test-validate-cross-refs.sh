@@ -38,21 +38,19 @@ fail() {
 
 mkdir -p "$FIXTURE/docs/specs" "$FIXTURE/docs/definitions"
 
-# The `definitions/explicit-path.md` reference in the good fixture needs
-# a corresponding file on disk — otherwise Check 1 (definition refs
-# exist) flags it and validate-cross-refs.sh exits non-zero for an
-# unrelated reason, masking Check 4's actual signal.
-cat > "$FIXTURE/docs/definitions/explicit-path.md" <<'EOF'
+for definition in explicit-path wp-config blog-config literature-summary blog-page; do
+  cat > "$FIXTURE/docs/definitions/${definition}.md" <<EOF
 ---
-name: explicit-path
+name: ${definition}
 version: v1
 status: draft
 ---
 
-# explicit-path
+# ${definition}
 
 Fixture definition for the smoke test.
 EOF
+done
 
 # ── Case 1: All well-formed entries → Check 4 passes + RC=0 ──────────
 
@@ -79,6 +77,44 @@ versioned-path form (regression for stvangaal/arboretum#11 review
 feedback). Note: example notation is in the frontmatter above; do not
 write versioned-path examples in body text — Check 1's reference
 scanner would treat them as real refs and look for nonexistent files.
+
+Line-range citations to definitions should be treated as references to
+the base definition file, not as literal filenames:
+docs/definitions/wp-config.md:28-42 and docs/definitions/wp-config.md:6-8.
+EOF
+
+cat > "$FIXTURE/docs/specs/blog-publish.spec.md" <<'EOF'
+---
+name: blog-publish
+status: active
+owner: alice
+---
+
+# blog-publish
+
+## Requires
+
+| Definition | Version |
+|---|---|
+| definitions/blog-config@v0 | required |
+| definitions/literature-summary@v2 | required |
+
+## Provides
+
+| Definition | Version |
+|---|---|
+| definitions/blog-page@v0 | provided |
+EOF
+
+cat > "$FIXTURE/contracts.yaml" <<'EOF'
+version: 1
+specs:
+  blog-publish:
+    requires:
+      definitions/blog-config: v0
+      definitions/literature-summary: v2
+    provides:
+      definitions/blog-page: v0
 EOF
 
 set +e
@@ -86,8 +122,8 @@ OUT=$(bash "$VALIDATE" "$FIXTURE" 2>&1)
 RC=$?
 set -e
 
-# Whole-script exit code matters: a green Check 4 inside a failing
-# script is still a failing script for CI gating.
+# Whole-script exit code matters: a green Check inside a failing script
+# is still a failing script for CI gating.
 [ "$RC" -eq 0 ] \
   || fail "case 1: validate-cross-refs exited $RC, expected 0 on well-formed fixture" "$OUT"
 

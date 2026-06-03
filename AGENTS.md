@@ -99,7 +99,7 @@ Arboretum wraps external skills at workflow transition points:
   - **Path B:** a topic with a corresponding design spec at `docs/superpowers/specs/*-<topic>-design.md` (the governed spec will be created by `/consolidate` before PR).
 
   If asked for a code change directly, identify the spec or design spec, offer to update it, and wait for approval. `/consolidate` flips `draft → active` automatically when reconciliation succeeds; `/health-check` flips `active → stale` when drift is detected. No manual promotion step.
-- **Ownership:** Every source file includes `# owner: <spec-name>` as its first comment line.
+- **Ownership:** Every source file includes `# owner: <spec-name>` as its first comment line. Shell scripts use shebang line 1 and `# owner: <spec-name>` line 2.
 - **Permitted without spec change:** implementation-detail refactoring (preserves behaviour, tests pass), patch fixes (code didn't match spec), supplementary test additions.
 - **Draft mode:** During early development when documents are `draft`, note ambiguities and continue rather than stopping. Stop only for contradictions or infeasibility.
 

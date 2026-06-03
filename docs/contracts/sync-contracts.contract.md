@@ -109,9 +109,10 @@ Exit codes:
 - **SC-4:** A spec with no definition references does NOT appear in the `specs:` tree.
 - **SC-5:** When no spec carries any pin, the output contains `specs: {}`.
 - **SC-6:** `--dry-run` prints the document to stdout and writes no `contracts.yaml` (file absent / unchanged).
-- **SC-7:** Round-trip: a generated `contracts.yaml` passes `validate-cross-refs.sh` Check 3 against the same specs with zero Check-3 issues. (Exercised with a requires-only spec — the validator's `requires:`/`provides:` section split uses a GNU-sed-only `\|` alternation that on BSD/macOS sed bleeds provides into the requires comparison, producing a spurious Check-3 mismatch for any spec with both. That is a pre-existing validator quirk, not a generator-schema desync — SC-2/SC-3 already pin the correct emitted shape for both blocks.)
+- **SC-7:** Round-trip: a generated `contracts.yaml` passes `validate-cross-refs.sh` Check 3 against the same specs with zero Check-3 issues, including specs that carry both `requires:` and `provides:` blocks.
 - **SC-8:** Absent specs directory → exit non-zero with a stderr diagnostic.
 
 ## Versioning
 
+- **1.1** (2026-06-02) — SC-7 now includes the both-`requires:`-and-`provides:` round trip after `validate-cross-refs.sh` fixed portable sub-block parsing. Issue #410.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/sync-contracts.sh` and consumer `scripts/validate-cross-refs.sh` Check 3 on `main`. Issue #303 (WS5 PR 7a).

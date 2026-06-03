@@ -23,7 +23,7 @@ The cross-cutting integrity validator that checks consistency *across* governanc
 
 Takes one optional positional argument — `[project-dir]` (defaults to `$(pwd)`) — and resolves `docs/REGISTER.md`, `contracts.yaml`, and `docs/specs/` beneath it. Runs four checks, accumulating a single `issues` counter:
 
-- **Check 1** — every `definitions/…` reference scraped from each spec's Requires/Provides tables resolves to an existing file under `docs/`. (Backticks and angle brackets are excluded from the scrape so markdown-wrapped refs and `<placeholder>` prose are not treated as real references.)
+- **Check 1** — every `definitions/…` reference scraped from each spec resolves to an existing file under `docs/`. Backticks and angle brackets are excluded from the scrape so markdown-wrapped refs and `<placeholder>` prose are not treated as real references; line-range citation suffixes such as `definitions/foo.md:12-34` are not part of the filesystem path.
 - **Check 2** — every `*.spec` row in `docs/REGISTER.md` names a file that exists in `docs/specs/`.
 - **Check 3** — `contracts.yaml` `requires:`/`provides:` pins for each spec match the spec's own `## Requires`/`## Provides` `@vN` pins, in both directions (spec→yaml and yaml→spec).
 - **Check 4** — each frontmatter `requires:`/`provides:` entry is well-formed: path-shaped entries (containing `/`) end in `.md`; versioned entries (containing `@`) match `@v<N>` exactly; bare names pass.
@@ -61,13 +61,14 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 - **Whole-document report, not first-fail.** All four checks always run; the summary `<N>` is the total issue count across every check, not the first failure.
 - **Missing input is skipped, not failed.** Absent `REGISTER.md`, `contracts.yaml`, or `docs/specs/` yields a `·` info line and does not increment `issues`.
 - **No mutation.** Read-only — never writes any document.
-- **Known portability quirk — Check 3 BSD/macOS-sed `requires`/`provides` bleed.** Check 3 splits the per-spec `contracts.yaml` section into `requires:`/`provides:` sub-blocks with a GNU-sed-only `\|` alternation (`sed -n '/requires:/,/provides:\|^  [^ ]/p'`, ~line 140). On BSD/macOS `sed`, `\|` is a literal, not an alternation, so for a spec carrying **both** `requires:` and `provides:` the provides block bleeds into the requires comparison and Check 3 emits a spurious "contracts.yaml … but spec does not require it" mismatch. This is the same pre-existing quirk documented in `docs/contracts/sync-contracts.contract.md` (SC-7); it is a validator portability defect, **not** a generator-schema desync, and is out of scope for this contract — the validator is intentionally unmodified. Smoke tests and round-trip checks (SC-7, and this contract's VCR test surface) avoid both-`requires`-and-`provides` fixtures on the affected path so the suite runs clean cross-platform.
+- **Requires/provides block isolation (Check 3).** The `requires:` comparison reads only the `requires:` sub-block in `contracts.yaml`; the terminating `provides:` line and provider entries MUST NOT be included. Likewise, the `provides:` comparison reads only provider entries. This is portable across GNU and BSD/macOS toolchains.
 
 ## Test surface
 
 - **VCR-1:** real repo root (`bash validate-cross-refs.sh` with no arg, project-dir defaulting to the repo) → exit 0, stdout `CONSISTENT: All cross-reference checks passed.` and `All frontmatter dep notations are well-formed`.
-- **VCR-2:** the existing Check-4 smoke test (`scripts/_smoke-test-validate-cross-refs.sh`) passes — well-formed fixture exits 0, five malformed dep entries each flagged with their distinct warning, no-requires spec leaves Check 4 green. (Its fixtures use a provides-only and a requires-only spec on the Check-3-affected path, dodging the BSD-sed quirk.)
+- **VCR-2:** the existing smoke test (`scripts/_smoke-test-validate-cross-refs.sh`) passes — well-formed fixture exits 0, line-range definition citations do not create fake filenames, a spec with both `requires:` and `provides:` passes Check 3, five malformed dep entries each flagged with their distinct warning, and a no-requires/provides spec leaves Check 4 green.
 
 ## Versioning
 
-- **1.0** (2026-05-30) — initial contract. Validator shape as of `scripts/validate-cross-refs.sh` on `main` (four checks, stdout `✓`/`✗` wording, exit 0/1, no exit-2 path; Check-3 BSD-sed quirk documented as a known portability invariant). Issue #303 (WS5 PR 7a).
+- **1.1** (2026-06-02) — Check 1 ignores line-range suffixes in definition citations, and Check 3 now isolates `requires:` and `provides:` blocks portably instead of documenting the BSD/macOS sed bleed as a known quirk. Issues #410 and #476.
+- **1.0** (2026-05-30) — initial contract. Validator shape as of `scripts/validate-cross-refs.sh` on `main` (four checks, stdout `✓`/`✗` wording, exit 0/1, no exit-2 path). Issue #303 (WS5 PR 7a).
