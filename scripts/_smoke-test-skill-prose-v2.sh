@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # _smoke-test-skill-prose-v2.sh — Prose-regression checks for the v2-only
 # sections of /start and /design. These are structural invariants —
 # accidental edits that break the v2 routing will be caught here.
@@ -15,6 +16,24 @@ ok() { echo "PASS: $1"; }
 
 START="skills/start/SKILL.md"
 DESIGN="skills/design/SKILL.md"
+FINISH="skills/finish/SKILL.md"
+CONSOLIDATE="skills/consolidate/SKILL.md"
+HEALTH="skills/health-check/SKILL.md"
+
+missing_skill_files=()
+for skill_file in "$START" "$DESIGN" "$FINISH" "$CONSOLIDATE" "$HEALTH"; do
+  [ -f "$skill_file" ] || missing_skill_files+=("$skill_file")
+done
+
+if [ "${#missing_skill_files[@]}" -gt 0 ]; then
+  if [ -f ".codex-plugin/plugin.json" ] || [ -f ".claude-plugin/plugin.json" ]; then
+    fail "skill-prose v2 invariants require Arboretum plugin skill files" \
+      "$(printf 'missing %s\n' "${missing_skill_files[@]}")"
+  fi
+  echo "SKIP: skill-prose v2 invariants require Arboretum plugin skill files"
+  printf 'SKIP: missing %s\n' "${missing_skill_files[@]}"
+  exit 0
+fi
 
 # /start invariants
 
@@ -114,10 +133,6 @@ grep -q "/build docs/superpowers/specs" "$DESIGN" \
 ok "case 11 — /design Section v2 exits to /build correctly"
 
 # PR3: /finish, /consolidate, /health-check invariants
-
-FINISH="skills/finish/SKILL.md"
-CONSOLIDATE="skills/consolidate/SKILL.md"
-HEALTH="skills/health-check/SKILL.md"
 
 # Case 12: /finish has Step 0 (flag read)
 grep -q "^### Step 0: Read the pipeline\.workflow flag" "$FINISH" \
