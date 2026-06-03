@@ -380,10 +380,10 @@ cat > "$MINI_FIXTURE/CLAUDE.md" <<'INNER'
 
 **Time horizon:** Through 2099-Q4 (next review: 2099-12-31)
 
-### In scope (this period)
+**In scope:**
 - Mini fixture test
 
-### Out of scope (this period)
+**Out of scope:**
 - Anything else
 INNER
 
@@ -425,15 +425,60 @@ MINI_CHECK9_BLOCK=$(echo "$MINI_OUT" | awk '
 ')
 
 if echo "$MINI_CHECK9_BLOCK" | grep -qE "^  ✓"; then
-  pass "HC-7 (positive): Check 9 emits ✓ when roadmap.config.yaml present"
+  pass "HC-7 (positive): Check 9 emits ✓ with bold Strategic Anchor scope labels"
 else
-  fail_case "HC-7 (positive): expected Check 9 ✓ line in mini fixture with roadmap.config.yaml" "$MINI_CHECK9_BLOCK"
+  fail_case "HC-7 (positive): expected Check 9 ✓ line for bold Strategic Anchor scope labels" "$MINI_CHECK9_BLOCK"
+fi
+
+if echo "$MINI_CHECK9_BLOCK" | grep -q 'integer expression expected'; then
+  fail_case "HC-7 (positive): bold Strategic Anchor scope labels must not trigger integer comparison errors" "$MINI_CHECK9_BLOCK"
+else
+  pass "HC-7 (positive): bold Strategic Anchor scope labels produce integer-safe bullet counts"
 fi
 
 if [ "$mini_exit" -eq 0 ]; then
   pass "HC-7 (positive): mini fixture exits 0 (all checks pass)"
 else
   fail_case "HC-7 (positive): mini fixture expected exit 0, got $mini_exit" "$MINI_OUT"
+fi
+
+cat > "$MINI_FIXTURE/CLAUDE.md" <<'INNER'
+# CLAUDE.md (mini fixture)
+
+## Strategic Anchor
+
+**Time horizon:** Through 2099-Q4 (next review: 2099-12-31)
+
+**In scope:**
+
+**Out of scope:**
+INNER
+
+EMPTY_SCOPE_OUT=$(bash "$HC" "$MINI_FIXTURE" 2>&1)
+empty_scope_exit=$?
+
+EMPTY_SCOPE_CHECK9_BLOCK=$(echo "$EMPTY_SCOPE_OUT" | awk '
+  /^━━━ Check 9:/ { in_block=1; next }
+  /^━━━ Check [0-9]/ && in_block { exit }
+  in_block { print }
+')
+
+if echo "$EMPTY_SCOPE_CHECK9_BLOCK" | grep -q "In scope"; then
+  pass "HC-7 (negative): bold In scope label with no bullets emits a warning"
+else
+  fail_case "HC-7 (negative): expected warning for empty bold In scope section" "$EMPTY_SCOPE_CHECK9_BLOCK"
+fi
+
+if echo "$EMPTY_SCOPE_CHECK9_BLOCK" | grep -q "Out of scope"; then
+  pass "HC-7 (negative): bold Out of scope label with no bullets emits a warning"
+else
+  fail_case "HC-7 (negative): expected warning for empty bold Out of scope section" "$EMPTY_SCOPE_CHECK9_BLOCK"
+fi
+
+if [ "$empty_scope_exit" -ne 0 ]; then
+  pass "HC-7 (negative): empty bold scope fixture exits non-zero"
+else
+  fail_case "HC-7 (negative): empty bold scope fixture expected non-zero exit" "$EMPTY_SCOPE_OUT"
 fi
 
 # ── HC-5: Check 7 read-only default ──────────────────────────────────

@@ -19,7 +19,7 @@
 #   1. Governed documents exist (ARCHITECTURE, REGISTER, contracts, etc.)
 #   2. Register vs. disk (do owned files exist?)
 #   3. Unowned source files. Half A — framework owner-marker scan
-#      (.sh/bin/ line-2 # owner:, SKILL.md owner: frontmatter), runs
+#      (.sh/bin/ first non-shebang # owner:, SKILL.md owner: frontmatter), runs
 #      register-independent. Half B — general source-ownership scan of
 #      project source roots (*.py vs. spec owns: coverage), gated on a
 #      compatible REGISTER.md schema.
@@ -134,6 +134,22 @@ missing_owner_spec_is_applicable() {
     return 1
   fi
   return 0
+}
+
+is_generated_source_artifact() {
+  local rel="$1"
+  case "$rel" in
+    */__pycache__/*|*.pyc) return 0 ;;
+  esac
+  return 1
+}
+
+shell_owner_marker() {
+  local file="$1"
+  awk '
+    NR == 1 && /^#!/ { next }
+    { print; exit }
+  ' "$file"
 }
 
 # O(N) membership test. Kept linear (not an associative array) because
@@ -676,7 +692,7 @@ fi
 
 # Check 3: every source file carries a resolvable owner marker.
 #   .sh under scripts/ (excl _archived/, _fixtures/) and .claude/hooks/,
-#   and bin/* executables: line 2 must be `# owner: <spec-name>`.
+#   and bin/* executables: first non-shebang line must be `# owner: <spec-name>`.
 #   skills/*/SKILL.md: YAML frontmatter must carry an `owner:` key.
 #   The named spec must exist at docs/specs/<name>.spec.md.
 # Scan roots are fixed: scripts/, .claude/hooks/, bin/, skills/.
@@ -687,12 +703,15 @@ owner_re='^# owner: ([a-z][a-z0-9-]+)$'
 skill_owner_re='^owner:[[:space:]]*([a-z][a-z0-9-]+)[[:space:]]*$'
 
 # .sh files under scripts/ (excl _archived, _fixtures) and .claude/hooks/,
-# plus bin/* — all use the line-2 `# owner:` convention.
+# plus bin/* — all use the first non-shebang `# owner:` convention.
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   rel="${f#"$PROJECT_DIR"/}"
-  line2=$(sed -n '2p' "$f")
-  if [[ "$line2" =~ $owner_re ]]; then
+  if is_generated_source_artifact "$rel"; then
+    continue
+  fi
+  owner_line=$(shell_owner_marker "$f")
+  if [[ "$owner_line" =~ $owner_re ]]; then
     owner_name="${BASH_REMATCH[1]}"
     if [ ! -f "$SPECS_DIR/$owner_name.spec.md" ]; then
       if missing_owner_spec_is_applicable "$rel"; then
@@ -703,7 +722,7 @@ while IFS= read -r f; do
       fi
     fi
   else
-    warn "Unowned: $rel — no '# owner:' header on line 2"
+    warn "Unowned: $rel — no '# owner:' header on first non-shebang line"
     ((unowned_count++)) || true
   fi
 done < <(
@@ -713,7 +732,9 @@ done < <(
   [ -d "$PROJECT_DIR/.claude/hooks" ] && \
     find "$PROJECT_DIR/.claude/hooks" -type f -name '*.sh' -print 2>/dev/null
   [ -d "$PROJECT_DIR/bin" ] && \
-    find "$PROJECT_DIR/bin" -type f -print 2>/dev/null
+    find "$PROJECT_DIR/bin" \
+         -type d -name __pycache__ -prune -o \
+         -type f ! -name '*.pyc' -print 2>/dev/null
 )
 
 # skills/*/SKILL.md — YAML frontmatter `owner:` key.
@@ -1224,14 +1245,32 @@ strategic_anchor_check() {
 
     # 3. In/out scope non-empty (≥1 bullet each)
     local in_bullets out_bullets
-    in_bullets=$(awk '/^### In scope/{found=1; next} found && /^### /{exit} found{print}' "$claude" \
-      | grep -cE '^- ' 2>/dev/null || echo 0)
-    out_bullets=$(awk '/^### Out of scope/{found=1; next} found && /^### /{exit} found{print}' "$claude" \
-      | grep -cE '^- ' 2>/dev/null || echo 0)
+    in_bullets=$(awk -v target="in scope" '
+      function starts_scope(line, scope) {
+        line = tolower(line)
+        return line ~ "^###[[:space:]]*" scope "([[:space:]:()]|$)" ||
+               line ~ "^\\*\\*[[:space:]]*" scope ":[[:space:]]*\\*\\*[[:space:]]*$"
+      }
+      starts_scope($0, target) { found=1; next }
+      found && (starts_scope($0, "in scope") || starts_scope($0, "out of scope")) { exit }
+      found && /^- / { count++ }
+      END { print count + 0 }
+    ' "$claude")
+    out_bullets=$(awk -v target="out of scope" '
+      function starts_scope(line, scope) {
+        line = tolower(line)
+        return line ~ "^###[[:space:]]*" scope "([[:space:]:()]|$)" ||
+               line ~ "^\\*\\*[[:space:]]*" scope ":[[:space:]]*\\*\\*[[:space:]]*$"
+      }
+      starts_scope($0, target) { found=1; next }
+      found && (starts_scope($0, "in scope") || starts_scope($0, "out of scope")) { exit }
+      found && /^- / { count++ }
+      END { print count + 0 }
+    ' "$claude")
     [ "$in_bullets" -lt 1 ] && \
-      echo "WARN [strategic-anchor]: '### In scope (this period)' has no bullets" && issues=$((issues + 1))
+      echo "WARN [strategic-anchor]: 'In scope' has no bullets" && issues=$((issues + 1))
     [ "$out_bullets" -lt 1 ] && \
-      echo "WARN [strategic-anchor]: '### Out of scope (this period)' has no bullets" && issues=$((issues + 1))
+      echo "WARN [strategic-anchor]: 'Out of scope' has no bullets" && issues=$((issues + 1))
   fi
 
   # 4. Cadence not overdue
