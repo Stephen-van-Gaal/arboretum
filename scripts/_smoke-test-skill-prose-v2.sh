@@ -127,6 +127,19 @@ grep -q "superpowers:writing-plans" "$DESIGN" \
   || fail "case 10 — /design Section v2 does not invoke superpowers:writing-plans"
 ok "case 10 — /design Section v2 folds in planning via superpowers:writing-plans"
 
+# Case 10a: /design Section v2 requires customer/operator experience guidance
+echo "$SECTION_V2" | grep -Eq "Customer Experience|customer/operator experience" \
+  || fail "case 10a — /design Section v2 missing customer/operator experience guidance"
+for phrase in "workflow steps" "ship-tail behaviour" "error or warning states" "user decisions or confirmations" "trust boundaries"; do
+  echo "$SECTION_V2" | grep -q "$phrase" \
+    || fail "case 10a — /design customer/operator guidance missing trigger phrase: $phrase"
+done
+for phrase in "normal path" "failure or unknown path" "user decision points"; do
+  echo "$SECTION_V2" | grep -q "$phrase" \
+    || fail "case 10a — /design customer/operator guidance missing coverage phrase: $phrase"
+done
+ok "case 10a — /design Section v2 covers customer/operator experience guidance"
+
 # Case 11: /design Section v2 exits to /build with design spec path
 grep -q "/build docs/superpowers/specs" "$DESIGN" \
   || fail "case 11 — /design Section v2 does not exit to /build with design spec path"

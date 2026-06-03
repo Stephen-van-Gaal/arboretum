@@ -225,6 +225,16 @@ Invoke the mode's provider skill (if any) with a brief that includes:
 - Naming convention: design spec lands at `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
 - Template: for modes where this skill authors the spec directly (investigate, coverage-baseline, none), use `docs/templates/spec.md` as the structural skeleton so `/consolidate` at `/finish` can harvest from it correctly
 
+Before writing the design spec, apply the **customer/operator experience check**:
+when the change affects workflow steps, ship-tail behaviour, error or warning states,
+user decisions or confirmations, or trust boundaries where Arboretum
+might otherwise overclaim, include a short `## Customer Experience` section (or
+equivalent clearly named section) in the design output. The section should cover
+the normal path, the failure or unknown path, and user decision points: what the
+human sees, what they are asked to decide, what confidence Arboretum is claiming,
+and what happens when Arboretum cannot know. Purely internal refactors with no
+user-visible workflow effect may omit the section.
+
 For **brainstorm** mode, the provider's output is the design spec. For **investigate** mode, the provider's output is a structured root-cause analysis; transcribe it into the design spec template. For **coverage-baseline** mode, run the project's declared default test command (`default-command` from `docs/specs/test-infrastructure.spec.md` via `bash scripts/read-test-config.sh`; if the spec file is present but the reader fails, fail the coverage-baseline gate and surface its stderr diagnostic; if the spec file is absent, fall back to native product-test discovery via `package.json`/`Makefile`/`pytest.ini`; never run the `opt-in-commands` tiers), identify coverage gaps in the refactor's blast radius, and document them in the design spec's Behaviour section as "tests to add before the refactor begins". For **none** mode, author the design spec directly from the request — Purpose + Behaviour + a single "decision: change is trivially well-defined, no Branch 1 dialogue needed" entry.
 
 All four modes produce a design spec at the conventional path. The spec is mandatory under v2 — never skip it (D4: "the everything-else pre-build **always** produces an ephemeral design spec").
