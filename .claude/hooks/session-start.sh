@@ -107,7 +107,7 @@ if [ -f "$NEXT_REFRESH" ]; then
     # Extract fields with python3 (preferred) or sed fallback.
     if command -v python3 >/dev/null 2>&1; then
       next_block=$(python3 - "$NEXT_CACHE" <<'PY'
-import json, re, sys
+import json, os, re, sys
 try:
     with open(sys.argv[1]) as f:
         cache = json.load(f)
@@ -123,6 +123,15 @@ _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 
+def latest_cache_err():
+    err_path = os.path.join(os.path.dirname(sys.argv[1]), "next-cache.err")
+    try:
+        with open(err_path, encoding="utf-8", errors="replace") as f:
+            lines = [scrub(ln.strip()) for ln in f if ln.strip()]
+    except Exception:
+        return ""
+    return lines[-1] if lines else ""
+
 err = cache.get("error")
 no_remote = cache.get("no_gh_remote", False)
 issue = cache.get("issue")
@@ -133,6 +142,12 @@ if err == "gh-unavailable":
     lines.append("  → Install: https://cli.github.com/")
     lines.append("  → Authenticate: gh auth login")
     lines.append("  → Then refresh: bash scripts/refresh-next-cache.sh")
+elif err == "azure-devops-unavailable":
+    lines.append("[Next-up] ERROR: Azure DevOps backend unavailable — cannot read next-up state.")
+    detail = latest_cache_err()
+    if detail:
+        lines.append(f"  → {detail}")
+    lines.append("  → Check Azure CLI auth/config, then refresh: bash scripts/refresh-next-cache.sh")
 elif no_remote:
     pass  # silent skip; not a GH project
 elif err:
@@ -174,6 +189,8 @@ PY
       next_block=""
       if grep -q '"error":[[:space:]]*"gh-unavailable"' "$NEXT_CACHE"; then
         next_block="[Next-up] ERROR: gh CLI not available — cannot read next-up state."$'\n'"  → Install: https://cli.github.com/"$'\n'"  → Authenticate: gh auth login"$'\n'"  → Then refresh: bash scripts/refresh-next-cache.sh"
+      elif grep -q '"error":[[:space:]]*"azure-devops-unavailable"' "$NEXT_CACHE"; then
+        next_block="[Next-up] ERROR: Azure DevOps backend unavailable — cannot read next-up state."$'\n'"  → Check Azure CLI auth/config, then refresh: bash scripts/refresh-next-cache.sh"
       elif grep -q '"no_gh_remote":[[:space:]]*true' "$NEXT_CACHE"; then
         next_block=""
       elif grep -q '"issue":[[:space:]]*null' "$NEXT_CACHE"; then
@@ -718,7 +735,7 @@ if [ "$LAYER" -lt 2 ]; then
     [ "$ci_count" -gt 0 ] && suggest_l2=true
   fi
   if [ "$suggest_l2" = false ]; then
-    author_count=$(git -C "$PROJECT_DIR" log --format='%ae' 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    author_count=$( { git -C "$PROJECT_DIR" log --format='%ae' 2>/dev/null || true; } | sort -u | wc -l | tr -d ' ')
     [ "$author_count" -ge 2 ] && suggest_l2=true
   fi
   if [ "$suggest_l2" = true ]; then

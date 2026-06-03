@@ -1,6 +1,6 @@
 ---
 seam: refresh-next-cache
-version: 1.2
+version: 1.3
 producer-type: script
 consumer-type: hook
 consumes:
@@ -32,7 +32,7 @@ Path resolution uses `PROJECT_DIR` (positional arg, defaults to `git rev-parse -
 
 All author-controlled string fields written into the cache are scrubbed of ASCII control characters (`\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f`) before serialization (the `scrub()` function inside the python3 cache-builder, plus the `comment_fetch_err` scrub on the new error path).
 
-The two tracker calls degrade in coordinated ways: the primary list call's failure sets the whole-cache `error` field (`gh-unavailable` or `gh-call-failed`, retained for cache-schema compatibility while GitHub is the only implemented adapter), invalidating the cache as a whole; the secondary comment-fetch call's failure sets a *scoped* error marker on the `handoff` field, preserving the valid item data above it.
+The two tracker calls degrade in coordinated ways: the primary list call's failure sets the whole-cache `error` field (`gh-unavailable` / `gh-call-failed` for GitHub, `azure-devops-unavailable` / `azure-devops-call-failed` for Azure DevOps, or a generic backend/tracker fallback), invalidating the cache as a whole; the secondary comment-fetch call's failure sets a *scoped* error marker on the `handoff` field, preserving the valid item data above it.
 
 ## Consumer
 
@@ -58,8 +58,8 @@ Reads (under the project-dir root):
 
 - `git remote` — to detect whether any repo remote is configured at all (`no_gh_remote: true` legacy-field short-circuit when no remote is configured).
 - `roadmap_backend [PROJECT_DIR]` — selects the configured backend (`github` by default).
-- `roadmap_require_backend` — validates local prerequisites. For `github`, `gh` must be installed and authenticated. For `azure-devops`, Azure CLI, the Azure DevOps extension, readable defaults, and `jq` must be available. Absence or auth/setup failure sets whole-cache `error: "gh-unavailable"` and exits 1; that legacy error value is retained for cache-schema compatibility.
-- `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` — the primary list call. Failure (other than "not a GH repo" on the GitHub adapter) sets whole-cache `error: "gh-call-failed"` and exits 2.
+- `roadmap_require_backend` — validates local prerequisites. For `github`, `gh` must be installed and authenticated. For `azure-devops`, Azure CLI, the Azure DevOps extension, readable defaults, and `jq` must be available. Absence or auth/setup failure sets a provider-specific whole-cache unavailable error and exits 1.
+- `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` — the primary list call. Failure (other than "not a GH repo" on the GitHub adapter) sets a provider-specific whole-cache call-failed error and exits 2.
 - `roadmap_tracker_issue_show <N> --json comments` — the secondary comment-fetch call, made only when the primary list returned an item. Failure sets `handoff: {"error": "fetch-failed", "detail": <stderr-first-line>}` and the script continues to exit 0.
 - `python3` — used for body truncation and JSON assembly. Absence triggers the minimal-fallback cache shape with whole-cache `error: "python3 unavailable; issue details omitted in fallback cache"` and exits 0.
 
@@ -88,6 +88,8 @@ Writes to `.arboretum/next-cache.json` (atomic via mktemp + mv). Cache shape:
                 "detail": "<first line of tracker stderr, control-char-stripped>" },
   "no_gh_remote": true | false,
   "error": null | "gh-unavailable" | "gh-call-failed"
+                | "azure-devops-unavailable" | "azure-devops-call-failed"
+                | "backend-unavailable" | "tracker-call-failed"
                 | "python3 unavailable; issue details omitted in fallback cache"
 }
 ```
@@ -99,8 +101,8 @@ Also writes diagnostic lines to `.arboretum/next-cache.err` via the `write_err()
 Exit codes:
 
 - `0` — cache written successfully. Sub-cases: issue found and handoff fetched OK; issue found and no handoff comment exists; issue found and handoff fetch failed (error union recorded in cache); no issue carries the `next-up` label; no repo remote configured.
-- `1` — selected backend unavailable. For the current GitHub adapter this means `gh` CLI missing OR `gh` unauthenticated. Whole-cache `error: "gh-unavailable"` recorded.
-- `2` — primary tracker list call failed for some other reason. Whole-cache `error: "gh-call-failed"` recorded.
+- `1` — selected backend unavailable. Whole-cache provider-specific unavailable error recorded.
+- `2` — primary tracker list call failed for some other reason. Whole-cache provider-specific call-failed error recorded.
 
 ### Invariants
 
@@ -124,6 +126,7 @@ Exit codes:
 
 ## Versioning
 
+- **1.3** (2026-06-03) — adds provider-specific Azure DevOps whole-cache errors so SessionStart can render ADO diagnostics instead of GitHub install/auth guidance. Issue #485.
 - **1.2** (2026-05-31) — contract wording is backend-neutral while retaining the legacy `gh-*` cache error values for schema compatibility.
 - **1.1** (2026-05-31) — producer now calls the backend-neutral roadmap tracker helpers; cache schema and consumer protocol remain unchanged.
 - **1.0** (2026-05-28) — initial contract. Producer + consumer shapes as of `scripts/refresh-next-cache.sh` post-Task-1 and `.claude/hooks/session-start.sh` post-Task-2 on `main`. Closes #264 (comment-fetch failure silently blanking the handoff) as "non-recurrable by construction" — RNC-4 asserts the failure path produces the explicit error union; any future regression to a silent-null fallback fails the smoke test.

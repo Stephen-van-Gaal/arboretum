@@ -11,6 +11,8 @@
 #   5. Cache stale (> 1h)             → hook kicks off background refresh
 #   6. Empty-body issue               → annotated as failing readiness
 #   7. gh stub returning empty list   → "no issue queued" rendering
+#   8. Empty git history              → hook exits 0
+#   9. ADO backend unavailable        → ADO diagnostic, not gh guidance
 #
 # Each case builds an isolated fixture under a tempdir and runs
 # `.claude/hooks/session-start.sh` against it with a custom PATH that
@@ -74,6 +76,23 @@ EOF
   git -C "$fix" -c commit.gpgsign=false -c gpg.program=true \
       commit -q --allow-empty -m "fixture seed" >/dev/null 2>&1 || true
 
+  echo "$fix"
+}
+
+new_fixture_no_commit() {
+  local name="$1"
+  local fix="$ROOT_TMP/$name"
+  mkdir -p "$fix/docs/definitions" "$fix/docs/specs" "$fix/scripts/roadmap" "$fix/.claude/hooks" "$fix/.arboretum"
+  echo "# fixture" > "$fix/docs/ARCHITECTURE.md"
+  echo "# fixture" > "$fix/docs/REGISTER.md"
+  echo "# fixture" > "$fix/contracts.yaml"
+  cat > "$fix/.arboretum.yml" <<'EOF'
+layer: 0
+EOF
+  cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
+  cp "$REFRESH" "$fix/scripts/refresh-next-cache.sh"
+  cp "$REPO_ROOT/scripts/roadmap/lib.sh" "$fix/scripts/roadmap/lib.sh"
+  git -C "$fix" init -q
   echo "$fix"
 }
 
@@ -300,6 +319,49 @@ out=$(run_hook "$fix" "PATH=$bindir:$PATH" "GH_STUB_MODE=no-issues")
 echo "$out" | grep -q 'no issue queued' \
   || fail "case 7 — expected '(no issue queued — run /handoff to set one)'" "$out"
 ok "case 7 — empty next-up renders as 'no issue queued'"
+
+# ── Case 8: empty git history must not crash the hook ────────────────
+
+fix=$(new_fixture_no_commit case8)
+set +e
+out=$(run_hook "$fix" "PATH=$PATH")
+rc=$?
+set -e
+[ "$rc" -eq 0 ] \
+  || fail "case 8 — empty git history should not make SessionStart exit nonzero" "rc=$rc output=$out"
+ok "case 8 — empty git history exits 0"
+
+# ── Case 9: ADO backend unavailable renders ADO guidance ─────────────
+
+fix=$(new_fixture case9)
+rm -f "$fix/.arboretum.yml"
+cat > "$fix/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+azure_devops:
+  organization: VCH-DataAnalytics
+  project: Advanced_Data_Analytics
+YAML
+git -C "$fix" remote add origin "https://dev.azure.com/VCH-DataAnalytics/Advanced_Data_Analytics/_git/cedar"
+
+case9_bin="$fix/.bin-isolated"
+mkdir -p "$case9_bin"
+for tool in bash sh git awk sed grep find date stat mktemp cat head \
+            cut tr wc sort sleep basename dirname env mv rm mkdir \
+            touch printf true false cp python3 chmod ls echo tail \
+            test [ stty tty xargs uname jq; do
+  resolved=$(command -v "$tool" 2>/dev/null || true)
+  if [ -n "$resolved" ]; then
+    ln -sf "$resolved" "$case9_bin/$tool"
+  fi
+done
+
+out=$(run_hook "$fix" "PATH=$case9_bin")
+echo "$out" | grep -q 'Azure DevOps backend unavailable' \
+  || fail "case 9 — expected Azure DevOps unavailable diagnostic" "$out"
+if echo "$out" | grep -q 'gh CLI not available'; then
+  fail "case 9 — ADO backend failure must not render gh CLI guidance" "$out"
+fi
+ok "case 9 — ADO backend failure renders ADO diagnostic"
 
 # ── Done ─────────────────────────────────────────────────────────────
 

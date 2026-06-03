@@ -22,6 +22,8 @@
 #                    | { "error": "fetch-failed", "detail": "<string>" }  # comment-fetch failure
 #     "no_gh_remote": true | false,
 #     "error": null | "gh-unavailable" | "gh-call-failed"
+#                  | "azure-devops-unavailable" | "azure-devops-call-failed"
+#                  | "backend-unavailable" | "tracker-call-failed"
 #                  | "python3 unavailable; issue details omitted in fallback cache"
 #   }
 #
@@ -127,13 +129,18 @@ fi
 
 backend_stderr=$(mktemp "$CACHE_DIR/backend.stderr.XXXXXX")
 if ! roadmap_probe_backend_access "$ROADMAP_BACKEND" "$PROJECT_DIR" > /dev/null 2>"$backend_stderr"; then
+  backend_unavailable_error="backend-unavailable"
+  case "$ROADMAP_BACKEND" in
+    github) backend_unavailable_error="gh-unavailable" ;;
+    azure-devops) backend_unavailable_error="azure-devops-unavailable" ;;
+  esac
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
   "handoff": null,
   "no_gh_remote": false,
-  "error": "gh-unavailable"
-}' "$(now_iso)")"
+  "error": "%s"
+}' "$(now_iso)" "$backend_unavailable_error")"
   while IFS= read -r _err_line; do
     [ -n "$_err_line" ] && write_err "$_err_line"
   done < "$backend_stderr"
@@ -162,7 +169,8 @@ if [ "$tracker_exit" -ne 0 ]; then
   tracker_err=$(cat "$tracker_stderr" 2>/dev/null || true)
   rm -f "$tracker_stdout" "$tracker_stderr"
   # Distinguish "not a GitHub repo" from other default-adapter failures.
-  if printf '%s' "$tracker_err" | grep -qiE 'no.*github.*remote|not a github repository'; then
+  if [ "$ROADMAP_BACKEND" = "github" ] \
+     && printf '%s' "$tracker_err" | grep -qiE 'no.*github.*remote|not a github repository'; then
     write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
@@ -172,13 +180,18 @@ if [ "$tracker_exit" -ne 0 ]; then
 }' "$(now_iso)")"
     exit 0
   fi
+  tracker_call_error="tracker-call-failed"
+  case "$ROADMAP_BACKEND" in
+    github) tracker_call_error="gh-call-failed" ;;
+    azure-devops) tracker_call_error="azure-devops-call-failed" ;;
+  esac
   write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
   "handoff": null,
   "no_gh_remote": false,
-  "error": "gh-call-failed"
-}' "$(now_iso)")"
+  "error": "%s"
+}' "$(now_iso)" "$tracker_call_error")"
   write_err "tracker issue list call failed: $tracker_err"
   exit 2
 fi

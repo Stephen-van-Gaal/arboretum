@@ -168,6 +168,55 @@ PYEOF
   fi
 }
 
+roadmap_yaml_nested_scalar_get() {
+  local yaml_file="$1"
+  local section="$2"
+  local key="$3"
+  [ -f "$yaml_file" ] || return 1
+  if ! [[ "$section" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
+     || ! [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+    echo "roadmap_yaml_nested_scalar_get: invalid section/key name: $section.$key" >&2
+    return 1
+  fi
+  if command -v yq >/dev/null 2>&1; then
+    yq -r ".${section}.${key} // \"\"" "$yaml_file"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$yaml_file" "$section" "$key" <<'PYEOF'
+import re, sys
+path, section, key = sys.argv[1], sys.argv[2], sys.argv[3]
+in_section = False
+with open(path) as f:
+    for raw in f:
+        line = raw.rstrip("\n")
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            if re.match(r"^" + re.escape(section) + r"\s*:\s*(?:#.*)?$", line):
+                in_section = True
+                continue
+            if in_section:
+                break
+        if not in_section:
+            continue
+        m = re.match(r"^[ \t]+" + re.escape(key) + r"\s*:\s*(.*)", line)
+        if not m:
+            continue
+        val = re.sub(r"\s+#.*$", "", m.group(1)).strip()
+        if val in ("", "null", "~"):
+            print("")
+        elif len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            print(val[1:-1])
+        else:
+            print(val)
+        break
+PYEOF
+  else
+    echo "roadmap: yq or python3 required. Install yq: https://github.com/mikefarah/yq" >&2
+    return 1
+  fi
+}
+
 # Backend selection. .arboretum.yml is the framework-level config surface;
 # roadmap.config.yaml is accepted for compatibility with the original roadmap
 # backend proposal. Missing/empty means GitHub so current projects keep working.
@@ -178,9 +227,11 @@ roadmap_backend() {
   [ -n "$root" ] || root="$(roadmap_project_root)"
   if [ -f "$root/.arboretum.yml" ]; then
     backend="$(roadmap_yaml_scalar_get "$root/.arboretum.yml" backend 2>/dev/null || true)"
+    [ -n "$backend" ] || backend="$(roadmap_yaml_nested_scalar_get "$root/.arboretum.yml" roadmap backend 2>/dev/null || true)"
   fi
   if [ -z "$backend" ] && [ -f "$root/roadmap.config.yaml" ]; then
     backend="$(roadmap_yaml_scalar_get "$root/roadmap.config.yaml" backend 2>/dev/null || true)"
+    [ -n "$backend" ] || backend="$(roadmap_yaml_nested_scalar_get "$root/roadmap.config.yaml" roadmap backend 2>/dev/null || true)"
   fi
   case "$backend" in
     ""|github) printf '%s\n' "github" ;;
@@ -193,13 +244,25 @@ roadmap_backend_config_get() {
   local key="$1"
   local root="${2:-}"
   local value=""
+  local nested_key=""
+  local file=""
   [ -n "$root" ] || root="$(roadmap_project_root)"
-  if [ -f "$root/.arboretum.yml" ]; then
-    value="$(roadmap_yaml_scalar_get "$root/.arboretum.yml" "$key" 2>/dev/null || true)"
-  fi
-  if [ -z "$value" ] && [ -f "$root/roadmap.config.yaml" ]; then
-    value="$(roadmap_yaml_scalar_get "$root/roadmap.config.yaml" "$key" 2>/dev/null || true)"
-  fi
+  for file in "$root/.arboretum.yml" "$root/roadmap.config.yaml"; do
+    [ -f "$file" ] || continue
+    value="$(roadmap_yaml_scalar_get "$file" "$key" 2>/dev/null || true)"
+    [ -n "$value" ] && break
+
+    case "$key" in
+      azure_devops_*)
+        nested_key="${key#azure_devops_}"
+        value="$(roadmap_yaml_nested_scalar_get "$file" azure_devops "$nested_key" 2>/dev/null || true)"
+        if [ -z "$value" ] && [ "$nested_key" = "work_item_type" ]; then
+          value="$(roadmap_yaml_nested_scalar_get "$file" azure_devops default_work_item_type 2>/dev/null || true)"
+        fi
+        [ -n "$value" ] && break
+        ;;
+    esac
+  done
   [ -n "$value" ] && printf '%s\n' "$value"
 }
 
@@ -264,6 +327,11 @@ roadmap_ado_organization() {
         gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit
       }' || true)"
   fi
+  case "$value" in
+    ""|http://*|https://*) ;;
+    dev.azure.com/*) value="https://$value" ;;
+    *) value="https://dev.azure.com/$value" ;;
+  esac
   [ -n "$value" ] && printf '%s\n' "$value"
 }
 
@@ -815,7 +883,7 @@ roadmap_probe_ado_access() {
   org="$(roadmap_ado_organization "$root" 2>/dev/null || true)"
   project="$(roadmap_ado_project "$root" 2>/dev/null || true)"
   if [ -z "$org" ] || [ -z "$project" ]; then
-    echo "/roadmap could not resolve Azure DevOps organization/project for backend=azure-devops. Configure azure_devops_organization and azure_devops_project, or set Azure DevOps CLI defaults." >&2
+    echo "/roadmap could not resolve Azure DevOps organization/project for backend=azure-devops. Configure azure_devops.organization/project (or flat azure_devops_organization/azure_devops_project aliases), or set Azure DevOps CLI defaults." >&2
     return 1
   fi
   args+=(--organization "$org" --project "$project")

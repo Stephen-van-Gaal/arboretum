@@ -374,4 +374,29 @@ else
   fail_case RL-17 "out=[$ado_created] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
 fi
 
+# RL-20 — Cedar-shaped Azure DevOps config: no .arboretum.yml, backend in
+# roadmap.config.yaml, provider knobs under the namespaced azure_devops block.
+rm -f "$FIX/.arboretum.yml"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+azure_devops:
+  organization: VCH-DataAnalytics
+  project: Advanced_Data_Analytics
+  default_work_item_type: Issue
+  default_assigned_to: Stephen.Vangaal@vch.ca
+  marker_tag: cedar
+YAML
+cedar_backend=$(inlib roadmap_backend)
+cedar_org=$(inlib roadmap_ado_organization)
+cedar_project=$(inlib roadmap_ado_project)
+cedar_type=$(inlib roadmap_ado_work_item_type)
+if [ "$cedar_backend" = "azure-devops" ] \
+   && [ "$cedar_org" = "https://dev.azure.com/VCH-DataAnalytics" ] \
+   && [ "$cedar_project" = "Advanced_Data_Analytics" ] \
+   && [ "$cedar_type" = "Issue" ]; then
+  pass RL-20
+else
+  fail_case RL-20 "backend=[$cedar_backend] org=[$cedar_org] project=[$cedar_project] type=[$cedar_type]"
+fi
+
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1
