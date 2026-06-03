@@ -211,6 +211,37 @@ fi
 if [ "$1 $2" = "issue close" ]; then exit 0; fi
 if [ "$1" = "api" ]; then printf '[]'; exit 0; fi
 if [ "$1 $2" = "pr list" ]; then printf '[]'; exit 0; fi
+if [ "$1 $2" = "pr view" ]; then
+  shift 2
+  fields=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) fields="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  : "${GH_STUB_PR_BODY:=$(printf '## Tracker\nCloses #484')}"
+  : "${GH_STUB_PR_STATE:=MERGED}"
+  : "${GH_STUB_PR_MERGED_AT:=2026-06-03T00:00:00Z}"
+  export GH_STUB_PR_BODY GH_STUB_PR_STATE GH_STUB_PR_MERGED_AT
+  python3 - "$fields" <<'PY'
+import json
+import os
+import sys
+
+fields = [field.strip() for field in sys.argv[1].split(",") if field.strip()]
+data = {
+    "number": 42,
+    "body": os.environ["GH_STUB_PR_BODY"],
+    "state": os.environ["GH_STUB_PR_STATE"],
+    "mergedAt": os.environ["GH_STUB_PR_MERGED_AT"],
+}
+if fields:
+    data = {field: data[field] for field in fields if field in data}
+print(json.dumps(data, separators=(",", ":")), end="")
+PY
+  exit 0
+fi
 echo "unexpected gh call: $*" >&2
 exit 2
 GH
@@ -238,6 +269,55 @@ if [ "$comments_out" = "[]" ] \
   pass RL-10
 else
   fail_case RL-10 "comments=[$comments_out] prs=[$prs_out] log=$(cat "$FIX/gh.log" 2>/dev/null)"
+fi
+
+# RL-21..RL-23 — PR detail and closure-status helpers stay behind the
+# roadmap backend seam. The closure helper emits controlled key=value lines
+# rather than raw provider body text.
+pr_show_filtered_out=$(PATH="$GH_BIN:$PATH" inlib roadmap_tracker_pr_show 42 --json number,body,state)
+if [ "$pr_show_filtered_out" = '{"number":42,"body":"## Tracker\nCloses #484","state":"MERGED"}' ] \
+   && grep -q 'pr view 42 --json number,body,state' "$FIX/gh.log"; then
+  pass "RL-21 (github pr show projection)"
+else
+  fail_case "RL-21 (github pr show projection)" "out=[$pr_show_filtered_out] log=$(cat "$FIX/gh.log" 2>/dev/null)"
+fi
+
+pr_show_out=$(PATH="$GH_BIN:$PATH" inlib roadmap_tracker_pr_show 42 --json number,body,state,mergedAt)
+if [ "$pr_show_out" = '{"number":42,"body":"## Tracker\nCloses #484","state":"MERGED","mergedAt":"2026-06-03T00:00:00Z"}' ] \
+   && grep -q 'pr view 42 --json number,body,state,mergedAt' "$FIX/gh.log"; then
+  pass RL-21
+else
+  fail_case RL-21 "out=[$pr_show_out] log=$(cat "$FIX/gh.log" 2>/dev/null)"
+fi
+
+closure_out=$(PATH="$GH_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 42 484)
+if printf '%s\n' "$closure_out" | grep -qx 'provider=github' \
+   && printf '%s\n' "$closure_out" | grep -qx 'intent=close' \
+   && printf '%s\n' "$closure_out" | grep -qx 'verification=supported' \
+   && printf '%s\n' "$closure_out" | grep -qx 'evidence=Merged PR #42 declares close intent for #484'; then
+  pass RL-22
+else
+  fail_case RL-22 "out=[$closure_out]"
+fi
+
+closure_reference_out=$(GH_STUB_PR_BODY='See #484 for the tracker.' PATH="$GH_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 42 484)
+if printf '%s\n' "$closure_reference_out" | grep -qx 'provider=github' \
+   && printf '%s\n' "$closure_reference_out" | grep -qx 'intent=reference' \
+   && printf '%s\n' "$closure_reference_out" | grep -qx 'verification=supported' \
+   && printf '%s\n' "$closure_reference_out" | grep -qx 'evidence=Merged PR #42 references #484 without close intent'; then
+  pass "RL-22 (reference)"
+else
+  fail_case "RL-22 (reference)" "out=[$closure_reference_out]"
+fi
+
+closure_none_out=$(GH_STUB_PR_BODY='Tracker issue intentionally omitted.' PATH="$GH_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 42 484)
+if printf '%s\n' "$closure_none_out" | grep -qx 'provider=github' \
+   && printf '%s\n' "$closure_none_out" | grep -qx 'intent=none' \
+   && printf '%s\n' "$closure_none_out" | grep -qx 'verification=supported' \
+   && printf '%s\n' "$closure_none_out" | grep -qx 'evidence=Merged PR #42 does not reference #484'; then
+  pass "RL-22 (none)"
+else
+  fail_case "RL-22 (none)" "out=[$closure_none_out]"
 fi
 
 # RL-11..RL-17 — Azure DevOps tracker adapter maps the same neutral helper
@@ -297,6 +377,10 @@ if [ "$1 $2 $3" = "boards work-item update" ]; then
 fi
 if [ "$1 $2 $3" = "boards work-item create" ]; then
   printf '%s\n' '{"id":77,"fields":{"System.Title":"Captured idea","System.Description":"Body","System.Tags":"component:skills; horizon:later","System.CreatedDate":"2026-05-31T00:00:00Z","System.ChangedDate":"2026-05-31T00:00:00Z","System.State":"New"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/77"}}}'
+  exit 0
+fi
+if [ "$1 $2 $3" = "repos pr show" ]; then
+  printf '%s\n' '{"pullRequestId":42,"title":"ADO PR","description":"Linked work item: #484","status":"completed","closedDate":"2026-06-03T00:00:00Z"}'
   exit 0
 fi
 echo "unexpected az call: $*" >&2
@@ -397,6 +481,24 @@ if [ "$cedar_backend" = "azure-devops" ] \
   pass RL-20
 else
   fail_case RL-20 "backend=[$cedar_backend] org=[$cedar_org] project=[$cedar_project] type=[$cedar_type]"
+fi
+
+ado_pr_show=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_show 42 --json number,body,state,mergedAt)
+if printf '%s' "$ado_pr_show" | jq -e '.number == 42 and .state == "completed" and .body == "Linked work item: #484"' >/dev/null \
+   && grep -q 'repos pr show --id 42' "$AZ_STUB_LOG"; then
+  pass "RL-21 (azure-devops pr show)"
+else
+  fail_case "RL-21 (azure-devops pr show)" "out=[$ado_pr_show] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
+
+ado_closure_out=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_pr_closure_status 42 484)
+if printf '%s\n' "$ado_closure_out" | grep -qx 'provider=azure-devops' \
+   && printf '%s\n' "$ado_closure_out" | grep -qx 'intent=unknown' \
+   && printf '%s\n' "$ado_closure_out" | grep -qx 'verification=unsupported' \
+   && printf '%s\n' "$ado_closure_out" | grep -qx 'evidence=Azure DevOps closure verification is not implemented in this slice'; then
+  pass RL-23
+else
+  fail_case RL-23 "out=[$ado_closure_out]"
 fi
 
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

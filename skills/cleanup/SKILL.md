@@ -68,7 +68,8 @@ backend:
 For `github`:
 
 ```bash
-gh pr list --head "$BRANCH" --state merged --json number,title,mergedAt
+MERGED_PR_JSON="$(gh pr list --head "$BRANCH" --state merged --json number,title,mergedAt)"
+MERGED_PR_COUNT="$(printf '%s\n' "$MERGED_PR_JSON" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 ```
 
 For `azure-devops`:
@@ -81,14 +82,83 @@ MERGED_PR_JSON="$(az repos pr list \
 MERGED_PR_COUNT="$(printf '%s\n' "$MERGED_PR_JSON" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 ```
 
-If the PR is not merged yet:
-> "PR for branch `<branch>` hasn't been merged yet. Did you mean to run `/finish` to create the PR?"
+For either backend, require exactly one merged/completed PR before continuing:
+
+```bash
+case "$MERGED_PR_COUNT" in
+  0)
+    echo "PR for branch '$BRANCH' hasn't been merged yet. Did you mean to run /finish to create the PR?"
+    exit 0
+    ;;
+  1) ;;
+  *)
+    echo "Found multiple merged/completed PRs for branch '$BRANCH'. Stop and inspect the configured tracker backend before cleanup."
+    exit 1
+    ;;
+esac
+
+case "$CLEANUP_BACKEND" in
+  github)
+    MERGED_PR_NUMBER="$(printf '%s\n' "$MERGED_PR_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0].get("number",""))')"
+    ;;
+  azure-devops)
+    MERGED_PR_NUMBER="$(printf '%s\n' "$MERGED_PR_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0].get("pullRequestId",""))')"
+    ;;
+esac
+
+[ -n "$MERGED_PR_NUMBER" ] || {
+  echo "Merged/completed PR lookup returned no PR number. Stop and inspect the configured tracker backend before cleanup."
+  exit 1
+}
+```
 
 Stop here — don't clean up an unmerged branch.
 
 On `azure-devops`, `completed` is the merged PR state. If no completed PR is
 found, do not fall back to GitHub or infer from local branch ancestry; stop with
 the same unmerged-branch message.
+
+### Step 1.5: Verify tracker closure after merge
+
+After merge/completion is confirmed and before switching to main, read the
+merged PR metadata through the configured backend:
+
+```bash
+PR_JSON="$(roadmap_tracker_pr_show "$MERGED_PR_NUMBER" --json number,body,state,mergedAt)"
+```
+
+Resolve the related tracker issue in this priority order:
+
+1. `$ISSUE`, when set.
+2. A close/link line in the PR `## Tracker` section (`Closes #N` or
+   `Linked work item: #N`).
+3. No issue known.
+
+If an issue is known, ask the neutral helper for closure status:
+
+```bash
+CLOSURE_STATUS="$(roadmap_tracker_pr_closure_status "$MERGED_PR_NUMBER" "$ISSUE")"
+```
+
+Interpret the key/value result:
+
+- `intent=close` and `verification=supported`: read current issue state with
+  `roadmap_tracker_issue_show "$ISSUE" --json state`. If the issue is still
+  open, close it through:
+  ```bash
+  roadmap_tracker_issue_close "$ISSUE" --reason completed --comment "Closed after merged PR #$MERGED_PR_NUMBER declared close intent."
+  ```
+- `intent=reference` or `intent=none`: leave the tracker issue open and report
+  that the PR did not declare close intent.
+- `verification=unsupported`: leave the tracker issue open and report the
+  provider limitation explicitly. For this slice, Azure DevOps falls here.
+- `verification=unknown`: leave the tracker issue open and report that manual
+  follow-up is needed.
+
+Never call `gh issue close` or `az boards work-item update` directly for
+ship-tail closure. `/cleanup` closes only through
+`roadmap_tracker_issue_close`, and only when the neutral closure-status helper
+reports a supported close intent.
 
 ### Step 2: Switch to main
 

@@ -170,6 +170,28 @@ Run **only** `default-command` — never the `opt-in-commands` tiers. If it exit
 non-zero, present the failures and fix them before proceeding — the PR should be
 green from its first push.
 
+### Step 5.8: Tracker closure-intent audit
+
+Before invoking `/pr`, resolve the active tracker issue using the same priority
+order as `/pr`: `$ISSUE`, then the current branch slug's design spec
+`related-issue:` frontmatter, then no issue. Present a concise audit:
+
+```text
+Tracker closure intent:
+- Will close: #<issue> | none
+- References only: #<issue-list> | none
+- Provider verification: supported | unsupported | unknown
+```
+
+For `github`, provider verification is `supported` when exactly one closeable
+issue will be rendered with a GitHub closing keyword in `/pr`'s `## Tracker`
+section. For `azure-devops`, provider verification is `unsupported` in this
+Arboretum slice; `/pr` will link the work item but must not claim automatic
+closure verification.
+
+If no tracker issue is resolved, warn clearly but continue when the user wants
+a trackerless PR.
+
 ### Step 6: Create PR
 
 Invoke the `/pr` skill to create the pull request through `$SHIP_BACKEND`. It handles:
@@ -220,6 +242,7 @@ These adjustments are documented here for the v2 reader; the procedure steps abo
 
 - This skill orchestrates existing skills (`/consolidate`, `/security-review`, `/pr`, `/land`). It doesn't duplicate their internals — it calls them in the right order.
 - **`/handoff` is no longer invoked here** (WS1 D8). The pre-merge handoff in the prior Step 6.5 queued `next-up` against the issue the PR was about to close — a race that resolved incoherently. Handoff now fires post-merge from `/reflect` Q5, which is the single canonical handoff invocation in the ship tail.
+- **`/land` is merge-readiness-only.** It does not close tracker items; post-merge tracker verification and any safe fallback close belong to `/cleanup`.
 - Steps are sequential and each depends on the previous one. Don't skip ahead.
 - If the user wants to create a PR without reconciling spec status via `/consolidate` or running health checks, let them — this is guidance, not a gate. But note what was skipped.
 - For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; skip security review and go straight to health check and PR.

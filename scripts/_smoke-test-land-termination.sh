@@ -44,6 +44,14 @@ grep -q 'roadmap_ado_organization' "$PR_SKILL" \
   || fail "case 0a — /pr fallback URL does not use active ADO organization config"
 grep -q 'repository",{}).get("project",{}).get("name"' "$PR_SKILL" \
   || fail "case 0a — /pr fallback URL does not use PR project metadata"
+grep -q 'scripts/refresh-stage-cache.sh' "$PR_SKILL" \
+  || fail "case 0a — /pr does not reuse the stage-cache branch slug convention"
+grep -q 'Closes #<issue>' "$PR_SKILL" \
+  || fail "case 0a — /pr does not render GitHub close intent in the Tracker section"
+grep -q 'Closure verification: unsupported by this Arboretum slice' "$PR_SKILL" \
+  || fail "case 0a — /pr does not surface unsupported ADO closure verification"
+grep -q 'Do not auto-close epics' "$PR_SKILL" \
+  || fail "case 0a — /pr does not guard epics from automatic close intent"
 ok "case 0a — /pr has GitHub/Azure backend dispatch"
 
 grep -q 'SHIP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$FINISH_SKILL" \
@@ -54,6 +62,10 @@ grep -Fq 'PIPELINE="$(cd "$PROJECT_DIR" && bash "$PROJECT_DIR/scripts/read-pipel
   || fail "case 0b — /finish does not read the pipeline flag from the resolved project root"
 grep -q 'backend-aware `/pr`' "$FINISH_SKILL" \
   || fail "case 0b — /finish ship tail does not name backend-aware /pr"
+grep -q 'Tracker closure intent:' "$FINISH_SKILL" \
+  || fail "case 0b — /finish does not audit tracker closure intent before /pr"
+grep -q '`/land` is merge-readiness-only' "$FINISH_SKILL" \
+  || fail "case 0b — /finish does not keep /land out of tracker closure"
 ok "case 0b — /finish carries backend-aware ship tail"
 
 grep -q 'LAND_BACKEND="${SHIP_BACKEND:-$(roadmap_backend "$PROJECT_DIR")}"' "$LAND_SKILL" \
@@ -89,6 +101,18 @@ grep -q -- '--status completed' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not use Azure Repos completed PR state"
 grep -q 'do not fall back to GitHub' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not guard ADO cleanup from GitHub fallback"
+grep -q 'case "$MERGED_PR_COUNT" in' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not require exactly one merged/completed PR for the branch"
+grep -q 'Found multiple merged/completed PRs for branch' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not stop on ambiguous branch-to-PR matches"
+grep -q 'roadmap_tracker_pr_show "$MERGED_PR_NUMBER" --json number,body,state,mergedAt' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not read merged PR metadata through the neutral helper"
+grep -q 'roadmap_tracker_pr_closure_status "$MERGED_PR_NUMBER" "$ISSUE"' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not use the neutral PR closure-status helper"
+grep -q 'roadmap_tracker_issue_close "$ISSUE" --reason completed' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not close through the neutral issue helper"
+grep -q 'verification=unsupported' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not surface unsupported closure verification"
 ok "case 0d — /cleanup has GitHub/Azure backend dispatch"
 
 grep -q 'REFLECT_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$REFLECT_SKILL" \

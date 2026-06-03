@@ -124,6 +124,29 @@ Build a specs table:
 
 If `docs/REGISTER.md` does not exist, skip this section entirely.
 
+### 5.5 Resolve tracker closure intent
+
+Before drafting the PR body, resolve the active tracker issue in this priority
+order:
+
+1. `$ISSUE`, when set.
+2. The design spec matching the current branch slug under
+   `docs/superpowers/specs/*-<slug>-design.md`, using its `related-issue:`
+   frontmatter.
+3. No issue found.
+
+Use the same branch-slug convention as `scripts/refresh-stage-cache.sh`: strip
+the prefix through the first `/`, then also try the slug with a trailing
+`-build` removed. Do not invent a second branch naming rule.
+
+If exactly one non-epic tracker issue is resolved, mark it as closeable for
+GitHub PRs. If the candidate is an epic, or if multiple issues would be
+referenced, separate close intent from reference-only intent and ask before
+using any closing keyword. Do not auto-close epics.
+
+For `azure-devops`, keep the existing work-item link behaviour but treat closure
+verification as unsupported in this Arboretum slice.
+
 ### 6. Suggest security review
 
 Check if any changed files match these paths:
@@ -170,11 +193,28 @@ Draft the PR title and body:
 
 ## Test Plan
 <bulleted checklist of how to verify the changes>
+
+## Tracker
+<closure or linkage statement from Step 5.5>
 ```
 
 Create the PR through the selected backend.
 
 For `github`:
+
+When Step 5.5 resolved exactly one closeable issue, the Tracker section MUST be:
+
+```markdown
+## Tracker
+Closes #<issue>
+```
+
+When no tracker issue is resolved, the Tracker section MUST be:
+
+```markdown
+## Tracker
+No tracker issue resolved.
+```
 
 ```bash
 gh pr create --title "<title>" --body "<body>" $EXTRA_ARGS
@@ -189,6 +229,21 @@ provider-specific options:
 - `--draft` -> `--draft true`
 - `--reviewer <user>` -> `--reviewers <user>`
 - `$ISSUE` set -> `--work-items "$ISSUE"` so the PR links to the active work item
+
+When Step 5.5 resolved one issue, the Tracker section MUST be:
+
+```markdown
+## Tracker
+Linked work item: #<issue>
+Closure verification: unsupported by this Arboretum slice
+```
+
+When no tracker issue is resolved, render:
+
+```markdown
+## Tracker
+No tracker issue resolved.
+```
 
 Then create the PR:
 

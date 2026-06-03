@@ -807,6 +807,108 @@ roadmap_ado_pr_list() {
   printf '[]\n' | roadmap_tracker_apply_json_options "$json_fields" "$jq_filter"
 }
 
+roadmap_ado_normalize_pull_request() {
+  jq '
+    {
+      number: ((.pullRequestId // .id) | tonumber? // (.pullRequestId // .id)),
+      title: (.title // ""),
+      body: (.description // ""),
+      state: (.status // ""),
+      mergedAt: (.closedDate // .completionQueueTime // "")
+    }
+  '
+}
+
+roadmap_ado_pr_show() {
+  local pr="$1"
+  shift
+  local json_fields=""
+  local jq_filter=""
+  local org project raw
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json_fields="$2"; shift 2 ;;
+      --jq) jq_filter="$2"; shift 2 ;;
+      *) echo "roadmap_tracker_pr_show: unsupported azure-devops arg: $1" >&2; return 2 ;;
+    esac
+  done
+  local args=(repos pr show --id "$pr" --output json --only-show-errors)
+  project="$(roadmap_ado_project)"
+  org="$(roadmap_ado_organization)"
+  [ -n "$org" ] && args+=(--organization "$org")
+  [ -n "$project" ] && args+=(--project "$project")
+  raw="$(az "${args[@]}")" || return $?
+  printf '%s' "$raw" | roadmap_ado_normalize_pull_request | roadmap_tracker_apply_json_options "$json_fields" "$jq_filter"
+}
+
+roadmap_github_pr_closure_status() {
+  local pr="$1"
+  local issue="$2"
+  local raw tmp rc
+  raw="$(roadmap_tracker_pr_show "$pr" --json number,body,state,mergedAt)" || return $?
+  tmp="$(mktemp)"
+  printf '%s' "$raw" > "$tmp"
+  python3 - "$pr" "$issue" "$tmp" <<'PYEOF'
+import json
+import re
+import sys
+
+requested_pr = sys.argv[1]
+issue = sys.argv[2]
+path = sys.argv[3]
+
+with open(path, encoding="utf-8") as f:
+    data = json.load(f)
+
+body = str(data.get("body") or "")
+number = str(data.get("number") or requested_pr)
+state = str(data.get("state") or "")
+merged = state.lower() == "merged" or bool(data.get("mergedAt"))
+subject = f"Merged PR #{number}" if merged else f"PR #{number}"
+issue_ref = "#" + issue
+
+close_re = re.compile(
+    r"\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+"
+    + re.escape(issue_ref)
+    + r"\b",
+    re.IGNORECASE,
+)
+ref_re = re.compile(re.escape(issue_ref) + r"\b", re.IGNORECASE)
+
+if close_re.search(body):
+    intent = "close"
+    evidence = f"{subject} declares close intent for {issue_ref}"
+elif ref_re.search(body):
+    intent = "reference"
+    evidence = f"{subject} references {issue_ref} without close intent"
+else:
+    intent = "none"
+    evidence = f"{subject} does not reference {issue_ref}"
+
+print("provider=github")
+print(f"intent={intent}")
+print("verification=supported")
+print(f"evidence={evidence}")
+PYEOF
+  rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
+roadmap_ado_pr_closure_status() {
+  local pr="$1"
+  local issue="$2"
+  [ -n "$pr" ] && [ -n "$issue" ] || {
+    echo "roadmap_tracker_pr_closure_status: pr and issue are required" >&2
+    return 2
+  }
+  printf '%s\n' \
+    "provider=azure-devops" \
+    "intent=unknown" \
+    "verification=unsupported" \
+    "evidence=Azure DevOps closure verification is not implemented in this slice"
+}
+
 roadmap_running_in_codex() {
   [ -n "${CODEX_SANDBOX:-}" ] || [ -n "${CODEX_SHELL:-}" ]
 }
@@ -1067,6 +1169,34 @@ roadmap_tracker_pr_list() {
     github) gh pr list "$@" ;;
     azure-devops) roadmap_ado_pr_list "$@" ;;
     *) echo "roadmap_tracker_pr_list: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_pr_show() {
+  local pr="$1"
+  shift
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) gh pr view "$pr" "$@" ;;
+    azure-devops) roadmap_ado_pr_show "$pr" "$@" ;;
+    *) echo "roadmap_tracker_pr_show: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+roadmap_tracker_pr_closure_status() {
+  local pr="${1:-}"
+  local issue="${2:-}"
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  [ -n "$pr" ] && [ -n "$issue" ] || {
+    echo "roadmap_tracker_pr_closure_status: pr and issue are required" >&2
+    return 2
+  }
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) roadmap_github_pr_closure_status "$pr" "$issue" ;;
+    azure-devops) roadmap_ado_pr_closure_status "$pr" "$issue" ;;
+    *) echo "roadmap_tracker_pr_closure_status: unsupported backend: $backend" >&2; return 1 ;;
   esac
 }
 
