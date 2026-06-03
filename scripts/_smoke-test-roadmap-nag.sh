@@ -148,7 +148,7 @@ chmod +x "$FAKE_BIN_NOAUTH/gh"
 
 fix=$(new_fixture case1)
 write_config "$fix" "$TODAY"
-run_nag "$fix" > /dev/null
+run_nag_noauth "$fix" > /dev/null
 [ -f "$fix/.arboretum/roadmap-pulse.json" ] \
   || fail "Case 1: pulse file not created after nag.sh run"
 python3 - "$fix/.arboretum/roadmap-pulse.json" <<'PYEOF' || fail "Case 1: pulse file schema wrong"
@@ -167,7 +167,7 @@ ok "Case 1: bootstrap creates well-formed pulse file"
 fix=$(new_fixture case2)
 write_config "$fix" "2024-01-01" 12    # 84 weeks overdue
 write_pulse "$fix" ""                  # nag_last_fired empty
-out=$(run_nag "$fix")
+out=$(run_nag_noauth "$fix")
 echo "$out" | grep -q "Strategic review" \
   || fail "Case 2: expected strategic-review-due nag to fire" "$out"
 ok "Case 2: strategic-review-due fires when overdue and never throttled"
@@ -177,7 +177,7 @@ ok "Case 2: strategic-review-due fires when overdue and never throttled"
 fix=$(new_fixture case3)
 write_config "$fix" "$TODAY" 12        # reviewed today — 0 days since
 write_pulse "$fix" ""
-out=$(run_nag "$fix")
+out=$(run_nag_noauth "$fix")
 echo "$out" | grep -q "Strategic review" \
   && fail "Case 3: unexpected strategic review nag when review is current" "$out" || true
 ok "Case 3: strategic-review-due suppressed when review is current"
@@ -188,7 +188,7 @@ ok "Case 3: strategic-review-due suppressed when review is current"
 fix=$(new_fixture case4)
 write_config "$fix" "2024-01-01" 12
 write_pulse "$fix" "${TODAY}T00:00:00Z"   # nag fired today
-out=$(run_nag "$fix")
+out=$(run_nag_noauth "$fix")
 echo "$out" | grep -q "Strategic review" \
   && fail "Case 4: weekly throttle should suppress nag fired today" "$out" || true
 ok "Case 4: weekly throttle suppresses nag fired today"
@@ -199,7 +199,7 @@ fix=$(new_fixture case5)
 write_config "$fix" "2024-01-01" 12
 OLD_TS="$(days_ago_ts 8)"
 write_pulse "$fix" "$OLD_TS"
-out=$(run_nag "$fix")
+out=$(run_nag_noauth "$fix")
 echo "$out" | grep -q "Strategic review" \
   || fail "Case 5: nag should fire when last fired 8 days ago (> 7-day window)" "$out"
 ok "Case 5: weekly throttle expires after 7 days — nag fires again"
@@ -209,7 +209,7 @@ ok "Case 5: weekly throttle expires after 7 days — nag fires again"
 fix=$(new_fixture case6)
 write_config "$fix" "2024-01-01" 12
 write_pulse "$fix" ""
-run_nag "$fix" > /dev/null
+run_nag_noauth "$fix" > /dev/null
 python3 - "$fix/.arboretum/roadmap-pulse.json" <<'PYEOF' || fail "Case 6: nag_last_fired not updated"
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -221,7 +221,7 @@ ok "Case 6: nag_last_fired recorded in pulse after nag fires"
 # ── Case 7: No roadmap.config.yaml → nag.sh exits silently ───────────
 
 fix=$(new_fixture case7)    # no write_config call
-out=$(run_nag "$fix")
+out=$(run_nag_noauth "$fix")
 [ -z "$out" ] || fail "Case 7: expected silent exit when config absent" "$out"
 ok "Case 7: nag.sh exits silently with no roadmap.config.yaml"
 
@@ -231,7 +231,7 @@ fix=$(new_fixture case8)
 write_config "$fix" "$TODAY" 12            # review not due
 write_pulse "$fix" "${TODAY}T00:00:00Z"    # nag already throttled today
 PULSE1="$(cat "$fix/.arboretum/roadmap-pulse.json")"
-run_nag "$fix" > /dev/null
+run_nag_noauth "$fix" > /dev/null
 PULSE2="$(cat "$fix/.arboretum/roadmap-pulse.json")"
 [ "$PULSE1" = "$PULSE2" ] \
   || fail "Case 8: pulse changed between runs with no nags firing"

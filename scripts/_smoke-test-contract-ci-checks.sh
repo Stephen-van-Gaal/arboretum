@@ -212,6 +212,47 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# CLI-10: CI modes, smoke-test tiers, and parallel-safety metadata
+# The orchestrator owns mode selection, full-only metadata, opt-in bounded
+# parallelism, and metadata-driven selection. It must not hard-code individual
+# full-only smoke-test paths into the runner.
+# ---------------------------------------------------------------------------
+if grep -q 'ARBORETUM_CI_MODE' "$TARGET"; then
+  echo "PASS: CLI-10a — ARBORETUM_CI_MODE support is present"
+else
+  echo "FAIL: CLI-10a — ARBORETUM_CI_MODE support is missing" >&2
+  fail=1
+fi
+
+if grep -q 'ARBORETUM_CI_JOBS' "$TARGET"; then
+  echo "PASS: CLI-10b — ARBORETUM_CI_JOBS support is present"
+else
+  echo "FAIL: CLI-10b — ARBORETUM_CI_JOBS support is missing" >&2
+  fail=1
+fi
+
+if grep -q 'ci-tier' "$TARGET"; then
+  echo "PASS: CLI-10c — ci-tier selector is present"
+else
+  echo "FAIL: CLI-10c — ci-tier selector is missing" >&2
+  fail=1
+fi
+
+if grep -q 'ci-parallel' "$TARGET"; then
+  echo "PASS: CLI-10e — ci-parallel selector is present"
+else
+  echo "FAIL: CLI-10e — ci-parallel selector is missing" >&2
+  fail=1
+fi
+
+if grep -q 'scripts/_smoke-test-runtime-portability.sh' "$TARGET"; then
+  echo "FAIL: CLI-10d — full-only selection should be metadata-driven, not hard-coded to runtime portability" >&2
+  fail=1
+else
+  echo "PASS: CLI-10d — no hard-coded runtime-portability denylist in ci-checks.sh"
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 if [ "$fail" -ne 0 ]; then

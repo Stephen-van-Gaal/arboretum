@@ -9,6 +9,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CI="$SCRIPT_DIR/ci-checks.sh"
 [ -x "$CI" ] || { echo "FAIL: ci-checks.sh missing or not executable" >&2; exit 1; }
 
+fail() {
+  echo "FAIL: $1" >&2
+  if [ "${2:-}" ]; then
+    echo "$2" >&2
+  fi
+  exit 1
+}
+
 TMP_DIRS=()
 cleanup() {
   local dir
@@ -51,6 +59,41 @@ make_ci_fixture() {
   done
 }
 
+make_plugin_root_fixture() {
+  local tmp="$1"
+  local repo="$tmp/repo"
+  local bin="$tmp/bin"
+  local tool
+
+  mkdir -p \
+    "$bin" \
+    "$repo/scripts" \
+    "$repo/scripts/_fixtures/roadmap" \
+    "$repo/docs/contracts" \
+    "$repo/tests/contracts" \
+    "$repo/hooks" \
+    "$repo/skills" \
+    "$repo/.github/ISSUE_TEMPLATE"
+  : > "$repo/.github/ISSUE_TEMPLATE/agent-ready.md"
+
+  cp "$CI" "$repo/scripts/ci-checks.sh"
+  chmod +x "$repo/scripts/ci-checks.sh"
+
+  for tool in bash cat chmod dirname find git grep head mkdir mktemp rm sed touch xargs; do
+    ln -s "$(command -v "$tool")" "$bin/$tool"
+  done
+
+  for tool in \
+    "validate-cross-refs.sh" \
+    "validate-coverage-manifest.sh" \
+    "health-check.sh" \
+    "check-version-bump.sh"
+  do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/$tool"
+    chmod +x "$repo/scripts/$tool"
+  done
+}
+
 make_consumer_ci_fixture() {
   local tmp="$1"
   local repo="$tmp/repo"
@@ -61,7 +104,7 @@ make_consumer_ci_fixture() {
   cp "$CI" "$repo/scripts/ci-checks.sh"
   chmod +x "$repo/scripts/ci-checks.sh"
 
-  for tool in bash dirname find grep head sed touch; do
+  for tool in bash cat chmod dirname find grep head mkdir mktemp rm sed touch xargs; do
     ln -s "$(command -v "$tool")" "$bin/$tool"
   done
 
@@ -99,7 +142,8 @@ INNER
   chmod +x "$repo/scripts/_smoke-test-reserved-framework-owned.sh"
 
   cp "$SCRIPT_DIR/check-version-bump.sh" "$repo/scripts/check-version-bump.sh"
-  chmod +x "$repo/scripts/check-version-bump.sh"
+  cp "$SCRIPT_DIR/check-release-gate.sh" "$repo/scripts/check-release-gate.sh"
+  chmod +x "$repo/scripts/check-version-bump.sh" "$repo/scripts/check-release-gate.sh"
 
   for tool in \
     "validate-cross-refs.sh" \
@@ -172,7 +216,7 @@ run_ci_fixture() {
 tmp="$(new_tmp_dir)"
 make_ci_fixture "$tmp"
 out="$(REQUIRE_SHELLCHECK='' run_ci_fixture "$tmp" 2>&1)"
-for section in "ShellCheck" "Smoke tests" "Declared test command" "Cross-reference" "Contract coverage" "Health check" "Version bump"; do
+for section in "ShellCheck" "Smoke tests" "Declared test command" "Cross-reference" "Contract coverage" "Health check" "Release gate"; do
   grep -qF "$section" <<< "$out" || {
     echo "FAIL: ci-checks.sh output missing section '$section'" >&2; exit 1; }
 done
@@ -262,6 +306,114 @@ grep -qF "SKIP: plugin version manifests not found" <<< "$consumer_out" || {
   exit 1
 }
 echo "PASS: consumer roots skip inapplicable framework smoke tests without requiring plugin dirs"
+
+tmp="$(new_tmp_dir)"
+make_plugin_root_fixture "$tmp"
+mode_repo="$tmp/repo"
+
+cat > "$mode_repo/scripts/_smoke-test-default.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+# ci-parallel: safe
+touch default-ran
+INNER
+cat > "$mode_repo/scripts/_smoke-test-full-only.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+# ci-tier: full
+# ci-tier-reason: fixture sweep only needed in full mode
+# ci-parallel: safe
+touch full-ran
+INNER
+chmod +x "$mode_repo/scripts/_smoke-test-default.sh" "$mode_repo/scripts/_smoke-test-full-only.sh"
+
+(cd "$mode_repo" && PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/mode-balanced.out" 2>&1
+[ -f "$mode_repo/default-ran" ] || fail "balanced mode did not run default-tier smoke test"
+[ ! -f "$mode_repo/full-ran" ] || fail "balanced mode ran full-only smoke test" "$(cat "$tmp/mode-balanced.out")"
+grep -qF "SKIP: scripts/_smoke-test-full-only.sh (ci-tier full; mode balanced)" "$tmp/mode-balanced.out" \
+  || fail "balanced mode did not explain full-only skip" "$(cat "$tmp/mode-balanced.out")"
+echo "PASS: balanced mode skips explicit full-only smoke tests"
+
+rm -f "$mode_repo/default-ran" "$mode_repo/full-ran"
+(cd "$mode_repo" && ARBORETUM_CI_MODE=full PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/mode-full.out" 2>&1
+[ -f "$mode_repo/default-ran" ] || fail "full mode did not run default-tier smoke test"
+[ -f "$mode_repo/full-ran" ] || fail "full mode did not run full-only smoke test" "$(cat "$tmp/mode-full.out")"
+echo "PASS: full mode runs explicit full-only smoke tests"
+
+git -C "$mode_repo" init -q
+git -C "$mode_repo" config user.email "fixture@test.com"
+git -C "$mode_repo" config user.name "fixture"
+git -C "$mode_repo" add .
+git -C "$mode_repo" commit -q -m "base"
+git -C "$mode_repo" tag base
+
+mkdir -p "$mode_repo/docs/specs"
+printf 'docs-only\n' > "$mode_repo/docs/specs/fixture.spec.md"
+git -C "$mode_repo" add docs/specs/fixture.spec.md
+git -C "$mode_repo" commit -q -m "docs spec change"
+rm -f "$mode_repo/default-ran" "$mode_repo/full-ran"
+(cd "$mode_repo" && ARBORETUM_CI_MODE=auto BASE_REF=base PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/auto-balanced.out" 2>&1
+grep -qF "CI mode: balanced" "$tmp/auto-balanced.out" \
+  || fail "auto mode should stay balanced for non-trigger paths" "$(cat "$tmp/auto-balanced.out")"
+[ -f "$mode_repo/default-ran" ] || fail "auto balanced did not run default-tier smoke test"
+[ ! -f "$mode_repo/full-ran" ] || fail "auto balanced ran full-only smoke test" "$(cat "$tmp/auto-balanced.out")"
+echo "PASS: auto mode stays balanced for non-trigger paths"
+
+printf '\n# trigger auto full\n' >> "$mode_repo/scripts/_smoke-test-default.sh"
+git -C "$mode_repo" add scripts/_smoke-test-default.sh
+git -C "$mode_repo" commit -q -m "smoke test change"
+rm -f "$mode_repo/default-ran" "$mode_repo/full-ran"
+(cd "$mode_repo" && ARBORETUM_CI_MODE=auto BASE_REF=base PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/auto-full.out" 2>&1
+grep -qF "CI mode: full" "$tmp/auto-full.out" \
+  || fail "auto mode should escalate to full for smoke-test path changes" "$(cat "$tmp/auto-full.out")"
+[ -f "$mode_repo/default-ran" ] || fail "auto full did not run default-tier smoke test"
+[ -f "$mode_repo/full-ran" ] || fail "auto full did not run full-only smoke test" "$(cat "$tmp/auto-full.out")"
+echo "PASS: auto mode escalates to full for CI/test executable paths"
+
+if (cd "$mode_repo" && ARBORETUM_CI_MODE=turbo PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/bad-mode.out" 2>&1; then
+  fail "invalid ARBORETUM_CI_MODE should fail"
+fi
+grep -qF "FAIL: invalid ARBORETUM_CI_MODE" "$tmp/bad-mode.out" \
+  || fail "invalid mode diagnostic missing" "$(cat "$tmp/bad-mode.out")"
+echo "PASS: invalid CI mode fails closed"
+
+if (cd "$mode_repo" && ARBORETUM_CI_JOBS=00 PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/bad-jobs.out" 2>&1; then
+  fail "all-zero ARBORETUM_CI_JOBS should fail"
+fi
+grep -qF "FAIL: invalid ARBORETUM_CI_JOBS" "$tmp/bad-jobs.out" \
+  || fail "invalid jobs diagnostic missing" "$(cat "$tmp/bad-jobs.out")"
+echo "PASS: all-zero CI jobs fails closed"
+
+cat > "$mode_repo/scripts/_smoke-test-bad-parallel.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+# ci-parallel: maybe
+touch bad-parallel-ran
+INNER
+chmod +x "$mode_repo/scripts/_smoke-test-bad-parallel.sh"
+if (cd "$mode_repo" && PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/bad-parallel.out" 2>&1; then
+  fail "invalid ci-parallel should fail"
+fi
+grep -qF "FAIL: invalid ci-parallel" "$tmp/bad-parallel.out" \
+  || fail "invalid ci-parallel diagnostic missing" "$(cat "$tmp/bad-parallel.out")"
+rm -f "$mode_repo/scripts/_smoke-test-bad-parallel.sh" "$mode_repo/bad-parallel-ran"
+echo "PASS: invalid ci-parallel fails closed"
+
+cat > "$mode_repo/scripts/_smoke-test-full-only.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+# ci-tier: weekly
+# ci-tier-reason: fixture invalid tier
+# ci-parallel: safe
+touch full-ran
+INNER
+chmod +x "$mode_repo/scripts/_smoke-test-full-only.sh"
+if (cd "$mode_repo" && PATH="$tmp/bin" bash scripts/ci-checks.sh) >"$tmp/bad-tier.out" 2>&1; then
+  fail "invalid ci-tier should fail"
+fi
+grep -qF "FAIL: invalid ci-tier" "$tmp/bad-tier.out" \
+  || fail "invalid tier diagnostic missing" "$(cat "$tmp/bad-tier.out")"
+echo "PASS: invalid ci-tier fails closed"
 
 tmp="$(new_tmp_dir)"
 make_declared_command_consumer_fixture "$tmp"

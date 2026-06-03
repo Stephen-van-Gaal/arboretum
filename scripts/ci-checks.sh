@@ -7,6 +7,31 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 fail=0
+CI_MODE="${ARBORETUM_CI_MODE:-balanced}"
+CI_JOBS="${ARBORETUM_CI_JOBS:-8}"
+smoke_selection_failed=0
+
+case "$CI_MODE" in
+  balanced|full|auto) ;;
+  *)
+    echo "FAIL: invalid ARBORETUM_CI_MODE '$CI_MODE' (expected balanced, full, or auto)" >&2
+    exit 1
+    ;;
+esac
+
+case "$CI_JOBS" in
+  ''|*[!0-9]*)
+    echo "FAIL: invalid ARBORETUM_CI_JOBS '$CI_JOBS' (expected positive integer)" >&2
+    exit 1
+    ;;
+esac
+case "$CI_JOBS" in
+  *[1-9]*) ;;
+  *)
+    echo "FAIL: invalid ARBORETUM_CI_JOBS '$CI_JOBS' (expected positive integer)" >&2
+    exit 1
+    ;;
+esac
 
 is_plugin_root() {
   [ -d skills ] \
@@ -113,6 +138,209 @@ run_plugin_check_if_available() {
   fi
 }
 
+ci_mode_triggered_by_path() {
+  local path="$1"
+
+  case "$path" in
+    scripts/ci-checks.sh|scripts/_smoke-test-*.sh|tests/contracts/*|.github/workflows/*)
+      return 0
+      ;;
+    .claude-plugin/plugin.json|.claude-plugin/marketplace.json|.codex-plugin/plugin.json|docs/releases/*|CHANGELOG.md)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+resolve_ci_mode() {
+  local mode="$1"
+  local base_ref merge_base changed path
+
+  if [ "$mode" != "auto" ]; then
+    printf '%s\n' "$mode"
+    return 0
+  fi
+
+  base_ref="${BASE_REF:-origin/main}"
+  if ! merge_base="$(git merge-base "$base_ref" HEAD 2>/dev/null)"; then
+    echo "WARN: could not resolve BASE_REF '$base_ref'; using full CI mode" >&2
+    printf '%s\n' "full"
+    return 0
+  fi
+
+  if ! changed="$(git diff --name-only "$merge_base" HEAD 2>/dev/null)"; then
+    echo "WARN: could not read changed paths; using full CI mode" >&2
+    printf '%s\n' "full"
+    return 0
+  fi
+
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if ci_mode_triggered_by_path "$path"; then
+      printf '%s\n' "full"
+      return 0
+    fi
+  done <<< "$changed"
+
+  printf '%s\n' "balanced"
+}
+
+smoke_test_tier() {
+  local f="$1"
+  local line tier
+
+  line="$(sed -n '1,12{/^# ci-tier: /p;}' "$f" | head -1)"
+  if [ -z "$line" ]; then
+    printf '%s\n' "balanced"
+    return 0
+  fi
+
+  tier="${line#"# ci-tier: "}"
+  case "$tier" in
+    balanced|full)
+      printf '%s\n' "$tier"
+      ;;
+    *)
+      echo "FAIL: invalid ci-tier '$tier' in $f" >&2
+      return 2
+      ;;
+  esac
+}
+
+smoke_test_parallel_mode() {
+  local f="$1"
+  local line mode
+
+  line="$(sed -n '1,12{/^# ci-parallel: /p;}' "$f" | head -1)"
+  if [ -z "$line" ]; then
+    printf '%s\n' "serial"
+    return 0
+  fi
+
+  mode="${line#"# ci-parallel: "}"
+  case "$mode" in
+    safe|serial)
+      printf '%s\n' "$mode"
+      ;;
+    *)
+      echo "FAIL: invalid ci-parallel '$mode' in $f" >&2
+      return 2
+      ;;
+  esac
+}
+
+smoke_test_selected_for_mode() {
+  local f="$1"
+  local tier
+
+  if ! tier="$(smoke_test_tier "$f")"; then
+    fail=1
+    smoke_selection_failed=1
+    return 1
+  fi
+
+  if [ "$tier" = "full" ] && [ "$EFFECTIVE_CI_MODE" != "full" ]; then
+    echo "SKIP: $f (ci-tier full; mode $EFFECTIVE_CI_MODE)"
+    return 1
+  fi
+
+  return 0
+}
+
+run_smoke_test_serial() {
+  local f="$1"
+
+  echo "--- $f ---"
+  bash "$f" || fail=1
+}
+
+run_smoke_tests_parallel() {
+  local tmp list statuses worker idx f rc
+
+  tmp="$(mktemp -d)"
+  list="$tmp/list"
+  statuses="$tmp/statuses"
+  mkdir -p "$tmp/logs" "$statuses"
+
+  worker="$tmp/run-one.sh"
+  cat > "$worker" <<'INNER'
+#!/usr/bin/env bash
+set -uo pipefail
+log_dir="$1"
+status_dir="$2"
+idx="$3"
+script="$4"
+if bash "$script" >"$log_dir/$idx.out" 2>&1; then
+  printf "0\n" >"$status_dir/$idx"
+else
+  printf "%s\n" "$?" >"$status_dir/$idx"
+fi
+INNER
+  chmod +x "$worker"
+
+  idx=0
+  for f in "$@"; do
+    idx=$((idx + 1))
+    printf '%s %s\n' "$idx" "$f" >> "$list"
+  done
+
+  if [ ! -s "$list" ]; then
+    rm -rf "$tmp"
+    return 0
+  fi
+
+  xargs -P "$CI_JOBS" -n 2 "$worker" "$tmp/logs" "$statuses" < "$list"
+
+  while read -r idx f; do
+    echo "--- $f ---"
+    [ -f "$tmp/logs/$idx.out" ] && cat "$tmp/logs/$idx.out"
+    rc="$(cat "$statuses/$idx" 2>/dev/null || printf '1')"
+    if [ "$rc" != "0" ]; then
+      echo "FAIL: $f exited $rc" >&2
+      fail=1
+    fi
+  done < "$list"
+
+  rm -rf "$tmp"
+}
+
+run_smoke_tests_selected() {
+  local f mode
+  local parallel_batch=()
+
+  for f in "$@"; do
+    if [ "$CI_JOBS" = "1" ]; then
+      run_smoke_test_serial "$f"
+      continue
+    fi
+
+    mode="$(smoke_test_parallel_mode "$f")" || {
+      fail=1
+      continue
+    }
+
+    if [ "$mode" = "safe" ]; then
+      parallel_batch+=("$f")
+      continue
+    fi
+
+    if [ "${#parallel_batch[@]}" -gt 0 ]; then
+      run_smoke_tests_parallel "${parallel_batch[@]}"
+      parallel_batch=()
+    fi
+
+    run_smoke_test_serial "$f"
+  done
+
+  if [ "$CI_JOBS" != "1" ] && [ "${#parallel_batch[@]}" -gt 0 ]; then
+    run_smoke_tests_parallel "${parallel_batch[@]}"
+  fi
+}
+
+EFFECTIVE_CI_MODE="$(resolve_ci_mode "$CI_MODE")"
+echo "CI mode: $EFFECTIVE_CI_MODE"
+
 echo "=== ShellCheck ==="
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck_roots=()
@@ -134,13 +362,23 @@ else
 fi
 
 echo "=== Smoke tests ==="
+selected_smoke_tests=()
 for f in scripts/_smoke-test-*.sh; do
   [ -e "$f" ] || continue
   [[ "$f" == *"_smoke-test-ci-checks.sh" ]] && continue  # skip self-referential meta-test
   smoke_test_applicable "$f" || continue
-  echo "--- $f ---"
-  bash "$f" || fail=1
+  smoke_test_selected_for_mode "$f" || continue
+  smoke_test_parallel_mode "$f" >/dev/null || {
+    fail=1
+    smoke_selection_failed=1
+    continue
+  }
+  selected_smoke_tests+=("$f")
 done
+
+if [ "$smoke_selection_failed" = "0" ]; then
+  run_smoke_tests_selected "${selected_smoke_tests[@]}"
+fi
 
 echo "=== Declared test command ==="
 run_declared_default_command
