@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-refresh-update-cache.sh — Contract test for
-# docs/contracts/refresh-update-cache.contract.md. Asserts RUC-1..RUC-7 from
+# docs/contracts/refresh-update-cache.contract.md. Asserts RUC-1..RUC-9 from
 # the contract's ## Test surface against scripts/refresh-update-cache.sh.
 #
 # Fixture pattern: mktemp -d a project root + a fake plugin cache (pointed at by
@@ -216,6 +216,73 @@ if echo "$write_cache_body" | grep -qE 'mktemp[[:space:]]+"\$CACHE_DIR' \
   pass "RUC-7 (atomic-write): write_cache() uses mktemp + atomic mv discipline"
 else
   fail_case "RUC-7: write_cache() does not match mktemp + mv pattern" "$write_cache_body"
+fi
+
+# ── RUC-8: default discovery includes ~/.codex/plugins/cache ─────────
+P8="$ROOT/p8"; mkdir -p "$P8"
+HOME8="$ROOT/home8"
+PC8="$HOME8/.codex/plugins/cache"; make_plugin_cache "$PC8" "0.7.0"
+( unset ARBORETUM_PLUGIN_CACHE
+  HOME="$HOME8" GH_TAG="v0.7.0" PATH="$GHB:$PATH" bash "$REFRESH" "$P8" >/dev/null 2>&1
+)
+r8_exit=$?
+C8="$P8/.arboretum/update-cache.json"
+r8_res=$(python3 -c "
+import json
+c = json.load(open('$C8'))
+p = []
+if c.get('installed_version') != '0.7.0': p.append('installed=%r' % c.get('installed_version'))
+if c.get('latest_version') != '0.7.0': p.append('latest=%r' % c.get('latest_version'))
+if c.get('error') is not None: p.append('error=%r' % c.get('error'))
+print('OK' if not p else ' | '.join(p))
+" 2>&1)
+if [ "$r8_res" = "OK" ] && [ "$r8_exit" -eq 0 ]; then
+  pass "RUC-8: default discovery finds arboretum in ~/.codex/plugins/cache"
+else
+  fail_case "RUC-8: Codex default discovery path wrong (exit=$r8_exit)" "$r8_res"
+fi
+
+# ── RUC-9: default discovery selects the active client cache, not global highest ──
+P9="$ROOT/p9"; mkdir -p "$P9"
+HOME9="$ROOT/home9"
+PC9_CODEX="$HOME9/.codex/plugins/cache"; make_plugin_cache "$PC9_CODEX" "0.7.0"
+PC9_CLAUDE="$HOME9/.claude/plugins/cache"; make_plugin_cache "$PC9_CLAUDE" "9.9.9"
+( unset ARBORETUM_PLUGIN_CACHE CLAUDE_PROJECT_DIR
+  HOME="$HOME9" GH_TAG="v0.8.0" PATH="$GHB:$PATH" bash "$REFRESH" "$P9" >/dev/null 2>&1
+)
+r9a_exit=$?
+C9="$P9/.arboretum/update-cache.json"
+r9a_res=$(python3 -c "
+import json
+c = json.load(open('$C9'))
+p = []
+if c.get('installed_version') != '0.7.0': p.append('installed=%r' % c.get('installed_version'))
+if c.get('update_available') is not True: p.append('update_available=%r' % c.get('update_available'))
+print('OK' if not p else ' | '.join(p))
+" 2>&1)
+
+P9B="$ROOT/p9b"; mkdir -p "$P9B"
+HOME9B="$ROOT/home9b"
+PC9B_CODEX="$HOME9B/.codex/plugins/cache"; make_plugin_cache "$PC9B_CODEX" "9.9.9"
+PC9B_CLAUDE="$HOME9B/.claude/plugins/cache"; make_plugin_cache "$PC9B_CLAUDE" "0.7.0"
+( unset ARBORETUM_PLUGIN_CACHE
+  HOME="$HOME9B" CLAUDE_PROJECT_DIR="$P9B" GH_TAG="v0.8.0" PATH="$GHB:$PATH" bash "$REFRESH" "$P9B" >/dev/null 2>&1
+)
+r9b_exit=$?
+C9B="$P9B/.arboretum/update-cache.json"
+r9b_res=$(python3 -c "
+import json
+c = json.load(open('$C9B'))
+p = []
+if c.get('installed_version') != '0.7.0': p.append('installed=%r' % c.get('installed_version'))
+if c.get('update_available') is not True: p.append('update_available=%r' % c.get('update_available'))
+print('OK' if not p else ' | '.join(p))
+" 2>&1)
+if [ "$r9a_res" = "OK" ] && [ "$r9a_exit" -eq 0 ] \
+   && [ "$r9b_res" = "OK" ] && [ "$r9b_exit" -eq 0 ]; then
+  pass "RUC-9: default discovery selects active client cache instead of highest version across clients"
+else
+  fail_case "RUC-9: active-client cache selection wrong (codex exit=$r9a_exit, claude exit=$r9b_exit)" "codex: $r9a_res"$'\n'"claude: $r9b_res"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────

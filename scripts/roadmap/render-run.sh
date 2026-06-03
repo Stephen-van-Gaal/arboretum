@@ -47,12 +47,24 @@ if [ -z "$board_file" ]; then
   nag_output="$(bash "$SCRIPT_DIR/nag.sh" 2>/dev/null || true)"
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+  if [ -z "$board_file" ]; then
+    printf '[roadmap] Configured, but renderer dependencies are missing — jq unavailable.\n'
+    exit 0
+  fi
+  echo "roadmap: jq required" >&2
+  exit 1
+fi
+
 # Load board (open issues)
 if [ -n "$board_file" ]; then
   open_json="$(cat "$board_file")"
 else
   if ! roadmap_require_backend >/dev/null 2>&1; then
-    [ -n "$nag_output" ] && printf '%s\n' "$nag_output"
+    if [ -n "$nag_output" ]; then
+      printf '%s\n' "$nag_output"
+    fi
+    printf '[roadmap] Configured, but tracker unavailable — check gh auth or roadmap backend settings.\n'
     exit 0
   fi
   open_json="$(roadmap_tracker_issue_list --state open --limit 200 \

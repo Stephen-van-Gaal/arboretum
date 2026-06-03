@@ -2,7 +2,7 @@
 # owner: project-infrastructure
 # refresh-update-cache.sh — Check if a newer arboretum plugin release is available.
 #
-# Scans the plugin cache for the highest installed arboretum version,
+# Scans the active plugin cache for the highest installed arboretum version,
 # compares it against the latest GitHub release (stvangaal/arboretum),
 # and writes the result to .arboretum/update-cache.json.
 #
@@ -38,7 +38,17 @@ fi
 PROJECT_DIR="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CACHE_DIR="$PROJECT_DIR/.arboretum"
 CACHE_FILE="$CACHE_DIR/update-cache.json"
-PLUGIN_CACHE_ROOT="${ARBORETUM_PLUGIN_CACHE:-${HOME}/.claude/plugins/cache}"
+if [ -n "${ARBORETUM_PLUGIN_CACHE:-}" ]; then
+  PLUGIN_CACHE_ROOTS=("$ARBORETUM_PLUGIN_CACHE")
+elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${HOME}/.claude/plugins/cache" ]; then
+  PLUGIN_CACHE_ROOTS=("${HOME}/.claude/plugins/cache")
+elif [ -d "${HOME}/.codex/plugins/cache" ]; then
+  PLUGIN_CACHE_ROOTS=("${HOME}/.codex/plugins/cache")
+elif [ -d "${HOME}/.claude/plugins/cache" ]; then
+  PLUGIN_CACHE_ROOTS=("${HOME}/.claude/plugins/cache")
+else
+  PLUGIN_CACHE_ROOTS=("${HOME}/.codex/plugins/cache")
+fi
 
 mkdir -p "$CACHE_DIR"
 
@@ -56,7 +66,10 @@ write_cache() {
 # to marketplace namespaces that don't match the plugin name.
 
 installed_version=$(
-  find "$PLUGIN_CACHE_ROOT" -type f -name "plugin.json" 2>/dev/null \
+  for plugin_cache_root in "${PLUGIN_CACHE_ROOTS[@]}"; do
+    [ -d "$plugin_cache_root" ] || continue
+    find "$plugin_cache_root" -type f -name "plugin.json" 2>/dev/null
+  done \
   | while IFS= read -r manifest; do
       if grep -q '"name"[[:space:]]*:[[:space:]]*"arboretum"' "$manifest" 2>/dev/null; then
         version=$(

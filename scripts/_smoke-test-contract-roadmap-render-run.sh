@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-roadmap-render-run.sh — Contract test for
-# docs/contracts/roadmap-render-run.contract.md. Asserts RRR-1..RRR-5
+# docs/contracts/roadmap-render-run.contract.md. Asserts RRR-1..RRR-6
 # against scripts/roadmap/render-run.sh.
 #
 # render-run.sh supports a file-driven test mode (--board-file /
@@ -78,5 +78,50 @@ fi
 # RRR-5 — unknown flag → exit 2
 bash "$RENDER" --bogus >/dev/null 2>&1; rc5=$?
 [ "$rc5" = 2 ] && pass RRR-5 || fail_case RRR-5 "rc=$rc5"
+
+# RRR-6 — live mode with config but unavailable tracker emits a diagnostic
+LIVE="$TMP/live"
+mkdir -p "$LIVE"
+git -C "$LIVE" init -q
+git -C "$LIVE" config user.email f@e.com
+git -C "$LIVE" config user.name f
+git -C "$LIVE" commit -q --allow-empty -m seed
+cat > "$LIVE/roadmap.config.yaml" <<'YAML'
+profile: lean
+wip_limit: 1
+last_reviewed: 2020-01-01
+review_cadence_weeks: 1
+YAML
+mkdir -p "$LIVE/.arboretum"
+cat > "$LIVE/.arboretum/roadmap-pulse.json" <<'JSON'
+{
+  "bootstrapped_at": "2020-01-01T00:00:00Z",
+  "last_maintain_run": "2020-01-01T00:00:00Z",
+  "last_revise_run": "2020-01-01T00:00:00Z",
+  "last_retro_completed": null,
+  "nag_last_fired": {},
+  "sprint_alerts_fired": {}
+}
+JSON
+NO_GH="$TMP/no-gh"
+mkdir -p "$NO_GH"
+IFS=':' read -ra _pdirs <<< "$PATH"
+for _d in "${_pdirs[@]}"; do
+  [ -d "$_d" ] || continue
+  for _f in "$_d"/*; do
+    [ -e "$_f" ] || continue
+    _b=${_f##*/}
+    [ "$_b" = gh ] && continue
+    [ -e "$NO_GH/$_b" ] || ln -s "$_f" "$NO_GH/$_b" 2>/dev/null || true
+  done
+done
+live_out=$(cd "$LIVE" && PATH="$NO_GH" bash "$RENDER" --condensed); rc6=$?
+if [ "$rc6" = 0 ] \
+   && printf '%s\n' "$live_out" | grep -qF '[nag] Strategic review overdue' \
+   && printf '%s\n' "$live_out" | grep -qF '[roadmap] Configured, but tracker unavailable — check gh auth or roadmap backend settings.'; then
+  pass RRR-6
+else
+  fail_case RRR-6 "rc=$rc6 out=[$live_out]"
+fi
 
 [ "$fail" = 0 ] && echo "roadmap-render-run contract: ALL PASS" || exit 1

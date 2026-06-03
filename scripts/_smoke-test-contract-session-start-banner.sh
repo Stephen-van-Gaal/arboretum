@@ -34,6 +34,7 @@ new_fixture() {
   cp "$HOOK" "$fix/.claude/hooks/"
   # No-op refresh stubs so pre-seeded caches survive the boot refresh.
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-next-cache.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-update-cache.sh"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-stage-cache.sh"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-workspace-cache.sh"
   chmod +x "$fix/scripts/"*.sh
@@ -125,5 +126,93 @@ fix=$(new_fixture ssb4)
 CLAUDE_PROJECT_DIR="$fix" bash "$fix/.claude/hooks/session-start.sh" >/dev/null 2>&1
 rc=$?
 [ "$rc" = 0 ] && pass SSB-4 || fail_case SSB-4 "hook exited $rc on clean fixture"
+
+# ── SSB-5: update-cache degraded states render diagnostic one-liners ────
+fix=$(new_fixture ssb5a)
+cat > "$fix/.arboretum/update-cache.json" <<'JSON'
+{
+  "fetched_at": "2026-06-03T00:00:00Z",
+  "installed_version": null,
+  "latest_version": null,
+  "update_available": false,
+  "error": "manifest-not-found"
+}
+JSON
+out=$(run_hook "$fix")
+if echo "$out" | grep -qF "[Arboretum] Plugin not found — install with /plugin install arboretum."; then
+  pass "SSB-5a"
+else
+  fail_case "SSB-5a" "missing plugin-not-found diagnostic" "$out"
+fi
+
+fix=$(new_fixture ssb5b)
+cat > "$fix/.arboretum/update-cache.json" <<'JSON'
+{
+  "fetched_at": "2026-06-03T00:00:00Z",
+  "installed_version": "0.24.6",
+  "latest_version": null,
+  "update_available": false,
+  "error": "gh-call-failed"
+}
+JSON
+out=$(run_hook "$fix")
+if echo "$out" | grep -qF "[Arboretum] Could not check latest release — release lookup failed; using installed v0.24.6."; then
+  pass "SSB-5b"
+else
+  fail_case "SSB-5b" "missing release-lookup-failed diagnostic" "$out"
+fi
+
+fix=$(new_fixture ssb5c)
+printf '{\n  "fetched_at": "2026-06-03T00:00:00Z",\n  "installed_version": "0.24.6\033[31mBAD",\n  "latest_version": null,\n  "update_available": false,\n  "error": "gh-call-failed"\n}\n' > "$fix/.arboretum/update-cache.json"
+NOPY_BIN="$ROOT_TMP/no-python-bin"
+mkdir -p "$NOPY_BIN"
+IFS=':' read -ra _pdirs <<< "$PATH"
+for _d in "${_pdirs[@]}"; do
+  [ -d "$_d" ] || continue
+  for _f in "$_d"/*; do
+    [ -e "$_f" ] || continue
+    _b=${_f##*/}
+    [ "$_b" = python3 ] && continue
+    [ -e "$NOPY_BIN/$_b" ] || ln -s "$_f" "$NOPY_BIN/$_b" 2>/dev/null || true
+  done
+done
+out=$(CLAUDE_PROJECT_DIR="$fix" PATH="$NOPY_BIN" bash "$fix/.claude/hooks/session-start.sh" 2>&1)
+if printf '%s' "$out" | python3 -c "import sys; sys.exit(0 if b'\x1b' in sys.stdin.buffer.read() else 1)"; then
+  fail_case "SSB-5c" "raw ESC (0x1b) survived update-cache shell fallback render" "$out"
+elif echo "$out" | grep -qF "[Arboretum] Could not check latest release — release lookup failed; using installed v0.24.6[31mBAD."; then
+  pass "SSB-5c"
+else
+  fail_case "SSB-5c" "missing scrubbed fallback diagnostic" "$out"
+fi
+
+# ── SSB-6: configured roadmap emits diagnostics when orientation is absent ─
+fix=$(new_fixture ssb6a)
+cat > "$fix/roadmap.config.yaml" <<'YAML'
+profile: lean
+wip_limit: 1
+YAML
+out=$(run_hook "$fix")
+if echo "$out" | grep -qF "[roadmap] Renderer missing from project tree — run /upgrade."; then
+  pass "SSB-6a"
+else
+  fail_case "SSB-6a" "missing roadmap-renderer-missing diagnostic" "$out"
+fi
+
+fix=$(new_fixture ssb6b)
+cat > "$fix/roadmap.config.yaml" <<'YAML'
+profile: lean
+wip_limit: 1
+YAML
+cat > "$fix/scripts/roadmap/render-run.sh" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+chmod +x "$fix/scripts/roadmap/render-run.sh"
+out=$(run_hook "$fix")
+if echo "$out" | grep -qF "[roadmap] Configured, but render failed — run /roadmap run for details."; then
+  pass "SSB-6b"
+else
+  fail_case "SSB-6b" "missing roadmap-render-failed diagnostic" "$out"
+fi
 
 [ "$fail" = 0 ] && echo "session-start-banner contract: ALL PASS" || exit 1

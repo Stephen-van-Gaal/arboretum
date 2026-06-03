@@ -475,13 +475,31 @@ if cache.get("update_available"):
     iv = _CTRL.sub("", cache.get("installed_version") or "?")
     lv = _CTRL.sub("", cache.get("latest_version") or "?")
     print(f"[Arboretum] Update available: v{iv} → v{lv} — run /plugin update arboretum to upgrade.")
+elif cache.get("error") == "manifest-not-found":
+    print("[Arboretum] Plugin not found — install with /plugin install arboretum.")
+elif cache.get("error") == "gh-unavailable":
+    print("[Arboretum] Could not check latest release — gh unavailable; install gh or run gh auth status.")
+elif cache.get("error") in ("gh-call-failed", "no-release"):
+    iv = _CTRL.sub("", cache.get("installed_version") or "?")
+    print(f"[Arboretum] Could not check latest release — release lookup failed; using installed v{iv}.")
 PY
 ) || true
     else
+      _scrub_ctrl() { printf '%s' "${1:-}" | LC_ALL=C tr -d '\000-\037\177-\237'; }
       if grep -q '"update_available"[[:space:]]*:[[:space:]]*true' "$UPDATE_CACHE" 2>/dev/null; then
         _iv=$(sed -n 's/.*"installed_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UPDATE_CACHE" | head -1)
         _lv=$(sed -n 's/.*"latest_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UPDATE_CACHE" | head -1)
+        _iv="$(_scrub_ctrl "$_iv")"
+        _lv="$(_scrub_ctrl "$_lv")"
         update_block="[Arboretum] Update available: v${_iv:-?} → v${_lv:-?} — run /plugin update arboretum to upgrade."
+      elif grep -q '"error"[[:space:]]*:[[:space:]]*"manifest-not-found"' "$UPDATE_CACHE" 2>/dev/null; then
+        update_block="[Arboretum] Plugin not found — install with /plugin install arboretum."
+      elif grep -q '"error"[[:space:]]*:[[:space:]]*"gh-unavailable"' "$UPDATE_CACHE" 2>/dev/null; then
+        update_block="[Arboretum] Could not check latest release — gh unavailable; install gh or run gh auth status."
+      elif grep -Eq '"error"[[:space:]]*:[[:space:]]*"(gh-call-failed|no-release)"' "$UPDATE_CACHE" 2>/dev/null; then
+        _iv=$(sed -n 's/.*"installed_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UPDATE_CACHE" | head -1)
+        _iv="$(_scrub_ctrl "$_iv")"
+        update_block="[Arboretum] Could not check latest release — release lookup failed; using installed v${_iv:-?}."
       fi
     fi
   fi
@@ -794,11 +812,18 @@ fi
 
 ROADMAP_RENDER="$PROJECT_DIR/scripts/roadmap/render-run.sh"
 if [ -x "$ROADMAP_RENDER" ]; then
-  orientation_text="$(bash "$ROADMAP_RENDER" --condensed 2>/dev/null || true)"
+  orientation_status=0
+  orientation_text="$(bash "$ROADMAP_RENDER" --condensed 2>/dev/null)" || orientation_status=$?
   if [ -n "$orientation_text" ]; then
     [ -n "$output" ] && output+=$'\n'
     output+="$orientation_text"
+  elif [ -f "$PROJECT_DIR/roadmap.config.yaml" ] && [ "$orientation_status" -ne 0 ]; then
+    [ -n "$output" ] && output+=$'\n'
+    output+="[roadmap] Configured, but render failed — run /roadmap run for details."
   fi
+elif [ -f "$PROJECT_DIR/roadmap.config.yaml" ]; then
+  [ -n "$output" ] && output+=$'\n'
+  output+="[roadmap] Renderer missing from project tree — run /upgrade."
 fi
 
 # ── Output ───────────────────────────────────────────────────────────

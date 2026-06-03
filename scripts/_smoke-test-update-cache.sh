@@ -9,6 +9,9 @@
 #   T4: installed 0.2.3, latest v0.2.3 → update_available=false
 #   T5: gh fails with "release not found" → error=no-release
 #   T6: multiple installed versions → picks highest
+#   T7: default discovery finds Codex plugin cache
+#   T8: default discovery prefers Codex cache over a higher Claude install
+#   T9: Claude sessions prefer Claude cache over a higher Codex install
 #
 # Usage: bash scripts/_smoke-test-update-cache.sh
 # Exit 0 if all assertions pass, 1 otherwise.
@@ -182,6 +185,68 @@ ua=$(cache_field "$cache" update_available)
 [ "$iv" = "0.2.2" ] || fail "T6" "expected highest version 0.2.2, got: $iv"
 [ "$ua" = "True" ]  || fail "T6" "expected update_available=True, got: $ua"
 pass "T6: multiple versions → picks highest (0.2.2), detects 0.3.0 update"
+
+# ── T7: default discovery searches Codex plugin cache ────────────────
+
+proj="$FIXTURE/t7"
+mkdir -p "$proj"
+home="$FIXTURE/home-t7"
+codex_plugins="$home/.codex/plugins/cache"
+make_manifest "$codex_plugins" "0.4.0"
+make_fake_gh "$FIXTURE/bin-t7" "v0.4.0"
+HOME="$home" \
+  PATH="$FIXTURE/bin-t7:$ISOLATED_BIN" \
+  bash "$REFRESH" "$proj" >/dev/null 2>&1 || true
+cache="$proj/.arboretum/update-cache.json"
+[ -f "$cache" ] || fail "T7" "cache file not written"
+err=$(cache_field "$cache" error)
+iv=$(cache_field "$cache" installed_version)
+[ "$err" = "" ]      || fail "T7" "expected error=null, got: $err"
+[ "$iv" = "0.4.0" ] || fail "T7" "expected installed_version=0.4.0 from Codex cache, got: $iv"
+pass "T7: default discovery finds arboretum in ~/.codex/plugins/cache"
+
+# ── T8: default discovery does not merge Codex + Claude versions ──────
+
+proj="$FIXTURE/t8"
+mkdir -p "$proj"
+home="$FIXTURE/home-t8"
+codex_plugins="$home/.codex/plugins/cache"
+claude_plugins="$home/.claude/plugins/cache"
+make_manifest "$codex_plugins" "0.4.0"
+make_manifest "$claude_plugins" "9.9.9"
+make_fake_gh "$FIXTURE/bin-t8" "v0.5.0"
+HOME="$home" \
+  PATH="$FIXTURE/bin-t8:$ISOLATED_BIN" \
+  bash "$REFRESH" "$proj" >/dev/null 2>&1 || true
+cache="$proj/.arboretum/update-cache.json"
+[ -f "$cache" ] || fail "T8" "cache file not written"
+iv=$(cache_field "$cache" installed_version)
+ua=$(cache_field "$cache" update_available)
+[ "$iv" = "0.4.0" ] || fail "T8" "expected Codex installed_version=0.4.0, got: $iv"
+[ "$ua" = "True" ] || fail "T8" "expected Codex 0.4.0 vs latest 0.5.0 to report update_available=True, got: $ua"
+pass "T8: default discovery prefers Codex cache over higher Claude install"
+
+# ── T9: Claude sessions prefer Claude plugin cache ────────────────────
+
+proj="$FIXTURE/t9"
+mkdir -p "$proj"
+home="$FIXTURE/home-t9"
+codex_plugins="$home/.codex/plugins/cache"
+claude_plugins="$home/.claude/plugins/cache"
+make_manifest "$codex_plugins" "9.9.9"
+make_manifest "$claude_plugins" "0.4.0"
+make_fake_gh "$FIXTURE/bin-t9" "v0.5.0"
+HOME="$home" \
+  CLAUDE_PROJECT_DIR="$proj" \
+  PATH="$FIXTURE/bin-t9:$ISOLATED_BIN" \
+  bash "$REFRESH" "$proj" >/dev/null 2>&1 || true
+cache="$proj/.arboretum/update-cache.json"
+[ -f "$cache" ] || fail "T9" "cache file not written"
+iv=$(cache_field "$cache" installed_version)
+ua=$(cache_field "$cache" update_available)
+[ "$iv" = "0.4.0" ] || fail "T9" "expected Claude installed_version=0.4.0, got: $iv"
+[ "$ua" = "True" ] || fail "T9" "expected Claude 0.4.0 vs latest 0.5.0 to report update_available=True, got: $ua"
+pass "T9: Claude session discovery prefers Claude cache over higher Codex install"
 
 echo "All smoke tests passed."
 exit 0
