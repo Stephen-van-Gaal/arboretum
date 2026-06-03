@@ -206,4 +206,80 @@ PROJECT_DIR="$PRJ_RD" bash "$SYNC" --write-manifest-entry scripts/foo.sh 0.1.0 "
 plan_rd2="$(PROJECT_DIR="$PRJ_RD" UPGRADE_PLUGIN_ROOT="$PLG_RD" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
 check "removal_detection active once baseline exists" active "$(echo "$plan_rd2" | jq -r '.removal_detection')"
 
+# Legacy projects may predate .arboretum.yml but still carry Arboretum roadmap
+# config. Cedar is the motivating shape: Azure DevOps lives in roadmap.config.yaml.
+PRJ_LEGACY="$TMP/proj-legacy"; PLG_LEGACY="$TMP/plugin-legacy"
+mkdir -p "$PRJ_LEGACY/scripts" "$PLG_LEGACY/scripts"
+cat > "$PRJ_LEGACY/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+azure_devops:
+  organization: VCH-DataAnalytics
+  project: Advanced_Data_Analytics
+YAML
+echo 'legacy-plugin-file' > "$PLG_LEGACY/scripts/legacy.sh"
+PROJECT_DIR="$PRJ_LEGACY" UPGRADE_PLUGIN_ROOT="$PLG_LEGACY" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.4.0 bash "$SYNC" --apply >/dev/null
+if [ -f "$PRJ_LEGACY/.arboretum.yml" ]; then
+  echo "ok: apply created .arboretum.yml for legacy roadmap project"
+else
+  echo "FAIL: apply created .arboretum.yml for legacy roadmap project — file missing"; fail=1
+fi
+check "legacy .arboretum.yml preserves backend" "backend: azure-devops" "$(grep '^backend:' "$PRJ_LEGACY/.arboretum.yml" 2>/dev/null || true)"
+check "legacy .arboretum.yml sets foundation layer" "layer: 0" "$(grep '^layer:' "$PRJ_LEGACY/.arboretum.yml" 2>/dev/null || true)"
+
+PRJ_LEGACY_PRECEDENCE="$TMP/proj-legacy-precedence"; PLG_LEGACY_PRECEDENCE="$TMP/plugin-legacy-precedence"
+mkdir -p "$PRJ_LEGACY_PRECEDENCE/scripts" "$PLG_LEGACY_PRECEDENCE/scripts"
+cat > "$PRJ_LEGACY_PRECEDENCE/roadmap.config.yaml" <<'YAML'
+unrelated:
+  backend: github
+backend: azure-devops
+YAML
+echo 'legacy-precedence-plugin-file' > "$PLG_LEGACY_PRECEDENCE/scripts/legacy.sh"
+PROJECT_DIR="$PRJ_LEGACY_PRECEDENCE" UPGRADE_PLUGIN_ROOT="$PLG_LEGACY_PRECEDENCE" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.4.0 bash "$SYNC" --apply >/dev/null
+check "legacy backend uses top-level key before unrelated nested key" "backend: azure-devops" "$(grep '^backend:' "$PRJ_LEGACY_PRECEDENCE/.arboretum.yml" 2>/dev/null || true)"
+
+PRJ_LEGACY_NOOP="$TMP/proj-legacy-noop"; PLG_LEGACY_NOOP="$TMP/plugin-legacy-noop"
+mkdir -p "$PRJ_LEGACY_NOOP/scripts" "$PLG_LEGACY_NOOP/scripts"
+cat > "$PRJ_LEGACY_NOOP/roadmap.config.yaml" <<'YAML'
+backend: null
+roadmap:
+  backend: azure-devops
+YAML
+PROJECT_DIR="$PRJ_LEGACY_NOOP" UPGRADE_PLUGIN_ROOT="$PLG_LEGACY_NOOP" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.4.2 bash "$SYNC" --apply >/dev/null
+check "legacy null backend defaults to github" "backend: github" "$(grep '^backend:' "$PRJ_LEGACY_NOOP/.arboretum.yml" 2>/dev/null || true)"
+if [ -f "$PRJ_LEGACY_NOOP/.arboretum/install-manifest.json" ]; then
+  echo "ok: legacy no-op apply creates install manifest"
+else
+  echo "FAIL: legacy no-op apply creates install manifest — file missing"; fail=1
+fi
+check "legacy no-op apply bumps manifest version" 0.4.2 "$(PROJECT_DIR="$PRJ_LEGACY_NOOP" bash "$SYNC" --read-manifest-version)"
+
+# The no-session CLI guard must accept the same legacy marker so old projects can
+# reach the upgrade helper, while still rejecting arbitrary directories.
+PRJ_BIN_LEGACY="$TMP/proj-bin-legacy"; PLG_BIN_LEGACY="$TMP/plugin-bin-legacy"
+mkdir -p "$PRJ_BIN_LEGACY/scripts" "$PLG_BIN_LEGACY/scripts"
+cat > "$PRJ_BIN_LEGACY/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+YAML
+echo 'bin-plugin-file' > "$PLG_BIN_LEGACY/scripts/bin.sh"
+bin_rc=0
+( cd "$PRJ_BIN_LEGACY" && UPGRADE_PLUGIN_ROOT="$PLG_BIN_LEGACY" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+    UPGRADE_PLUGIN_VERSION=0.4.1 "$HERE/../bin/arboretum" update >/dev/null ) || bin_rc=$?
+check "bin update accepts legacy roadmap project" 0 "$bin_rc"
+check "bin update legacy backend preserved" "backend: azure-devops" "$(grep '^backend:' "$PRJ_BIN_LEGACY/.arboretum.yml" 2>/dev/null || true)"
+
+PRJ_BIN_NOT="$TMP/proj-bin-not"; mkdir -p "$PRJ_BIN_NOT"
+bin_not_rc=0
+( cd "$PRJ_BIN_NOT" && UPGRADE_PLUGIN_ROOT="$PLG_BIN_LEGACY" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+    UPGRADE_PLUGIN_VERSION=0.4.1 "$HERE/../bin/arboretum" update >/dev/null 2>/dev/null ) || bin_not_rc=$?
+check "bin update rejects unmarked project" 2 "$bin_not_rc"
+
+if grep -q 'legacy marker migration' "$HERE/../skills/upgrade/SKILL.md"; then
+  echo "ok: upgrade skill handles empty-plan legacy marker migration"
+else
+  echo "FAIL: upgrade skill handles empty-plan legacy marker migration — prose missing"; fail=1
+fi
+
 exit "$fail"

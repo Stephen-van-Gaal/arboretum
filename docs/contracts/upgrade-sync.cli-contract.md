@@ -1,6 +1,6 @@
 ---
 script: scripts/upgrade-sync.sh
-version: 1.3
+version: 1.5
 invokers:
   - type: skill
     name: arboretum:/upgrade (project-upgrade)
@@ -23,7 +23,7 @@ CLI helper invoked by the `/upgrade` skill to sync vendored framework files from
 | Subcommand | Purpose | Args |
 |---|---|---|
 | `--plan` | Emit a JSON plan describing every managed file's required action. Pure read — no writes. | none |
-| `--apply` | Run `--plan` internally, apply all non-interactive-safe actions (`add`, `overwrite-safe`, `overwrite-local`, `converged`, `remove-obsolete`), merge the plugin's settings template into `.claude/settings.json`, bump `framework_version` in the install manifest, then echo the full plan JSON so the caller can surface `conflict` and `report-only` entries. | none |
+| `--apply` | Run `--plan` internally, initialize `.arboretum/install-manifest.json` if needed, apply all non-interactive-safe actions (`add`, `overwrite-safe`, `overwrite-local`, `converged`, `remove-obsolete`), create `.arboretum.yml` for legacy `roadmap.config.yaml` projects, merge the plugin's settings template into `.claude/settings.json`, bump `framework_version` in the install manifest, then echo the full plan JSON so the caller can surface `conflict` and `report-only` entries. | none |
 | `--bootstrap-manifest` | Populate `.arboretum/install-manifest.json` for a project that was installed before the manifest existed. Walks every 3-way-managed glob in the tree; records a base entry only when the tree copy matches the plugin copy (diverged files get no base, so the next `--plan` sees them as `overwrite-local` under the plugin-wins policy). | none |
 | `--read-manifest-sha <path>` | Print the `sha256` recorded for `<path>` in the install manifest, or empty string if absent. | `<path>` — repo-root-relative POSIX path |
 | `--read-manifest-version` | Print the `framework_version` stored in the install manifest, or empty string. | none |
@@ -86,6 +86,13 @@ No other exit codes. `1` is never emitted by this script.
 `--plan` and `--read-*` subcommands are read-only — no disk writes, no network calls.
 
 `--apply` writes:
+- Creates `<project>/.arboretum.yml` when it is absent and the legacy
+  `roadmap.config.yaml` marker is present, preserving the configured backend
+  (`backend:` or `roadmap.backend`) through `scripts/lib/yaml-lite.sh`, treating
+  YAML null markers (`null`, `~`) as unset, and setting `layer: 0`.
+- Initializes `<project>/.arboretum/install-manifest.json` before applying
+  actions so no-op legacy applies can still create a manifest baseline and bump
+  `framework_version` when no unresolved items remain.
 - Copies managed files for `add`, `overwrite-safe`, `overwrite-local`, `converged` actions.
 - Deletes safe obsolete excluded framework files for `remove-obsolete` actions and drops their manifest entries.
 - Merges plugin's `docs/templates/settings.json.template` into `.claude/settings.json` (via `seed-settings.sh`; degrades gracefully if `jq` absent).
@@ -110,6 +117,13 @@ This script consumes `definitions/install-manifest-schema.md @v1` — the schema
 
 ## Versioning
 
+- **1.5** — delegates legacy backend reads to `scripts/lib/yaml-lite.sh`,
+  normalizes YAML null-ish backend values to the GitHub default, and initializes
+  the install manifest at the start of `--apply` so no-op legacy migrations do
+  not leave partial `.arboretum.yml`-only state (2026-06-03).
+- **1.4** — `--apply` creates `.arboretum.yml` for legacy roadmap-config projects,
+  preserving the configured backend so Cedar-shaped Azure DevOps adopters can
+  upgrade into the current marker model (2026-06-03).
 - **1.3** — adds `remove-obsolete` so `/upgrade --apply` cleans up already-copied excluded framework files, such as plugin self-tests, when they are safe to delete (2026-06-02).
 - **1.2** — excludes plugin/dev self-tests (`scripts/_smoke-test-*.sh`) from managed upgrade propagation, matching `/init`'s consumer packaging boundary (2026-06-02).
 - **1.1** — plugin-wins policy + removal-detection honesty (2026-05-30, issues #394/#407). Adds the `overwrite-local` action: a divergent local copy of a framework file present in both tree and plugin now resolves to plugin-wins (applied, discards local edits) instead of `keep-local`/`conflict` — adopters do not fork framework code. Redefines `keep-local`/`conflict` as deletion-only cases. Adds the `removal_detection` plan field (`active`|`inconclusive`) so an empty-manifest plan is not misread as "zero removals". `--bootstrap-manifest` divergent files now classify `overwrite-local` on the next `--plan`.

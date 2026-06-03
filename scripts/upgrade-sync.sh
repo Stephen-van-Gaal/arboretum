@@ -6,6 +6,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/lib/upgrade-classify.sh
 source "$HERE/lib/upgrade-classify.sh"
+# shellcheck source=scripts/lib/yaml-lite.sh
+source "$HERE/lib/yaml-lite.sh"
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${PROJECT_DIR:-$(pwd)}}"
 MANIFEST="$PROJECT_DIR/.arboretum/install-manifest.json"
@@ -55,6 +57,62 @@ remove_manifest_entry() { # path
 }
 
 sha() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
+
+yaml_lite_value() {
+  local yaml_file="$1" key="$2"
+  [ -f "$yaml_file" ] || return 1
+  yaml_lite_parse file "$yaml_file" | awk -v key="$key" '
+    {
+      sep = index($0, "=")
+      if (sep == 0) { next }
+      parsed_key = substr($0, 1, sep - 1)
+      if (parsed_key == key) {
+        print substr($0, sep + 1)
+        found = 1
+        exit
+      }
+    }
+    END { exit found ? 0 : 1 }
+  '
+}
+
+normalize_backend_value() {
+  case "$1" in
+    ""|null|Null|NULL|~) printf '%s\n' "" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+project_backend_for_config() {
+  local config="$PROJECT_DIR/roadmap.config.yaml" backend=""
+  if [ -f "$config" ]; then
+    if backend="$(yaml_lite_value "$config" backend 2>/dev/null)"; then
+      backend="$(normalize_backend_value "$backend")"
+    else
+      backend="$(yaml_lite_value "$config" roadmap.backend 2>/dev/null || true)"
+      backend="$(normalize_backend_value "$backend")"
+    fi
+  fi
+  case "$backend" in
+    ""|github) printf '%s\n' "github" ;;
+    azure|ado|azure-devops) printf '%s\n' "azure-devops" ;;
+    *) printf '%s\n' "$backend" ;;
+  esac
+}
+
+ensure_arboretum_config() {
+  [ -f "$PROJECT_DIR/.arboretum.yml" ] && return 0
+  [ -f "$PROJECT_DIR/roadmap.config.yaml" ] || return 0
+  local backend
+  backend="$(project_backend_for_config)"
+  cat > "$PROJECT_DIR/.arboretum.yml" <<YAML
+# Arboretum project configuration
+# layer: 0 = foundation, 1 = structure, 2 = governance
+layer: 0
+# Tracker/repo backend. Preserved from legacy roadmap.config.yaml when present.
+backend: $backend
+YAML
+}
 
 # Files matched by a managed glob but explicitly NOT propagated by /upgrade
 # (mirrors /init's exclusion). rel is repo-root-relative (e.g. scripts/bootstrap-project.sh).
@@ -186,6 +244,8 @@ cmd_apply() {
   need_jq
   local plan proot; plan="$(cmd_plan)"; proot="$(echo "$plan" | jq -r '.plugin_root')"
   local v; v="$(plugin_version)"
+  manifest_init_if_missing
+  ensure_arboretum_config
   # Apply only the non-interactive-safe actions here; conflicts/report-only are
   # surfaced by the skill and never auto-applied by the helper.
   while IFS=$'\t' read -r rel action; do

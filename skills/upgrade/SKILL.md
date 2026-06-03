@@ -10,7 +10,11 @@ Deploy framework evolution from the installed plugin into this project's tree.
 `/plugin update` refreshes the *source* (plugin cache); `/upgrade` deploys it here.
 
 ## Preconditions (halt with the reason if any fail)
-1. `.arboretum.yml` exists at the project root (this is an arboretum project; #383).
+1. Project root is recognized: either `.arboretum.yml` exists, or the legacy
+   `roadmap.config.yaml` marker exists (older Arboretum projects such as Cedar
+   may predate `.arboretum.yml`). If only `roadmap.config.yaml` exists, say this
+   is a legacy upgrade; `--apply` will create `.arboretum.yml` with `layer: 0`
+   and preserve the configured backend.
 2. Inside a git repository.
 3. Working tree is clean enough — if dirty, list the dirty paths and ask to stop
    (recommended; git is the recovery net) or proceed.
@@ -55,9 +59,16 @@ _SYNC="${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-sync.sh"
    - `report-only` (`CLAUDE.md`, `PRINCIPLES.md`) — show the framework diff; never edit.
    - `report-removed` — note the framework dropped it; never auto-delete (only when
      `removal_detection` is `active`).
-   If `actions` is empty: report "already current" (noting removal-detection status) and stop.
-3. **Apply:** `bash "$_SYNC" --apply` (writes safe actions, merges the
-   settings allowlist additively, bumps the manifest when no conflicts remain).
+   If `actions` is empty:
+   - When `.arboretum.yml` is absent and legacy `roadmap.config.yaml` is present,
+     report "framework files already current; legacy marker migration still
+     needed" and proceed to Step 3 so `--apply` creates `.arboretum.yml` and the
+     install manifest baseline.
+   - Otherwise report "already current" (noting removal-detection status) and stop.
+3. **Apply:** `bash "$_SYNC" --apply` (writes safe actions, creates
+   `.arboretum.yml` for legacy `roadmap.config.yaml` projects while preserving
+   the backend, merges the settings allowlist additively, bumps the manifest when
+   no conflicts remain).
    For any conflict the user chose to take, copy that file from `plugin_root` manually
    and record it via `bash "$_SYNC" --write-manifest-entry <path> <version> <sha>`.
 4. **Verify:** regenerate the register (`bash scripts/generate-register.sh`) and run

@@ -33,6 +33,10 @@ fi
 COMMAND="$1"
 shift
 
+is_arboretum_project() {
+  [ -f ".arboretum.yml" ] || [ -f "roadmap.config.yaml" ]
+}
+
 case "$COMMAND" in
   bootstrap)
     exec "$REPO_ROOT/scripts/bootstrap-project.sh" "$@"
@@ -41,8 +45,8 @@ case "$COMMAND" in
     # Deploy framework evolution into an existing project (no-session path).
     # Conflicts are reported and skipped here — the /upgrade skill handles
     # interactive conflict resolution.
-    if [ ! -f ".arboretum.yml" ]; then
-      echo "arboretum update: not an arboretum project (no .arboretum.yml in $(pwd))" >&2
+    if ! is_arboretum_project; then
+      echo "arboretum update: not an arboretum project (no .arboretum.yml or roadmap.config.yaml in $(pwd))" >&2
       exit 2
     fi
     exec bash "$REPO_ROOT/scripts/upgrade-sync.sh" --apply
