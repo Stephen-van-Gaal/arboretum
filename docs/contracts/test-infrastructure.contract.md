@@ -1,6 +1,6 @@
 ---
 seam: test-infrastructure
-version: 1.2
+version: 1.3
 producer-type: script
 consumer-type: skill
 consumes:
@@ -17,7 +17,7 @@ owns:
 
 # test-infrastructure — `read-test-config.sh` Test-Command Declaration Contract
 
-The seam between `scripts/read-test-config.sh` (which reads a project's testing-shape declaration off `docs/specs/test-infrastructure.spec.md`) and the three skills that run a project's suite — `/build` (exit gate), `/finish` (pre-PR gate), and `/design` (coverage-baseline mode). The script's stdout is a `key=value` protocol; this contract pins the declared field set, the single required field, the closed enums, and the exit semantics so consumers never re-parse the spec's YAML.
+The seam between `scripts/read-test-config.sh` (which reads a project's testing-shape declaration off `docs/specs/test-infrastructure.spec.md`) and the consumers that run a project's suite — `/build` (exit gate), `/finish` (pre-PR gate), `/design` (coverage-baseline mode), and consumer-installed `scripts/ci-checks.sh` (canonical local/CI entrypoint). The script's stdout is a `key=value` protocol; this contract pins the declared field set, the single required field, the closed enums, and the exit semantics so consumers never re-parse the spec's YAML.
 
 ## Producer
 
@@ -35,11 +35,12 @@ Fields and rules:
 
 ## Consumer
 
-Consumer-type: `skill`. Three downstream consumers:
+Consumer-type: `skill` in frontmatter for the primary workflow consumers. Four downstream consumers:
 
 - **`skills/build/SKILL.md`** (exit gate) reads `default-command` to run the suite at build exit.
 - **`skills/finish/SKILL.md`** (Step 5.5) reads `default-command` for the pre-PR local gate.
 - **`skills/design/SKILL.md`** (coverage-baseline mode) reads `default-command` to baseline coverage before a refactor.
+- **`scripts/ci-checks.sh`** (consumer local/CI entrypoint) reads `default-command` in non-plugin roots when both `docs/specs/test-infrastructure.spec.md` and `scripts/read-test-config.sh` are installed, then runs that command as the consumer content gate.
 
 **Consumer obligations:**
 
@@ -49,6 +50,7 @@ Consumer-type: `skill`. Three downstream consumers:
   - An absent spec means the repo is uninitialized for testing-shape purposes. `/build` and `/design` coverage-baseline fall back to native product-test discovery: `package.json` with a `test` script, then `Makefile` with `test:`, then pytest config (`pytest.ini`, `pyproject.toml`, or `setup.cfg`).
   - `/finish` does not introduce native discovery. If the spec is absent, it skips its pre-PR local gate; `/build` remains the stage responsible for proving the product-test command before work exits.
 - A non-zero exit from `default-command` *itself* (once obtained) is a real test failure and MUST block the gate.
+- `scripts/ci-checks.sh` MUST skip its declared-command stage in the Arboretum plugin root, where the framework's own `default-command` is `bash scripts/ci-checks.sh`; this avoids recursive self-invocation while preserving `/finish`'s normal reader path.
 
 ## Protocol shape
 
@@ -89,6 +91,7 @@ Consumer-type: `skill`. Three downstream consumers:
 
 ## Versioning
 
+- **1.3** (2026-06-03) - `scripts/ci-checks.sh` is now a script consumer in non-plugin roots: it runs the declared `default-command` when available and skips the stage in the plugin root to avoid recursive self-invocation.
 - **1.2** (2026-06-02) - present-but-invalid declarations now fail closed; Arboretum `ci-checks.sh` is not a product-test fallback for initialized adopter repos. Design: adopter-ci-boundary.
 - **1.1** (2026-06-01) - parser moved onto shared `yaml-lite.sh` helper for Issue #437.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/read-test-config.sh` on this branch. Design: testing-shape.

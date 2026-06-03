@@ -23,11 +23,12 @@ fail=0
 
 # ---------------------------------------------------------------------------
 # CLI-1: Stage-banner sequence
-# All six banners must be present and appear in the documented order.
+# All seven banners must be present and appear in the documented order.
 # ---------------------------------------------------------------------------
 BANNERS=(
   "=== ShellCheck ==="
   "=== Smoke tests ==="
+  "=== Declared test command ==="
   "=== Cross-reference validation ==="
   "=== Contract coverage validation ==="
   "=== Health check (non-blocking) ==="
@@ -47,11 +48,11 @@ for banner in "${BANNERS[@]}"; do
     prev_line="$line_no"
   fi
 done
-[ "$fail" -eq 0 ] && echo "PASS: CLI-1 — all six stage banners present and in order"
+[ "$fail" -eq 0 ] && echo "PASS: CLI-1 — all seven stage banners present and in order"
 
 # ---------------------------------------------------------------------------
-# CLI-2: fail-flag accumulation — blocking stages use `|| fail=1`
-# The script must initialise fail=0 and accumulate via || fail=1.
+# CLI-2: fail-flag accumulation
+# The script must initialise fail=0 and accumulate blocking failures.
 # The health-check line must NOT have || fail=1 (non-blocking).
 # ---------------------------------------------------------------------------
 if ! grep -q '^fail=0' "$TARGET"; then
@@ -61,7 +62,8 @@ else
   echo "PASS: CLI-2a — fail=0 initialisation present"
 fi
 
-# Count lines containing `|| fail=1` (must be at least 4: shellcheck, smoke loop, cross-ref, contract-coverage, version-bump)
+# Count lines containing `|| fail=1` (threshold is intentionally loose because
+# some blocking stages set fail=1 through helpers rather than inline guards).
 fail1_count=$(grep -c '|| fail=1' "$TARGET" || true)
 if [ "$fail1_count" -lt 4 ]; then
   echo "FAIL: CLI-2 — expected ≥4 '|| fail=1' accumulations, found $fail1_count" >&2
@@ -173,6 +175,15 @@ else
   fail=1
 fi
 
+if grep -q '^run_plugin_check_if_available()' "$TARGET" \
+  && grep -q 'not installed in this root' "$TARGET" \
+  && grep -q 'missing in plugin root' "$TARGET"; then
+  echo "PASS: CLI-7e — plugin-only script checks are file-guarded for consumer roots"
+else
+  echo "FAIL: CLI-7e — plugin-only script checks are not guarded by root/file availability" >&2
+  fail=1
+fi
+
 # ---------------------------------------------------------------------------
 # CLI-8: Empty smoke-test glob
 # Consumer roots may have no scripts/_smoke-test-*.sh files. The loop must not
@@ -182,6 +193,21 @@ if grep -qF '[ -e "$f" ] || continue' "$TARGET"; then
   echo "PASS: CLI-8 — smoke-test loop ignores unmatched globs"
 else
   echo "FAIL: CLI-8 — smoke-test loop can pass an unmatched glob to sed" >&2
+  fail=1
+fi
+
+# ---------------------------------------------------------------------------
+# CLI-9: Consumer declared test command
+# Consumer roots with a testing-shape declaration must run default-command
+# through read-test-config.sh.
+# ---------------------------------------------------------------------------
+if grep -q '^run_declared_default_command()' "$TARGET" \
+  && grep -q 'read-test-config.sh' "$TARGET" \
+  && grep -q 'default-command=' "$TARGET" \
+  && grep -q 'bash -c "$default_command"' "$TARGET"; then
+  echo "PASS: CLI-9 — declared default-command reader path is present"
+else
+  echo "FAIL: CLI-9 — declared default-command reader path is missing" >&2
   fail=1
 fi
 

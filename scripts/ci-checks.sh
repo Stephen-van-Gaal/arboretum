@@ -55,6 +55,64 @@ smoke_test_applicable() {
   return 1
 }
 
+run_declared_default_command() {
+  local spec="docs/specs/test-infrastructure.spec.md"
+  local reader="scripts/read-test-config.sh"
+  local config default_command
+
+  if [ "${ARBORETUM_CI_CHECKS_RUNNING_DEFAULT:-0}" = "1" ]; then
+    echo "SKIP: declared default-command already running"
+    return
+  fi
+
+  if is_plugin_root; then
+    echo "SKIP: plugin root runs framework checks directly"
+    return
+  fi
+
+  if [ ! -f "$spec" ]; then
+    echo "SKIP: $spec not found"
+    return
+  fi
+
+  if [ ! -f "$reader" ]; then
+    echo "FAIL: $reader not installed; cannot read declared default-command" >&2
+    fail=1
+    return
+  fi
+
+  if ! config="$(bash "$reader" "$spec")"; then
+    fail=1
+    return
+  fi
+
+  default_command="$(printf '%s\n' "$config" | sed -n 's/^default-command=//p' | head -1)"
+  if [ -z "$default_command" ]; then
+    echo "FAIL: $reader did not emit default-command" >&2
+    fail=1
+    return
+  fi
+
+  echo "--- $default_command ---"
+  ARBORETUM_CI_CHECKS_RUNNING_DEFAULT=1 bash -c "$default_command" || fail=1
+}
+
+run_plugin_check_if_available() {
+  local script="$1"
+
+  if [ -f "$script" ]; then
+    bash "$script" || fail=1
+    return
+  fi
+
+  if is_plugin_root; then
+    echo "FAIL: $script missing in plugin root" >&2
+    fail=1
+  else
+    echo "SKIP: $script not installed in this root"
+  fi
+}
+
 echo "=== ShellCheck ==="
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck_roots=()
@@ -84,16 +142,19 @@ for f in scripts/_smoke-test-*.sh; do
   bash "$f" || fail=1
 done
 
+echo "=== Declared test command ==="
+run_declared_default_command
+
 echo "=== Cross-reference validation ==="
 bash scripts/validate-cross-refs.sh || fail=1
 
 echo "=== Contract coverage validation ==="
-bash scripts/validate-coverage-manifest.sh || fail=1
+run_plugin_check_if_available "scripts/validate-coverage-manifest.sh"
 
 echo "=== Health check (non-blocking) ==="
 bash scripts/health-check.sh "$ROOT" || echo "(health-check reported issues — non-blocking)"
 
 echo "=== Version bump check ==="
-bash scripts/check-version-bump.sh || fail=1
+run_plugin_check_if_available "scripts/check-version-bump.sh"
 
 exit $fail

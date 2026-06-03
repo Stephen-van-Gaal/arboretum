@@ -111,6 +111,59 @@ INNER
   done
 }
 
+make_declared_command_consumer_fixture() {
+  local tmp="$1"
+  local repo="$tmp/repo"
+  local bin="$tmp/bin"
+  local python_exe
+  local tool
+
+  mkdir -p "$bin" "$repo/scripts/lib" "$repo/docs/specs"
+  cp "$CI" "$repo/scripts/ci-checks.sh"
+  cp "$SCRIPT_DIR/read-test-config.sh" "$repo/scripts/read-test-config.sh"
+  cp "$SCRIPT_DIR/lib/yaml-lite.sh" "$repo/scripts/lib/yaml-lite.sh"
+  chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/read-test-config.sh" "$repo/scripts/lib/yaml-lite.sh"
+
+  python_exe=$(python3 -c 'import sys; print(sys.executable)')
+
+  for tool in bash dirname find grep head mktemp rm sed touch; do
+    ln -s "$(command -v "$tool")" "$bin/$tool"
+  done
+  ln -s "$python_exe" "$bin/python3"
+
+  cat > "$bin/shellcheck" <<'INNER'
+#!/usr/bin/env bash
+exit 0
+INNER
+  chmod +x "$bin/shellcheck"
+
+  cat > "$repo/scripts/validate-cross-refs.sh" <<'INNER'
+#!/usr/bin/env bash
+exit 0
+INNER
+  chmod +x "$repo/scripts/validate-cross-refs.sh"
+
+  cat > "$repo/scripts/health-check.sh" <<'INNER'
+#!/usr/bin/env bash
+exit 0
+INNER
+  chmod +x "$repo/scripts/health-check.sh"
+
+  cat > "$repo/scripts/product-test.sh" <<'INNER'
+#!/usr/bin/env bash
+touch product-test-ran
+exit 0
+INNER
+  chmod +x "$repo/scripts/product-test.sh"
+
+  cat > "$repo/docs/specs/test-infrastructure.spec.md" <<'INNER'
+---
+name: test-infrastructure
+default-command: bash scripts/product-test.sh
+---
+INNER
+}
+
 run_ci_fixture() {
   local tmp="$1"
   PATH="$tmp/bin" "$(command -v bash)" "$tmp/repo/scripts/ci-checks.sh"
@@ -119,11 +172,11 @@ run_ci_fixture() {
 tmp="$(new_tmp_dir)"
 make_ci_fixture "$tmp"
 out="$(REQUIRE_SHELLCHECK='' run_ci_fixture "$tmp" 2>&1)"
-for section in "ShellCheck" "Smoke tests" "Cross-reference" "Contract coverage" "Health check" "Version bump"; do
+for section in "ShellCheck" "Smoke tests" "Declared test command" "Cross-reference" "Contract coverage" "Health check" "Version bump"; do
   grep -qF "$section" <<< "$out" || {
     echo "FAIL: ci-checks.sh output missing section '$section'" >&2; exit 1; }
 done
-echo "PASS: ci-checks.sh runs and reports all 6 sections"
+echo "PASS: ci-checks.sh runs and reports all 7 sections"
 
 tmp="$(new_tmp_dir)"
 make_ci_fixture "$tmp"
@@ -209,3 +262,36 @@ grep -qF "SKIP: plugin version manifests not found" <<< "$consumer_out" || {
   exit 1
 }
 echo "PASS: consumer roots skip inapplicable framework smoke tests without requiring plugin dirs"
+
+tmp="$(new_tmp_dir)"
+make_declared_command_consumer_fixture "$tmp"
+set +e
+declared_out="$(run_ci_fixture "$tmp" 2>&1)"
+declared_status=$?
+set -e
+if [ "$declared_status" -ne 0 ]; then
+  echo "FAIL: consumer root ci-checks should exit cleanly when declared tests pass and plugin-only checks are absent" >&2
+  echo "$declared_out" >&2
+  exit 1
+fi
+if [ ! -f "$tmp/repo/product-test-ran" ]; then
+  echo "FAIL: consumer roots should run the declared default-command" >&2
+  echo "$declared_out" >&2
+  exit 1
+fi
+if grep -qF "No such file or directory" <<< "$declared_out"; then
+  echo "FAIL: consumer roots should skip absent plugin-only checks instead of hard-calling them" >&2
+  echo "$declared_out" >&2
+  exit 1
+fi
+grep -qF "SKIP: scripts/validate-coverage-manifest.sh not installed in this root" <<< "$declared_out" || {
+  echo "FAIL: missing contract-coverage gate did not print a consumer skip line" >&2
+  echo "$declared_out" >&2
+  exit 1
+}
+grep -qF "SKIP: scripts/check-version-bump.sh not installed in this root" <<< "$declared_out" || {
+  echo "FAIL: missing version-bump gate did not print a consumer skip line" >&2
+  echo "$declared_out" >&2
+  exit 1
+}
+echo "PASS: consumer roots run declared default-command and skip absent plugin-only checks"
