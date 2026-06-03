@@ -69,11 +69,20 @@ git log $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/re
 ```
 
 Report:
-- **Uncommitted changes:** If any, warn: "You have uncommitted changes. Commit them first?"
+- **Uncommitted changes:** If any, offer a `stage named files + commit checkpoint` before pausing.
 - **Commits on branch:** List them so the user can confirm the work is complete
 - **Current branch:** Confirm it's a feature branch
 
-If there are uncommitted changes, wait for the user to resolve them before proceeding.
+If there are uncommitted changes, the checkpoint is:
+
+1. Show `git status --short`.
+2. Ask which exact files to stage.
+3. Run `git add -- <file> [<file>...]` with only those named files.
+4. Ask for or confirm the commit message, referencing the active issue when available.
+5. Run `git commit --only -m "<message>" -- <file> [<file>...]` so pre-existing staged entries are not swept into the checkpoint commit.
+6. Re-run `git status --short`; continue only when clean.
+
+If the operator declines the checkpoint, wait for them to resolve the dirty tree before proceeding.
 
 ### Step 2: Identify affected specs
 

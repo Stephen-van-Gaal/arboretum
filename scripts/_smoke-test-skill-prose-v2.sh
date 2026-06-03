@@ -157,6 +157,15 @@ grep -q "^## Section v2: Ship-tail under the unified workflow" "$FINISH" \
   || fail "case 13 — /finish Section v2 missing"
 ok "case 13 — /finish Section v2 present"
 
+# Case 13a: /finish Step 1 offers an in-flow commit checkpoint instead of only hard-pausing
+grep -Fq "stage named files + commit checkpoint" "$FINISH" \
+  || fail "case 13a — /finish Step 1 does not offer the named-file commit checkpoint"
+grep -Fq "git add -- <file> [<file>...]" "$FINISH" \
+  || fail "case 13a — /finish checkpoint does not preserve explicit named-file staging"
+grep -Fq "git commit --only -m \"<message>\" -- <file> [<file>...]" "$FINISH" \
+  || fail "case 13a — /finish checkpoint does not restrict commit contents to named files"
+ok "case 13a — /finish Step 1 offers an explicit named-file commit checkpoint"
+
 # Case 14: /health-check has Step 0 (flag read)
 grep -q "^### Step 0: Read the pipeline\.workflow flag" "$HEALTH" \
   || fail "case 14 — /health-check Step 0 (flag read) missing"
