@@ -204,6 +204,18 @@ the active session worktree was removed. This is the final filesystem action.
 Tell the user to end this session or open a fresh session from a valid checkout;
 do not run further commands from the removed path.
 
+### Step 3.5: Surface release pending state
+
+Use the merged PR metadata read in Step 1.5. If the PR body contains
+`release-state: pending`, include this in the cleanup result:
+
+> "Cleanup complete. Release remains pending; run `scripts/prepare-release-package.sh` from main when the Release Package is ready."
+
+Do not run the release-package helper from `/cleanup`; cleanup only preserves
+the handoff. If the active session worktree was removed, this is still safe to
+report as final guidance, but do not run any further commands from the removed
+path.
+
 ### Step 4: Suggest reflection
 
 > "Before moving on — want to run `/reflect` to capture what you learned from this work?"

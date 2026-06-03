@@ -79,6 +79,16 @@ git_fixture() {
   git -C "$d" branch -q base-ref
 }
 
+run_check() {
+  env -u RELEASE_INTENT_BODY_FILE -u RELEASE_INTENT_EVENT \
+    REPO_ROOT="$1" BASE_REF="$2" bash "$CHECK"
+}
+
+run_check_with_body() {
+  env -u RELEASE_INTENT_EVENT \
+    RELEASE_INTENT_BODY_FILE="$3" REPO_ROOT="$1" BASE_REF="$2" bash "$CHECK"
+}
+
 echo "=== bump-version.sh: patch increments all four spots ==="
 D="$TMP/patch"; make_manifests "$D" "1.2.3"
 REPO_ROOT="$D" bash "$BUMP" patch >/dev/null
@@ -132,14 +142,18 @@ echo "=== check-version-bump.sh: dev-only change passes without a bump ==="
 D="$TMP/check-devonly"; git_fixture "$D"
 echo "more" >> "$D/docs/specs/demo.spec.md"
 git -C "$D" add -A; git -C "$D" commit -qm "spec edit"
-REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null || fail "dev-only should pass"
+run_check "$D" base-ref >/dev/null || fail "dev-only should pass"
 
 echo "=== check-version-bump.sh: shippable change without a bump fails ==="
 D="$TMP/check-noshippable"; git_fixture "$D"
 echo "more" >> "$D/skills/demo/SKILL.md"
 git -C "$D" add -A; git -C "$D" commit -qm "skill edit"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
-  fail "shippable change without bump should fail"
+if ! run_check "$D" base-ref >/dev/null 2>&1; then
+  fail "shippable change without PR body should skip before /pr"
+fi
+printf '## Summary\nmissing intent\n' > "$D/body.md"
+if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
+  fail "shippable change with invalid supplied body should fail"
 fi
 
 echo "=== check-version-bump.sh: shippable change with a bump passes ==="
@@ -147,7 +161,7 @@ D="$TMP/check-bump"; git_fixture "$D"
 echo "more" >> "$D/skills/demo/SKILL.md"
 REPO_ROOT="$D" bash "$BUMP" minor >/dev/null
 git -C "$D" add -A; git -C "$D" commit -qm "skill edit + bump"
-REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null || fail "shippable + bump should pass"
+run_check "$D" base-ref >/dev/null || fail "shippable + bump should pass"
 
 echo "=== check-version-bump.sh: disagreeing versions fail ==="
 D="$TMP/check-disagree"; git_fixture "$D"
@@ -159,7 +173,7 @@ d["version"] = "5.5.5"
 json.dump(d, open(p, "w"), indent=2)
 PY
 git -C "$D" add -A; git -C "$D" commit -qm "break consistency"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+if run_check "$D" base-ref >/dev/null 2>&1; then
   fail "disagreeing versions should fail"
 fi
 
@@ -173,7 +187,7 @@ d["version"] = "5.5.5"
 json.dump(d, open(p, "w"), indent=2)
 PY
 git -C "$D" add -A; git -C "$D" commit -qm "break codex consistency"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+if run_check "$D" base-ref >/dev/null 2>&1; then
   fail "Codex version disagreement should fail"
 fi
 
@@ -181,7 +195,8 @@ echo "=== check-version-bump.sh: public-mirror source (CLAUDE.public.md) is ship
 D="$TMP/check-public"; git_fixture "$D"
 echo "more" >> "$D/CLAUDE.public.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit CLAUDE.public.md"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+printf '## Summary\nmissing intent\n' > "$D/body.md"
+if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
   fail "CLAUDE.public.md change without a bump should fail — sync-public.yml copies it to the published CLAUDE.md"
 fi
 
@@ -189,14 +204,15 @@ echo "=== check-version-bump.sh: root README.md is dev-only ==="
 D="$TMP/check-readme"; git_fixture "$D"
 echo "more" >> "$D/README.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit README.md"
-REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null \
+run_check "$D" base-ref >/dev/null \
   || fail "root README.md change should pass without a bump — sync overwrites it from README.public.md"
 
 echo "=== check-version-bump.sh: a prefix-collision path is not exempt ==="
 D="$TMP/check-anchor"; git_fixture "$D"
 echo "more" >> "$D/CLAUDE.md.bak"
 git -C "$D" add -A; git -C "$D" commit -qm "edit CLAUDE.md.bak"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+printf '## Summary\nmissing intent\n' > "$D/body.md"
+if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
   fail "CLAUDE.md.bak change without a bump should fail — the CLAUDE.md pattern is \$-anchored"
 fi
 
@@ -204,14 +220,15 @@ echo "=== check-version-bump.sh: .claude/skills/dev-* is dev-only ==="
 D="$TMP/check-skills-dev"; git_fixture "$D"
 echo "more" >> "$D/.claude/skills/dev-demo/SKILL.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit dev skill"
-REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null \
+run_check "$D" base-ref >/dev/null \
   || fail ".claude/skills/dev-* change should pass without a bump"
 
 echo "=== check-version-bump.sh: non-dev .claude/skills/ paths are shippable ==="
 D="$TMP/check-skills-shipped"; git_fixture "$D"
 echo "more" >> "$D/.claude/skills/shipped/SKILL.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit shipped skill"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+printf '## Summary\nmissing intent\n' > "$D/body.md"
+if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
   fail ".claude/skills/shipped change without a bump should fail — sync-public.yml excludes only dev-*/_archived/"
 fi
 
@@ -219,14 +236,15 @@ echo "=== check-version-bump.sh: .agents/skills/ is dev-only ==="
 D="$TMP/check-agents-skills"; git_fixture "$D"
 echo "more" >> "$D/.agents/skills/dev-local/SKILL.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit codex dev skill"
-REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null \
+run_check "$D" base-ref >/dev/null \
   || fail ".agents/skills/ change should pass without a bump"
 
 echo "=== check-version-bump.sh: .agents/plugins/ is shippable ==="
 D="$TMP/check-agents-plugins"; git_fixture "$D"
 echo "more" >> "$D/.agents/plugins/marketplace.json"
 git -C "$D" add -A; git -C "$D" commit -qm "edit codex marketplace"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+printf '## Summary\nmissing intent\n' > "$D/body.md"
+if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
   fail ".agents/plugins/ change without a bump should fail"
 fi
 
@@ -234,7 +252,8 @@ echo "=== check-version-bump.sh: public report issue form is shippable ==="
 D="$TMP/check-report-form"; git_fixture "$D"
 echo "more" >> "$D/.github/ISSUE_TEMPLATE/arboretum-problem.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit public report issue form"
-if REPO_ROOT="$D" BASE_REF=base-ref bash "$CHECK" >/dev/null 2>&1; then
+printf '## Summary\nmissing intent\n' > "$D/body.md"
+if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
   fail "arboretum report issue-form change without a bump should fail — sync-public.yml copies it to the public repo"
 fi
 

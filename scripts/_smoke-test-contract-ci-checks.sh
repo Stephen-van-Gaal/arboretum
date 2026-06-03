@@ -32,7 +32,7 @@ BANNERS=(
   "=== Cross-reference validation ==="
   "=== Contract coverage validation ==="
   "=== Health check (non-blocking) ==="
-  "=== Version bump check ==="
+  "=== Release gate ==="
 )
 
 prev_line=0

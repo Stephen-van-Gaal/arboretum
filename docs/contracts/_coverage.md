@@ -7,6 +7,7 @@
 |---|---|---|
 | scripts/bootstrap-project.sh | docs/contracts/bootstrap-project.cli-contract.md | cli |
 | scripts/bump-version.sh | docs/contracts/bump-version.cli-contract.md | cli |
+| scripts/check-release-gate.sh | docs/contracts/check-release-gate.cli-contract.md | cli |
 | scripts/check-version-bump.sh | docs/contracts/check-version-bump.cli-contract.md | cli |
 | scripts/ci-checks.sh | docs/contracts/ci-checks.cli-contract.md | cli |
 | scripts/classify-pr-change.sh | docs/contracts/classify-pr-change.contract.md | full |
@@ -21,10 +22,12 @@
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
 | scripts/parse-plan-checkboxes.sh | docs/contracts/parse-plan-checkboxes.contract.md | full |
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
+| scripts/prepare-release-package.sh | docs/contracts/prepare-release-package.cli-contract.md | cli |
 | scripts/read-doc-profile.sh | docs/contracts/read-doc-profile.cli-contract.md | cli |
 | scripts/read-doc-section.sh | docs/contracts/read-doc-section.cli-contract.md | cli |
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
+| scripts/read-release-intent.sh | docs/contracts/release-intent.cli-contract.md | cli |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
 | scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |

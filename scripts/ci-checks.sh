@@ -154,7 +154,7 @@ run_plugin_check_if_available "scripts/validate-coverage-manifest.sh"
 echo "=== Health check (non-blocking) ==="
 bash scripts/health-check.sh "$ROOT" || echo "(health-check reported issues — non-blocking)"
 
-echo "=== Version bump check ==="
+echo "=== Release gate ==="
 run_plugin_check_if_available "scripts/check-version-bump.sh"
 
 exit $fail

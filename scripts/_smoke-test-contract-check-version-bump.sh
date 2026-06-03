@@ -57,7 +57,15 @@ commit_all() {
 # BASE_REF overridden; return the exit code.
 run_check() {
   local repo_root="$1" base_ref="$2"
-  REPO_ROOT="$repo_root" BASE_REF="$base_ref" bash "$SCRIPT"
+  env -u RELEASE_INTENT_BODY_FILE -u RELEASE_INTENT_EVENT \
+    REPO_ROOT="$repo_root" BASE_REF="$base_ref" bash "$SCRIPT"
+}
+
+run_check_with_body() {
+  local repo_root="$1" base_ref="$2" body_file="$3"
+  env -u RELEASE_INTENT_EVENT \
+    RELEASE_INTENT_BODY_FILE="$body_file" \
+    REPO_ROOT="$repo_root" BASE_REF="$base_ref" bash "$SCRIPT"
 }
 
 # ---------------------------------------------------------------------------
@@ -78,7 +86,7 @@ printf 'spec content\n' > "$REPO_A/docs/specs/example.spec.md"
 commit_all "$REPO_A" "pr: add dev-only spec (no shippable change)"
 
 rc=0
-out=$(REPO_ROOT="$REPO_A" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+out=$(run_check "$REPO_A" base 2>&1) || rc=$?
 if [ "$rc" -eq 0 ] && echo "$out" | grep -q "no shippable content changed"; then
   echo "PASS: CLI-1+CLI-2 — consistent versions, dev-only change → exit 0"
 else
@@ -104,7 +112,7 @@ printf 'Updated SKILL content\n' > "$REPO_B/skills/finish/SKILL.md"
 commit_all "$REPO_B" "pr: bump to 1.1.0 and update skill (shippable)"
 
 rc=0
-out=$(REPO_ROOT="$REPO_B" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+out=$(run_check "$REPO_B" base 2>&1) || rc=$?
 if [ "$rc" -eq 0 ] && echo "$out" | grep -q "version bumped"; then
   echo "PASS: CLI-3 — shippable content + bump present → exit 0"
 else
@@ -113,10 +121,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Scenario: CLI-4 — consistent versions, shippable content changed, NO bump
+# Scenario: CLI-4 — consistent versions, shippable content changed, no release intent input yet
 # ---------------------------------------------------------------------------
 #   Build: base and HEAD share the same version 1.0.0, but HEAD touches a
-#   shippable path.  Expected: exit 1.
+#   shippable path.  Expected: exit 0 pre-PR skip.
 REPO_C="$FIXTURE_ROOT/repo-c"
 init_repo "$REPO_C"
 write_plugin_json "$REPO_C" "1.0.0"
@@ -130,11 +138,22 @@ printf 'Updated SKILL content\n' > "$REPO_C/skills/finish/SKILL.md"
 commit_all "$REPO_C" "pr: update skill without bumping version"
 
 rc=0
-out=$(REPO_ROOT="$REPO_C" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
-if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version was not incremented"; then
-  echo "PASS: CLI-4 — shippable content + no bump → exit 1"
+out=$(run_check "$REPO_C" base 2>&1) || rc=$?
+if [ "$rc" -eq 0 ] && echo "$out" | grep -q "release intent input not available"; then
+  echo "PASS: CLI-4 — shippable content without release intent input → pre-PR skip"
 else
-  echo "FAIL: CLI-4 — expected exit 1 + 'plugin version was not incremented'; got rc=$rc output: $out" >&2
+  echo "FAIL: CLI-4 — expected exit 0 + 'release intent input not available'; got rc=$rc output: $out" >&2
+  fail=1
+fi
+
+# Scenario: CLI-4b — supplied invalid release intent remains blocking
+printf '## Summary\nmissing intent\n' > "$REPO_C/body.md"
+rc=0
+out=$(run_check_with_body "$REPO_C" base "$REPO_C/body.md" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing"; then
+  echo "PASS: CLI-4b — supplied invalid release intent → exit 1"
+else
+  echo "FAIL: CLI-4b — expected exit 1 + 'release intent is missing'; got rc=$rc output: $out" >&2
   fail=1
 fi
 
@@ -143,7 +162,7 @@ fi
 # ---------------------------------------------------------------------------
 #   Build: base and HEAD share the same version 1.0.0, but HEAD touches the
 #   issue-form mirror that sync-public.yml copies after excluding .github/.
-#   Expected: exit 1.
+#   Expected: pre-PR skip without body; supplied invalid intent fails.
 REPO_E="$FIXTURE_ROOT/repo-e"
 init_repo "$REPO_E"
 write_plugin_json "$REPO_E" "1.0.0"
@@ -156,11 +175,20 @@ printf 'updated problem form\n' > "$REPO_E/.github/ISSUE_TEMPLATE/arboretum-prob
 commit_all "$REPO_E" "pr: update public report form without bumping version"
 
 rc=0
-out=$(REPO_ROOT="$REPO_E" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
-if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version was not incremented"; then
-  echo "PASS: CLI-7 — public report issue-form + no bump → exit 1"
+out=$(run_check "$REPO_E" base 2>&1) || rc=$?
+if [ "$rc" -eq 0 ] && echo "$out" | grep -q "release intent input not available"; then
+  echo "PASS: CLI-7 — public report issue-form without release intent input → pre-PR skip"
 else
-  echo "FAIL: CLI-7 — expected exit 1 + 'plugin version was not incremented'; got rc=$rc output: $out" >&2
+  echo "FAIL: CLI-7 — expected pre-PR skip; got rc=$rc output: $out" >&2
+  fail=1
+fi
+printf '## Summary\nmissing intent\n' > "$REPO_E/body.md"
+rc=0
+out=$(run_check_with_body "$REPO_E" base "$REPO_E/body.md" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing"; then
+  echo "PASS: CLI-7b — public report issue-form with invalid supplied intent → exit 1"
+else
+  echo "FAIL: CLI-7b — expected exit 1 + 'release intent is missing'; got rc=$rc output: $out" >&2
   fail=1
 fi
 
@@ -183,7 +211,7 @@ printf '{"version":"1.1.0","plugins":[{"version":"1.1.0"}]}' \
 commit_all "$REPO_D" "pr: inconsistent versions (1.2.0 vs 1.1.0)"
 
 rc=0
-out=$(REPO_ROOT="$REPO_D" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+out=$(run_check "$REPO_D" base 2>&1) || rc=$?
 if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version occurrences disagree"; then
   echo "PASS: CLI-1 — version inconsistency → exit 1"
 else
@@ -201,7 +229,7 @@ fi
 #   fall back to origin/main (unreachable in a bare fixture) or REPO_ROOT
 #   would point at the live repo and fail for unrelated reasons.
 rc=0
-out=$(REPO_ROOT="$REPO_B" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+out=$(run_check "$REPO_B" base 2>&1) || rc=$?
 if [ "$rc" -eq 0 ]; then
   echo "PASS: CLI-5+CLI-6 — BASE_REF + REPO_ROOT seams honoured → exit 0"
 else
@@ -223,7 +251,7 @@ printf 'changed\n' > "$REPO_F/scripts/example.sh"
 commit_all "$REPO_F" "pr: script edit in consumer root"
 
 rc=0
-out=$(REPO_ROOT="$REPO_F" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+out=$(run_check "$REPO_F" base 2>&1) || rc=$?
 if [ "$rc" -eq 0 ] && echo "$out" | grep -q "plugin version manifests not found"; then
   echo "PASS: CLI-8a — no plugin manifests → consumer skip"
 else
@@ -242,7 +270,7 @@ printf '{"version":"1.0.1"}' > "$REPO_G/.codex-plugin/plugin.json"
 commit_all "$REPO_G" "pr: partial plugin manifest edit"
 
 rc=0
-out=$(REPO_ROOT="$REPO_G" BASE_REF=base bash "$SCRIPT" 2>&1) || rc=$?
+out=$(run_check "$REPO_G" base 2>&1) || rc=$?
 if [ "$rc" -ne 0 ] && echo "$out" | grep -q "plugin version manifest set is incomplete"; then
   echo "PASS: CLI-8b — partial plugin manifest set fails"
 else
