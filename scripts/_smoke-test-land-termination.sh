@@ -32,6 +32,7 @@ CLEANUP_SKILL="$REPO_ROOT/skills/cleanup/SKILL.md"
 REFLECT_SKILL="$REPO_ROOT/skills/reflect/SKILL.md"
 SETTINGS_JSON="$REPO_ROOT/.claude/settings.json"
 SETTINGS_TEMPLATE="$REPO_ROOT/docs/templates/settings.json.template"
+CLOSURE_HELPER="$REPO_ROOT/scripts/cleanup-tracker-closure.sh"
 
 # ── Case 0: Shipping skills dispatch on backend before provider calls ─
 grep -q 'SHIP_BACKEND="$(roadmap_backend "$PROJECT_DIR")"' "$PR_SKILL" \
@@ -109,11 +110,21 @@ grep -q 'Found multiple merged/completed PRs for branch' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not stop on ambiguous branch-to-PR matches"
 grep -q 'roadmap_tracker_pr_show "$MERGED_PR_NUMBER" --json number,body,state,mergedAt' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not read merged PR metadata through the neutral helper"
-grep -q 'roadmap_tracker_pr_closure_status "$MERGED_PR_NUMBER" "$ISSUE"' "$CLEANUP_SKILL" \
-  || fail "case 0d — /cleanup does not use the neutral PR closure-status helper"
-grep -q 'roadmap_tracker_issue_close "$ISSUE" --reason completed' "$CLEANUP_SKILL" \
-  || fail "case 0d — /cleanup does not close through the neutral issue helper"
-grep -q 'verification=unsupported' "$CLEANUP_SKILL" \
+[ -f "$CLOSURE_HELPER" ] \
+  || fail "case 0d — /cleanup closure helper is missing"
+grep -q 'scripts/cleanup-tracker-closure.sh classify' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not classify tracker closure through the cleanup helper"
+grep -q 'scripts/cleanup-tracker-closure.sh close' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not close tracker items through the cleanup helper"
+grep -q -- '--confirm-close' "$CLEANUP_SKILL" \
+  || fail "case 0d — /cleanup does not require explicit close confirmation"
+grep -q 'roadmap_tracker_pr_closure_status "$pr" "$issue"' "$CLOSURE_HELPER" \
+  || fail "case 0d — cleanup helper does not use the neutral PR closure-status helper"
+grep -q 'roadmap_tracker_issue_close' "$CLOSURE_HELPER" \
+  || fail "case 0d — cleanup helper does not close through the neutral issue helper"
+grep -q -- '--reason completed' "$CLOSURE_HELPER" \
+  || fail "case 0d — cleanup helper does not close with the completed reason"
+grep -q 'status=unsupported' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not surface unsupported closure verification"
 grep -q 'cleanup-merged-session.sh' "$CLEANUP_SKILL" \
   || fail "case 0d — /cleanup does not delegate local destructive cleanup to helper"

@@ -17,11 +17,12 @@ ok() { echo "PASS: $1"; }
 START="skills/start/SKILL.md"
 DESIGN="skills/design/SKILL.md"
 FINISH="skills/finish/SKILL.md"
+CLEANUP="skills/cleanup/SKILL.md"
 CONSOLIDATE="skills/consolidate/SKILL.md"
 HEALTH="skills/health-check/SKILL.md"
 
 missing_skill_files=()
-for skill_file in "$START" "$DESIGN" "$FINISH" "$CONSOLIDATE" "$HEALTH"; do
+for skill_file in "$START" "$DESIGN" "$FINISH" "$CLEANUP" "$CONSOLIDATE" "$HEALTH"; do
   [ -f "$skill_file" ] || missing_skill_files+=("$skill_file")
 done
 
@@ -285,20 +286,24 @@ for f in CLAUDE.md CLAUDE.public.md docs/templates/CLAUDE.md docs/templates/PRIN
 done
 ok "case 31 — no Path A/B references in project memory or architecture docs"
 
-# Case 32: /cleanup consumes closure-status helper results without mutating ADO
-# work items during verification.
+# Case 32: /cleanup asks before closing tracker items and delegates mutation
+# through the non-interactive helper.
 CLEANUP="skills/cleanup/SKILL.md"
-grep -q 'roadmap_tracker_pr_closure_status' "$CLEANUP" \
-  || fail "case 32 — /cleanup does not consume neutral closure-status helper"
-grep -q 'provider=azure-devops' "$CLEANUP" \
-  || fail "case 32 — /cleanup does not branch ADO closure interpretation by provider"
-grep -q 'ADO closure verification is[[:space:]]*$' "$CLEANUP" \
-  || grep -q 'read-only in this slice' "$CLEANUP" \
-  || fail "case 32 — /cleanup does not state ADO verification is read-only"
-if grep -q 'az boards work-item update' "$CLEANUP"; then
-  fail "case 32 — /cleanup leaks direct ADO work-item mutation"
-fi
-ok "case 32 — /cleanup closure verification keeps ADO read-only"
+grep -q "AskUserQuestion" "$CLEANUP" \
+  || fail "case 32 — /cleanup does not use AskUserQuestion for tracker-close confirmation"
+grep -q "scripts/cleanup-tracker-closure.sh classify" "$CLEANUP" \
+  || fail "case 32 — /cleanup does not delegate classification to cleanup-tracker-closure.sh"
+grep -q "scripts/cleanup-tracker-closure.sh close" "$CLEANUP" \
+  || fail "case 32 — /cleanup does not delegate confirmed close to cleanup-tracker-closure.sh"
+grep -q -- "--confirm-close" "$CLEANUP" \
+  || fail "case 32 — /cleanup close path does not require --confirm-close"
+grep -q "roadmap_tracker_issue_close" "$CLEANUP" \
+  || fail "case 32 — /cleanup does not preserve the backend-neutral close helper requirement"
+grep -q 'Never call provider-specific close or work-item mutation commands directly' "$CLEANUP" \
+  || fail "case 32 — /cleanup does not prohibit raw provider close commands"
+grep -q 'untrusted display data' "$CLEANUP" \
+  || fail "case 32 — /cleanup does not treat tracker display fields as untrusted data"
+ok "case 32 — /cleanup tracker-close prompt and helper delegation present"
 
 # === Agent pipeline contract invariants ===
 
