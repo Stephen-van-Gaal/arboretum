@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-2
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-build-exit.sh rejects exit-status values outside
 # the closed enum {success, escape-hatch}.

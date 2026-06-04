@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-4
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-design-spec.sh refuses on out-of-enum
 # implementation-mode value.

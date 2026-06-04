@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # _smoke-test-agent-target-e2e.sh — End-to-end smoke test of the agent-target
-# pipeline at the shell-seam layer: flag is v2, brief is written, /build's
+# pipeline at the shell-seam layer: flag is unified, brief is written, /build's
 # S2 helper accepts the brief, all five required S2 fields parse correctly.
 # Markdown-skill behaviour (/start prose, /build dispatch) is verified by
 # manual walk-through, not here.
@@ -21,13 +21,13 @@ cd "$ROOT_TMP"
 # Seed a minimal repo-shaped config in the temp dir
 cat > roadmap.config.yaml <<'YAML'
 pipeline:
-  workflow: v2
+  workflow: unified
 YAML
 
-# Seam 1: read-pipeline-flag.sh returns v2
+# Seam 1: read-pipeline-flag.sh returns unified
 FLAG=$(bash "$REPO_ROOT/scripts/read-pipeline-flag.sh")
-[ "$FLAG" = "v2" ] || fail "seam 1 — flag read" "got: $FLAG"
-ok "seam 1 — pipeline flag reads v2"
+[ "$FLAG" = "unified" ] || fail "seam 1 — flag read" "got: $FLAG"
+ok "seam 1 — pipeline flag reads unified"
 
 # Seam 2: write-agent-brief.sh produces a brief
 echo "Rename foo to bar in baz.sh" | bash "$REPO_ROOT/scripts/write-agent-brief.sh" 12345 >/dev/null

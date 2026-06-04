@@ -22,7 +22,7 @@ Reconcile the branch with its governance documentation. Reconciliation covers fo
 For each governed spec touched by this branch (level 2):
 
 - **AUTO sections** (frontmatter, status, Tests, Implementation Notes → Design record) regenerate silently from current code, tests, and citation files.
-- **HUMAN sections** (Purpose, Behaviour, free-text Implementation Notes) are preserved. v1 stale detection scans for file-path-token references that no longer exist on disk; any matches are surfaced to the user for review. (Function-name and test-case detection are deferred — see issue #108.)
+- **HUMAN sections** (Purpose, Behaviour, free-text Implementation Notes) are preserved. Stale detection scans for file-path-token references that no longer exist on disk; any matches are surfaced to the user for review. (Function-name and test-case detection are deferred — see issue #108.)
 - **APPEND-AUTO sections** (Decisions) accumulate new rows harvested from design specs (`docs/superpowers/specs/*-design.md`) and plans (`docs/plans/*.md`) referenced by this spec. Existing rows are never modified or removed. The Source column is the idempotency key.
 
 When all reconciliation succeeds, the spec's status flips automatically: `draft → active` (first reconciliation) or `stale → active` (after drift). Design specs and plans are **retained as permanent historical records** — never deleted by this skill.
@@ -31,14 +31,16 @@ When all reconciliation succeeds, the spec's status flips automatically: `draft 
 
 ### Step 0: Read the pipeline.workflow flag
 
-Before any reconciliation work, read the active pipeline version:
+Before any reconciliation work, validate the active named pipeline:
 
 ```bash
 PIPELINE=$(bash scripts/read-pipeline-flag.sh)
 ```
 
-- **`v1` (default)** — continue with Steps 1–6 below as written.
-- **`v2`** — **read Section v2: Unified-workflow reconciliation FIRST**, then run Steps 1–6 with the v2 amendments it specifies (most importantly: Step 5b's status determination collapses to always-`active` per v2.1; Step 5c gains Substep 3.5 for D3 hybrid behaviour-supersession detection per v2.5; `coverage-baseline` refactor design specs get AUTO-only reconciliation per v2.3). Apply the v2 amendments at the moment each step runs, not retroactively. The v1 prose annotated `(v1 only — skip under v2)` is suppressed; the prose annotated `(historical name; applies in both v1 and v2)` runs unchanged.
+The reader must succeed before reconciliation. The current general-release
+pipeline uses the unified reconciliation details below: new governed specs are
+born from built state, behaviour supersession is surfaced explicitly, and
+`coverage-baseline` refactor design specs get AUTO-only reconciliation.
 
 ### Step 1: Detect base branch and gather changes
 
@@ -134,7 +136,7 @@ Present a structured reconciliation plan to the user, organised by level:
 #### New governed specs to create
 - `docs/specs/<proposed-name>.spec.md`
   - Would own: <file1>, <file2>, ...
-  - Status on creation: `active` if code already exists for the listed owns, otherwise `draft`
+  - Status on creation: `active` when code already exists for the listed owns; if no owned files exist yet, flag the create as premature and defer it until the build lands
   - Content source: harvest from `<design-spec-path>` (if provided) or code analysis only
 
 #### Governed specs to reconcile (already exist; touched by this branch)
@@ -149,7 +151,7 @@ Present a structured reconciliation plan to the user, organised by level:
 
 ### Level 3 — File headers + top-of-file comments
 
-#### `# owner:` header rewrites (Path B grouping reconciliation — historical name; applies in both v1 and v2)
+#### `# owner:` header rewrites (grouping reconciliation)
 <!-- Only show if final grouping differs from headers committed in source files. -->
 - `<source-file>`: `# owner: <old-name>` → `# owner: <new-name>`
 
@@ -184,9 +186,9 @@ For each new spec in the approved plan:
 
 1. Read `docs/templates/spec.md` for the structure.
 
-2. Determine status (v1 only — skip under v2; see Section v2 § "New-spec status"):
-   - If owned files already exist on disk and there's evidence the code matches the spec's intended behaviour (Path B post-build): `active`.
-   - Otherwise (Path A pre-build, or pre-implementation draft): `draft`.
+2. Determine status:
+   - Status on creation is `active` when owned files already exist on disk.
+   - If no owned files exist yet, flag the create as premature and defer it until the build lands. If the user declines to defer, stop this consolidation pass; do not write a governed spec for an unbuilt surface.
 
 3. Populate sections:
    - **Purpose** — if a design spec is provided, harvest from its problem statement. Otherwise stub: `<!-- HUMAN — Why does this exist? -->`
@@ -242,7 +244,7 @@ If `contracts.yaml` exists and new specs reference shared definitions, add versi
 
 For each changed source file:
 
-1. **`# owner:` header rewriting** (Path B grouping reconciliation — historical naming; applies in both v1 and v2): if the approved reconciliation plan included header rewrites (because final grouping differs from what files committed to):
+1. **`# owner:` header rewriting**: if the approved reconciliation plan included header rewrites (because final grouping differs from what files committed to):
    - Edit the first comment line in place (`# owner: <new-name>`).
    - Update the corresponding `Owns` cell in REGISTER.md (already done in 5d, but verify).
 
@@ -333,44 +335,58 @@ This substep never adds new comments. The bias is toward removing stale ones.
    <pass/fail summary>
    ```
 
-## Section v2: Unified-workflow reconciliation (when `PIPELINE=v2`)
+## Unified-workflow reconciliation details
 
-Skip this section when `PIPELINE=v1`. Under v2, the four-level reconciliation model is unchanged, but the **Behaviour-section authoring rules** (D3) and the **refactor design-spec handling** (D5) refine Step 5b ("Create new governed specs") and Step 5c ("Reconcile existing governed specs"). This section adds the v2 logic without rewriting either step in place.
+The four-level reconciliation model is unchanged, but the **Behaviour-section
+authoring rules** (D3) and the **refactor design-spec handling** (D5) refine
+Step 5b ("Create new governed specs") and Step 5c ("Reconcile existing
+governed specs").
 
-### v2.1 New-spec status — always `active`
+### 1. New-spec status — always `active`
 
-Under v2, Path A's pre-build draft window does not exist (D3): every governed spec is born from built state at `/consolidate` time. Step 5b's status-determination v1 prose ("Path B post-build: `active`; Path A pre-build: `draft`") collapses to a single rule under v2:
+Every governed spec is born from built state at `/consolidate` time. Step 5b's
+status determination uses a single rule:
 
-- **New spec, v2:** status is always `active`. The `draft` initial state from v1 is unreachable because there is no Path A.
+- **New spec:** status is always `active` when owned files exist.
 
-A spec that *should* still be at `draft` (no code yet) is, by v2's lights, a spec being created prematurely — flag the case and ask the user whether the create should be deferred until the build lands.
+A spec that *should* still be at `draft` (no code yet) is being created
+prematurely — flag the case and defer the create until the build lands. If the
+user declines to defer, stop the consolidation pass; do not write a governed
+spec for an unbuilt surface.
 
-### v2.2 D3 hybrid behaviour-supersession detection
+### 2. D3 hybrid behaviour-supersession detection
 
-When reconciling an existing governed spec (Step 5c) under v2, the design spec referenced by this consolidation may have changed the spec's intended behaviour. `/consolidate` must surface that, not silently overwrite Behaviour. Use this hybrid procedure:
+When reconciling an existing governed spec (Step 5c), the design spec
+referenced by this consolidation may have changed the spec's intended
+behaviour. `/consolidate` must surface that, not silently overwrite Behaviour.
+Use this hybrid procedure:
 
 1. **Heuristic flag (auto):** mark the governed spec as a supersession candidate when **all four** hold:
    - **Scope-narrowed harvest set:** the design specs being evaluated for this governed spec are restricted to the union of (a) any design spec passed explicitly as `$ARGUMENTS`, (b) design specs already cited in this governed spec's existing `### Design record` subsection (per Step 2 item 3), and (c) design specs **added, modified, or renamed on the current branch** (detected via `git diff --diff-filter=AMR <merge-base>...HEAD --name-only | grep '^docs/superpowers/specs/.*\.md$'` — the `--diff-filter=AMR` is required: a bare `--name-only` also returns deleted paths, which the heuristic would then try to read behaviour-shaped content from, causing false prompts or read failures; including `R` keeps renamed-with-edit specs in scope since they are part of the current consolidation changes). Set (c) is critical: `/finish` auto-invokes `/consolidate` without an explicit `$ARGUMENTS` argument, and a brand-new design spec for the current branch is not yet cited in the governed spec's Design record (the citation gets added during *this* consolidation pass) — without (c), exactly the design spec that motivated this consolidation would fall out of scope. Step 2's default "scan all `docs/superpowers/specs/*.md`" pool is **not** used for the supersession heuristic — that pool exists for the unrelated APPEND-AUTO Decisions harvest. This 3-source union stops historical design specs unrelated to the current consolidation from flagging false-positive supersessions while still catching the live design spec on this branch.
    - That scope-narrowed set contains at least one design spec with Behaviour-shaped content (a `## Behaviour`, `## Deliverable spec`, or `## Procedure` heading with body text; or, for design specs written against the unified template, an `## Intended behaviour` section).
    - The governed spec already has a non-stub Behaviour section (not just `<!-- HUMAN — What should the system do? -->`).
-   - The governed spec's Decisions table contains **no existing row** with `Source = "<design-spec-path>@<git-blob-sha> (no-change classification, v2.2)"` where `<git-blob-sha>` matches the design spec's **current** blob SHA (`git ls-tree HEAD -- <design-spec-path>` → blob hash). A prior consolidation that classified the design spec as a no-change restatement (v2.2 step 4) persists that decision keyed by content hash; the heuristic skips re-prompting only when the stored hash still matches current content. If the design spec has since been modified, its blob SHA differs from any stored marker → the no-change classification is **automatically invalidated** and the heuristic re-prompts. This stops a stale marker from suppressing supersession detection when a previously-no-change design spec later gains real behaviour changes.
+   - The governed spec's Decisions table contains **no existing row** with `Source = "<design-spec-path>@<git-blob-sha> (no-change classification, unified)"` where `<git-blob-sha>` matches the design spec's **current** blob SHA (`git ls-tree HEAD -- <design-spec-path>` → blob hash). A prior consolidation that classified the design spec as a no-change restatement persists that decision keyed by content hash; the heuristic skips re-prompting only when the stored hash still matches current content. If the design spec has since been modified, its blob SHA differs from any stored marker → the no-change classification is **automatically invalidated** and the heuristic re-prompts. This stops a stale marker from suppressing supersession detection when a previously-no-change design spec later gains real behaviour changes.
 
 2. **Human confirm (interactive):** present the existing governed Behaviour and the design spec's behaviour-shaped content side by side, then prompt:
 
    > "Does this design spec change the governed Behaviour of `<spec-name>`?"
    > - **yes — behaviour changed** → flag the governed Behaviour as superseded and surface both texts for the human to author the updated Behaviour (described next).
    > - **no — design spec restates existing behaviour, no change** → leave Behaviour unchanged; reconcile AUTO sections only.
-   > - **no — this is a refactor design spec** → defer to v2.3 § D5 handling.
+   > - **no — this is a refactor design spec** → defer to the D5 refactor handling below.
 
 3. **On "yes":** prepend the existing Behaviour section with an HTML comment marker `<!-- SUPERSEDED by docs/superpowers/specs/<design-spec>.md — author updated Behaviour below -->` and append the design-spec's behaviour text under a `<!-- NEW BEHAVIOUR from design spec — author the consolidated text -->` marker. The human authors the consolidated Behaviour during this pass; `/consolidate` does **not** auto-merge.
 
-4. **On "no — restatement":** persist the classification by appending a row to the governed spec's APPEND-AUTO Decisions table with `Source = "<design-spec-path>@<git-blob-sha> (no-change classification, v2.2)"`, where `<git-blob-sha>` is the design spec's blob hash **exactly as returned by `git ls-tree HEAD -- <design-spec-path>` field 3** — store it verbatim, full length, with no abbreviation. The hash width is whatever `git ls-tree` emits for the repository's object format (40 hex for SHA-1, 64 hex for SHA-256); do not hard-code a length, but also do not truncate. Condition 4 compares against the full SHA returned by the same `git ls-tree` command; mixing abbreviated and full hashes across runs would cause spurious re-prompts and duplicate no-change rows because string-equality on `<short>` vs `<full>` fails. The Source-column dedup the Decisions table already guarantees ("Decision harvest from design specs and plans" § Idempotency) is what makes the next consolidation skip the re-prompt: the heuristic (Condition 4 above) checks for an existing Source row whose full hash matches the design spec's *current* full blob SHA. This reuses the existing durable artifact rather than inventing a new persistence file, and the content-hash key ensures the marker auto-invalidates whenever the design spec content actually changes.
+4. **On "no — restatement":** persist the classification by appending a row to the governed spec's APPEND-AUTO Decisions table with `Source = "<design-spec-path>@<git-blob-sha> (no-change classification, unified)"`, where `<git-blob-sha>` is the design spec's blob hash **exactly as returned by `git ls-tree HEAD -- <design-spec-path>` field 3** — store it verbatim, full length, with no abbreviation. The hash width is whatever `git ls-tree` emits for the repository's object format (40 hex for SHA-1, 64 hex for SHA-256); do not hard-code a length, but also do not truncate. Condition 4 compares against the full SHA returned by the same `git ls-tree` command; mixing abbreviated and full hashes across runs would cause spurious re-prompts and duplicate no-change rows because string-equality on `<short>` vs `<full>` fails. The Source-column dedup the Decisions table already guarantees ("Decision harvest from design specs and plans" § Idempotency) is what makes the next consolidation skip the re-prompt: the heuristic (Condition 4 above) checks for an existing Source row whose full hash matches the design spec's *current* full blob SHA. This reuses the existing durable artifact rather than inventing a new persistence file, and the content-hash key ensures the marker auto-invalidates whenever the design spec content actually changes.
 
-This preserves cross-path invariant #4 ("Behaviour is human-authored") — only the *timing* changes. The governed Behaviour stays human-authored, but it is kept current by a prompted human edit on every behaviour change, never by an automated rewrite.
+This preserves the invariant that Behaviour is human-authored. The governed
+Behaviour stays human-authored, but it is kept current by a prompted human edit
+on every behaviour change, never by an automated rewrite.
 
-### v2.3 D5 refactor-spec handling — AUTO-only reconciliation
+### 3. D5 refactor-spec handling — AUTO-only reconciliation
 
-A `coverage-baseline` refactor design spec preserves behaviour by definition (D5, D6). When the user selects "no — this is a refactor design spec" in v2.2, treat the design spec as **structure-only**:
+A `coverage-baseline` refactor design spec preserves behaviour by definition
+(D5, D6). When the user selects "no — this is a refactor design spec", treat
+the design spec as **structure-only**:
 
 1. **Skip Behaviour reconciliation entirely.** Do not prompt for the supersession edit. The governed Behaviour section is correct as-is (behaviour did not change).
 2. **Regenerate the AUTO sections only:** frontmatter (Owns may shift if files moved or split), Tests (characterization-test rows update), Implementation Notes → Design record (the refactor design spec is added to the citation list).
@@ -378,22 +394,27 @@ A `coverage-baseline` refactor design spec preserves behaviour by definition (D5
 
 If a refactor design spec inadvertently asks for a Behaviour edit, that signals the work is no longer behaviour-preserving and should reclassify as everything-else with a `brainstorm` or `investigate` Branch 1 (per D6's reclassification rule). Surface this and ask the user to either reclassify or correct the design spec.
 
-### v2.4 Step 5b new-spec status under v2
+### 4. Step 5b new-spec status
 
-In Step 5b, when determining the new spec's status, under v2 the rule collapses (v2.1):
+In Step 5b, when determining the new spec's status, the rule is:
 
-| Condition | v2 status |
+| Condition | Status |
 |---|---|
-| Owned files exist on disk (always the case under v2 — built state precondition) | `active` |
-| No owned files on disk yet | flag as "premature create"; ask the user to defer the create until the build lands |
+| Owned files exist on disk (the built-state precondition) | `active` |
+| No owned files on disk yet | flag as "premature create"; defer until the build lands; if the user declines to defer, stop without writing the spec |
 
-The v1 "draft" initial state is unreachable under v2.
+The pre-build `draft` create path is retired.
 
-### v2.5 Step 5c reconciliation under v2
+### 5. Step 5c reconciliation additions
 
-In Step 5c, the v1 procedure (AUTO regen + HUMAN stale-scan + decision harvest) runs as written, with one addition between substeps 3 ("Scan HUMAN sections") and 4 ("Harvest decisions"):
+In Step 5c, the base procedure (AUTO regen + HUMAN stale-scan + decision
+harvest) runs as written, with one addition between substeps 3 ("Scan HUMAN
+sections") and 4 ("Harvest decisions"):
 
-- **Substep 3.5 (v2 only):** run the D3 hybrid supersession detection (v2.2). If flagged + confirmed "yes — behaviour changed", insert the supersession markers into the Behaviour section. If confirmed "refactor", skip Behaviour entirely (per v2.3) and proceed to substep 4 (harvest).
+- **Substep 3.5:** run the D3 hybrid supersession detection above. If flagged
+  and confirmed "yes — behaviour changed", insert the supersession markers into
+  the Behaviour section. If confirmed "refactor", skip Behaviour entirely (per
+  the D5 handling above) and proceed to substep 4 (harvest).
 
 ## Regeneration model
 
@@ -421,7 +442,9 @@ For each region being scanned:
    - On `y`: present the region for inline edit.
    - On `n` / `skip`: leave unchanged but record the flag for the consolidation summary.
 
-Function-name and test-case stale detection is out of scope for v1 (see issue tracker for the richer guided-reconciliation flow). Level-4 comment heuristics are documented in 5i.
+Function-name and test-case stale detection is deferred (see issue tracker for
+the richer guided-reconciliation flow). Level-4 comment heuristics are
+documented in 5i.
 
 ## Decision harvest from design specs and plans
 

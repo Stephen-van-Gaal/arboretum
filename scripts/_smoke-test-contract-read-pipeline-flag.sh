@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-read-pipeline-flag.sh — Contract test for
-# docs/contracts/read-pipeline-flag.contract.md. Asserts RPF-1..RPF-8
+# docs/contracts/read-pipeline-flag.contract.md. Asserts RPF-1..RPF-10
 # against scripts/read-pipeline-flag.sh using a mktemp CWD fixture
 # carrying a roadmap.config.yaml. Picked up automatically by
 # ci-checks.sh's === Smoke tests === loop.
@@ -20,37 +20,44 @@ fail_case() { echo "FAIL: $1" >&2; [ -n "${2:-}" ] && { echo "--- detail ---" >&
 
 run() { ( cd "$FIX" && bash "$PROBE" ) 2>"$FIX/.err"; }   # echoes stdout, sets $? ; stderr in .err
 
-# RPF-1
-printf 'pipeline:\n  workflow: v2\n' > "$FIX/roadmap.config.yaml"
+# RPF-1 explicit current general-release
+printf 'pipeline:\n  workflow: unified\n' > "$FIX/roadmap.config.yaml"
 out=$(run); rc=$?
-[ "$rc" = 0 ] && [ "$out" = v2 ] && pass RPF-1 || fail_case RPF-1 "rc=$rc out=$out"
-# RPF-2
-printf 'pipeline:\n  workflow: v1\n' > "$FIX/roadmap.config.yaml"
-out=$(run); rc=$?
-[ "$rc" = 0 ] && [ "$out" = v1 ] && pass RPF-2 || fail_case RPF-2 "rc=$rc out=$out"
-# RPF-3 absent pipeline block
+[ "$rc" = 0 ] && [ "$out" = unified ] && pass RPF-1 || fail_case RPF-1 "rc=$rc out=$out"
+# RPF-2 absent pipeline block defaults to current general-release
 printf 'other: true\n' > "$FIX/roadmap.config.yaml"
 out=$(run); rc=$?
-[ "$rc" = 0 ] && [ "$out" = v1 ] && pass RPF-3 || fail_case RPF-3 "rc=$rc out=$out"
-# RPF-4 absent workflow key
+[ "$rc" = 0 ] && [ "$out" = unified ] && pass RPF-2 || fail_case RPF-2 "rc=$rc out=$out"
+# RPF-3 absent workflow key defaults to current general-release
 printf 'pipeline:\n  other: 1\n' > "$FIX/roadmap.config.yaml"
 out=$(run); rc=$?
-[ "$rc" = 0 ] && [ "$out" = v1 ] && pass RPF-4 || fail_case RPF-4 "rc=$rc out=$out"
-# RPF-5 out-of-set
-printf 'pipeline:\n  workflow: v3\n' > "$FIX/roadmap.config.yaml"
+[ "$rc" = 0 ] && [ "$out" = unified ] && pass RPF-3 || fail_case RPF-3 "rc=$rc out=$out"
+# RPF-4 retired v1 fails closed
+printf 'pipeline:\n  workflow: v1\n' > "$FIX/roadmap.config.yaml"
 out=$(run); rc=$?
-[ "$rc" = 1 ] && [ -z "$out" ] && pass RPF-5 || fail_case RPF-5 "rc=$rc out=$out"
-# RPF-6 missing config
+[ "$rc" = 1 ] && [ -z "$out" ] && grep -q "retired" "$FIX/.err" && pass RPF-4 \
+  || fail_case RPF-4 "rc=$rc out=$out err=$(cat "$FIX/.err")"
+# RPF-5 retired v2 fails closed
+printf 'pipeline:\n  workflow: v2\n' > "$FIX/roadmap.config.yaml"
+out=$(run); rc=$?
+[ "$rc" = 1 ] && [ -z "$out" ] && grep -q "retired" "$FIX/.err" && pass RPF-5 \
+  || fail_case RPF-5 "rc=$rc out=$out err=$(cat "$FIX/.err")"
+# RPF-6 unknown values fail closed
+printf 'pipeline:\n  workflow: experimental\n' > "$FIX/roadmap.config.yaml"
+out=$(run); rc=$?
+[ "$rc" = 1 ] && [ -z "$out" ] && grep -q "unknown pipeline.workflow value" "$FIX/.err" && pass RPF-6 \
+  || fail_case RPF-6 "rc=$rc out=$out err=$(cat "$FIX/.err")"
+# RPF-7 missing config
 rm -f "$FIX/roadmap.config.yaml"
 out=$(run); rc=$?
-[ "$rc" = 1 ] && pass RPF-6 || fail_case RPF-6 "rc=$rc out=$out"
-# RPF-7 read-only
-printf 'pipeline:\n  workflow: v2\n' > "$FIX/roadmap.config.yaml"
+[ "$rc" = 1 ] && pass RPF-7 || fail_case RPF-7 "rc=$rc out=$out"
+# RPF-8 read-only
+printf 'pipeline:\n  workflow: unified\n' > "$FIX/roadmap.config.yaml"
 before=$(shasum "$FIX/roadmap.config.yaml" | cut -d' ' -f1); run >/dev/null
 after=$(shasum "$FIX/roadmap.config.yaml" | cut -d' ' -f1)
-[ "$before" = "$after" ] && pass RPF-7 || fail_case RPF-7 "config mutated"
+[ "$before" = "$after" ] && pass RPF-8 || fail_case RPF-8 "config mutated"
 
-# RPF-8 no PyYAML dependency
+# RPF-9 no PyYAML dependency
 mkdir -p "$FIX/no-yaml"
 cat > "$FIX/no-yaml/sitecustomize.py" <<'PY'
 import builtins
@@ -61,17 +68,17 @@ def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
     return _orig_import(name, globals, locals, fromlist, level)
 builtins.__import__ = guarded_import
 PY
-printf 'pipeline:\n  workflow: v2\n' > "$FIX/roadmap.config.yaml"
+printf 'pipeline:\n  workflow: unified\n' > "$FIX/roadmap.config.yaml"
 out=$(PYTHONPATH="$FIX/no-yaml" run); rc=$?
-[ "$rc" = 0 ] && [ "$out" = v2 ] && pass RPF-8 || fail_case RPF-8 "rc=$rc out=$out err=$(cat "$FIX/.err")"
+[ "$rc" = 0 ] && [ "$out" = unified ] && pass RPF-9 || fail_case RPF-9 "rc=$rc out=$out err=$(cat "$FIX/.err")"
 
-# RPF-9 missing yaml-lite helper reports a clear dependency diagnostic.
+# RPF-10 missing yaml-lite helper reports a clear dependency diagnostic.
 MISSING_HELPER="$FIX/missing-helper"
 mkdir -p "$MISSING_HELPER/scripts"
 cp "$PROBE" "$MISSING_HELPER/scripts/read-pipeline-flag.sh"
-printf 'pipeline:\n  workflow: v2\n' > "$MISSING_HELPER/roadmap.config.yaml"
+printf 'pipeline:\n  workflow: unified\n' > "$MISSING_HELPER/roadmap.config.yaml"
 out=$(cd "$MISSING_HELPER" && bash scripts/read-pipeline-flag.sh 2>"$FIX/.err"); rc=$?
-[ "$rc" = 1 ] && [ -z "$out" ] && grep -q "yaml-lite helper not found" "$FIX/.err" && pass RPF-9 \
-  || fail_case RPF-9 "rc=$rc out=$out err=$(cat "$FIX/.err")"
+[ "$rc" = 1 ] && [ -z "$out" ] && grep -q "yaml-lite helper not found" "$FIX/.err" && pass RPF-10 \
+  || fail_case RPF-10 "rc=$rc out=$out err=$(cat "$FIX/.err")"
 
 [ "$fail" = 0 ] && echo "read-pipeline-flag contract: ALL PASS" || exit 1

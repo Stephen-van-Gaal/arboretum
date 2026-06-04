@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-5
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: every comment the helper posts begins with the canonical
 # marker followed by a parseable journey-log line per WS9 §D5.

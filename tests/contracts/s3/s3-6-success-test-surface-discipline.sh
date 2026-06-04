@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-6
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: validate-test-surface.sh accepts a spec/list pair that
 # satisfies the contract rule (block present + every file listed),

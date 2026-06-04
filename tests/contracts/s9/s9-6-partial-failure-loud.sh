@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-6
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: if the body edit succeeds and the comment post fails (or
 # vice versa), the script exits non-zero with an error naming the

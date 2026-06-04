@@ -102,15 +102,15 @@ Arboretum defines abstract capabilities that workflows need. Each has a current 
 
 ## The Unified Workflow
 
-Arboretum v2 has one development workflow — `build` — covering features, bug fixes, refactors, and documentation changes. The only structural fork is `/start`'s triage: agent-target (fast lane, no design spec) vs. everything-else (design spec via `/design` → plan → build → `/consolidate`).
+Arboretum's current general-release pipeline, `unified`, has one development workflow — `build` — covering features, bug fixes, refactors, and documentation changes. The only structural fork is `/start`'s triage: agent-target (fast lane, no design spec) vs. everything-else (design spec via `/design` → plan → build → `/consolidate`).
 
-Governed specs at `docs/specs/` are written **only** by `/consolidate`, which runs inside `/finish` after the build is complete. The legacy spec-first-vs-design-first selector is gone — under v2 there's just one consistent flow with mode dispatch inside `/design` for different change kinds.
+Governed specs at `docs/specs/` are written **only** by `/consolidate`, which runs inside `/finish` after the build is complete. The legacy spec-first-vs-design-first selector is gone — there is one consistent flow with mode dispatch inside `/design` for different change kinds.
 
 The workflow invariants are stated centrally in `workflows/README.md ## Workflow invariants` — five rules that hold regardless of triage classification.
 
 ## Development Rules
 
-- **Spec-first gate:** Code modification is allowed when the changed files' `# owner:` headers point to a topic that has either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md` (the governed spec will be created by `/consolidate` at `/finish` time). Under v2, `/consolidate` is the sole writer of governed specs — no workflow step hand-authors one.
+- **Spec-first gate:** Code modification is allowed when the changed files' `# owner:` headers point to a topic that has either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md` (the governed spec will be created by `/consolidate` at `/finish` time). In the current general-release pipeline, `/consolidate` is the sole writer of governed specs — no workflow step hand-authors one.
 - **Ownership:** Every source file includes `# owner: <spec-name>` as its first comment line. Shell scripts use shebang line 1 and `# owner: <spec-name>` line 2.
 - **Permitted without spec change:** implementation-detail refactoring (preserves behaviour, tests pass), patch fixes (code didn't match spec), supplementary test additions.
 

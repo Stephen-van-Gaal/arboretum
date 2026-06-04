@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-5
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts cross-field invariant: plan: null is incompatible with
 # implementation-mode: executing-plans (executing-plans requires a plan file).

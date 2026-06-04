@@ -16,14 +16,13 @@ Run the project health check to detect drift across the spec-driven workflow.
 
 ### Step 0: Read the pipeline.workflow flag
 
-Before running the health check, read the active pipeline version:
+Before running the health check, validate the active named pipeline:
 
 ```bash
 PIPELINE=$(bash scripts/read-pipeline-flag.sh)
 ```
 
-- **`v1` (default)** — continue with the numbered procedure below as written.
-- **`v2`** — continue with the numbered procedure below as written, then consult **Section v2: Health-check under the unified workflow** before summarising results. The script behaviour and check set are identical; the v2 section documents how the unified-workflow model interprets Check 7 drift.
+The reader must succeed before interpreting results.
 
 ### Numbered procedure
 
@@ -41,18 +40,10 @@ PIPELINE=$(bash scripts/read-pipeline-flag.sh)
 3. If the script exits with code 0 (healthy), confirm the project is in good shape
 4. If the script exits with code 1 (drift detected), summarize the issues found and suggest specific fixes
 5. For any spec with detected drift, surface that the user should run `/consolidate` to reconcile (which calls health-check with `--reconcile` automatically)
-
-## Section v2: Health-check under the unified workflow (when `PIPELINE=v2`)
-
-Under v2 (`pipeline.workflow: v2`), the nine checks the script runs are **unchanged** — the simplified `draft / active / stale` state machine and Check 7's read-only-by-default semantics apply identically.
-
-The unified-workflow model (WS2 D3, D4, D8) refines how Check 7 drift should be interpreted:
-
-- **Drift on a governed spec → run `/consolidate`.** Under v2, `/consolidate` is the **sole writer** of governed specs (D3). A Check 7 drift report means a governed spec's `# owner:`-mapped files have changed; the only sanctioned remedy is `/consolidate` (which calls health-check with `--reconcile` automatically).
-- **No upstream "Path A draft author it yourself" branch.** Under v1, a `draft` spec could be reconciled by hand-editing the governed spec; under v2 that path is closed (D3). Surface drift as a `/consolidate` request, never as a hand-edit suggestion.
-- **`active → stale` flips** still come from `/health-check --reconcile` (or `/consolidate` which passes `--reconcile`). The skill itself remains read-only; no behaviour change there.
-
-These are interpretation-layer notes for the v2 reader; the script and the numbered procedure above are authoritative and require no edit.
+6. Interpret Check 7 drift using the unified workflow rule:
+   - **Drift on a governed spec → run `/consolidate`.** `/consolidate` is the sole writer of governed specs. A Check 7 drift report means a governed spec's `# owner:`-mapped files have changed; the sanctioned remedy is `/consolidate` (which calls health-check with `--reconcile` automatically).
+   - **Do not suggest hand-authoring governed specs to resolve drift.** Surface drift as a `/consolidate` request.
+   - **`active → stale` flips** still come from `/health-check --reconcile` (or `/consolidate` which passes `--reconcile`). The skill itself remains read-only.
 
 ## Important
 

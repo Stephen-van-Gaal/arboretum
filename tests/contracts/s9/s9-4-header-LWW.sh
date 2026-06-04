@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-4
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: repeated invocations with identical inputs produce identical
 # output (LWW idempotency proxy). Two --emit-log-only calls with the

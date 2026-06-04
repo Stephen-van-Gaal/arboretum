@@ -18,7 +18,9 @@ Claude should invoke this skill (or follow its logic) whenever the user:
 - References a tracker issue they want to work on
 - Starts a session with an intent to modify the project
 
-This skill is read-only under `v1` (gather context, recommend next steps). Under `v2` (`pipeline.workflow: v2`), the agent-target lane in Step 4-v2 writes a task brief via `scripts/write-agent-brief.sh`; the v1 routing path remains read-only.
+This skill gathers context and routes the request. The verified `agent-ready`
+lane also writes a task brief via `scripts/write-agent-brief.sh`; other routes
+remain advisory and hand off to the next workflow stage.
 
 ## Procedure
 
@@ -43,14 +45,14 @@ fi
 
 ### 0. Read the pipeline.workflow flag
 
-Before any routing, read the active pipeline version:
+Before any routing, validate the active named pipeline:
 
 ```bash
 PIPELINE=$(bash scripts/read-pipeline-flag.sh)
 ```
 
-- **`v1` (default)** — continue with Steps 1–6 below (Path A/B routing). Skip Section 4-v2.
-- **`v2`** — continue with Steps 1–3 (issue, survey, branch state) as usual, then jump to **Step 4-v2: Agent-target triage** instead of Step 4.
+The reader must succeed before routing. The current general-release pipeline
+uses the unified agent-target/everything-else triage below.
 
 ### 1. Identify the change request
 
@@ -79,12 +81,6 @@ Present what you found:
 
 Do not block on issue creation — suggest it but proceed if the user declines.
 
-### 2b. Survey existing specs (v1 only — skip under v2)
-
-Under v2, SURVEY is owned by `/design` Section v2.1 (for everything-else) or is not needed (for agent-target, which is spec-exempt or fits-existing-spec by definition). Skip this step entirely when `PIPELINE=v2`.
-
-Read existing specs in `docs/specs/` and `docs/ARCHITECTURE.md` to understand where this change fits in the existing project structure. Identify which specs are likely touched by this work.
-
 ### 3. Check current branch and project state
 
 ```bash
@@ -97,36 +93,7 @@ Report:
 - Any uncommitted work
 - Whether they need to create a feature branch
 
-### 4. Determine the workflow path — A or B
-
-Recommend Path A (spec-first) or Path B (design-first):
-
-**Path A (spec-first)** — recommend when:
-- The user can describe Behaviour upfront ("add X that does Y when Z")
-- Bug with known root cause ("the auth handler doesn't validate expiry")
-- Refactor with clear scope (existing spec describes the behaviour to preserve)
-
-**Path B (design-first)** — recommend when:
-- The right Behaviour wording will only crystallize after seeing code
-- Open-ended improvement ("can we improve performance? unclear how yet")
-- Significant new architecture worth a brainstorm before any code
-
-If unsure, default to Path A — it's cheaper to switch from A to B (drop the spec, brainstorm fresh) than from B to A (you've already coded against unsettled design).
-
-Present recommendation:
-> "This sounds like **Path A (spec-first)**. I'd recommend:
->  1. Run `/design` to settle the spec
->  2. `/consolidate` to create the governed spec at `docs/specs/`
->  3. Plan and build
->  4. `/finish` to PR
->
-> Or do you want to take **Path B (design-first)** — brainstorm and build first, governed spec at the end?"
-
-For genuinely exploratory questions (no idea what to build yet), the **explore** workflow with a *spike* may be more appropriate than Path B — see `workflows/explore.md ## Spike vs. Path B`.
-
-### 4-v2. Agent-target triage (when `PIPELINE=v2`)
-
-Skip this section when `PIPELINE=v1`. When `PIPELINE=v2`, replace Step 4 with this triage.
+### 4. Agent-target triage
 
 The unified workflow's only structural fork: classify the request as **agent-target** or **everything-else**.
 
@@ -228,9 +195,16 @@ Hand off to `/design` with the issue number AND the user's original request:
 /design Issue #<N>: <user's original change request>
 ```
 
-The `Issue #<N>:` prefix gives `/design` v2 the value it needs for the `related-issue` field in the design spec's S2 frontmatter (`/build`'s gate requires it). If no issue exists yet, hand off as `/design Issue #pending: <request>` and `/design` will prompt to create one before writing the spec.
+The `Issue #<N>:` prefix gives `/design` the value it needs for the
+`related-issue` field in the design spec's S2 frontmatter (`/build`'s gate
+requires it). If no issue exists yet, hand off as
+`/design Issue #pending: <request>` and `/design` will prompt to create one
+before writing the spec.
 
-`/design` (under v2) runs SURVEY + Branch 1 dispatch + writes the design spec + folds in planning + exits to `/build`. See `/design` Section v2 for the Branch 1 mode vocabulary. Steps 1 (issue) and 3 (branch state) above are already complete — pass them along, don't re-run. Step 2b (SURVEY) is owned by `/design` v2.1; `/start` skips it under v2 (see Step 2b's v2-skip note).
+`/design` runs survey + Branch 1 dispatch + writes the design spec + folds in
+planning + exits to `/build`. See `/design`'s unified design phase for the
+Branch 1 mode vocabulary. Steps 1 (issue) and 3 (branch state) above are
+already complete — pass them along, don't re-run.
 
 ### 5. Verify the workflow's required plugins
 
@@ -238,7 +212,7 @@ Each workflow declares its external-plugin dependencies in its frontmatter `requ
 
 ```bash
 # Locate the workflow file (covers arbo-dev, retrofitted, and plugin-installed layouts)
-WORKFLOW_NAME="<feature|bug-fix|explore|refactor|documentation|publish|new-project|retrofit>"
+WORKFLOW_NAME="<build|explore|publish|new-project|retrofit>"
 WORKFLOW_FILE=""
 for path in \
     "workflows/${WORKFLOW_NAME}.md" \
@@ -299,27 +273,28 @@ Surface the install guidance and ask the user how to proceed. Recommend installi
 
 ### 6. Route to next step
 
-Based on the user's choice:
+Based on triage:
 
-- **Path A:** Invoke `/design` to brainstorm and produce the governed spec, then transition to planning and build.
-- **Path B:** Invoke `/design` to brainstorm and produce a *design spec* in `docs/superpowers/specs/`, then transition to planning and build; `/consolidate` runs at the end to produce the governed spec from built state.
+- **Verified agent-target:** write the agent brief in Step 4 and hand off to `/build`.
+- **Everything-else:** invoke `/design` to produce the design spec and plan, pause for human review, then hand off to `/build` after approval.
+- **Exploratory work:** if the request is not yet concrete enough for a design spec, route to the **explore** workflow for a spike/document/decide loop.
 
 ## Workflow transitions
 
 If the user's situation changes mid-workflow, re-evaluate and route to the appropriate workflow. Common transitions:
 
-- **feature → explore:** Unknowns surface during survey/design — pause feature, enter explore workflow
-- **bug-fix → feature:** Classification reveals a spec gap, not just wrong code — the fix becomes a feature
-- **refactor → bug-fix:** Restructuring surfaces a bug — pause refactor, capture the bug separately
-- **explore → feature:** Spike produces enough understanding — `/consolidate` findings and enter feature at design step
-- **any → documentation:** Docs-only issues noted during any workflow — handle in a separate pass after current workflow
+- **build → explore:** Unknowns surface during survey/design — pause build work and run a spike.
+- **explore → build:** A spike produces enough understanding — capture the decision and re-enter at `/start` or `/design`.
+- **build → separate issue:** The current work reveals a distinct docs, bug, refactor, or feature concern — capture it separately rather than widening the slice.
 
 See `workflows/README.md ## Workflow transitions` for the full transition table.
 
 ## Important
 
 - This skill is **guidance, not a gate**. If the user wants to skip straight to coding, let them — but note what governance steps they're skipping.
-- Do not create files, modify code, or make commits. This skill only gathers context and recommends.
+- Do not modify product code or make commits. This skill only gathers context,
+  recommends routing, and writes the verified `agent-ready` brief when that
+  lane is selected.
 - If the project is at Layer 0 with no governed documents yet, mention that `/init-project` can set up the infrastructure, but don't block on it.
 - If the project has an existing codebase without governance, suggest the **retrofit** workflow instead.
 - Keep the output concise. The user wants to start working, not read a manual.

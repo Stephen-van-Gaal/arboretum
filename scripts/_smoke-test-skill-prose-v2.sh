@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # scope: plugin-only
-# _smoke-test-skill-prose-v2.sh — Prose-regression checks for the v2-only
-# sections of /start and /design. These are structural invariants —
-# accidental edits that break the v2 routing will be caught here.
+# _smoke-test-skill-prose-v2.sh — Prose-regression checks for the unified
+# workflow skill surface. These are structural invariants — accidental edits
+# that reintroduce retired routing or break the unified path are caught here.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "run with bash" >&2; exit 1; }
 
@@ -28,13 +28,23 @@ done
 
 if [ "${#missing_skill_files[@]}" -gt 0 ]; then
   if [ -f ".codex-plugin/plugin.json" ] || [ -f ".claude-plugin/plugin.json" ]; then
-    fail "skill-prose v2 invariants require Arboretum plugin skill files" \
+    fail "skill-prose unified invariants require Arboretum plugin skill files" \
       "$(printf 'missing %s\n' "${missing_skill_files[@]}")"
   fi
-  echo "SKIP: skill-prose v2 invariants require Arboretum plugin skill files"
+  echo "SKIP: skill-prose unified invariants require Arboretum plugin skill files"
   printf 'SKIP: missing %s\n' "${missing_skill_files[@]}"
   exit 0
 fi
+
+# Named-pipeline policy: retired compatibility routing must not remain live in
+# the workflow skills. Historical discussion belongs in design/spec archives,
+# not in the live slash-skill procedures.
+for f in "$START" "$DESIGN" "$CONSOLIDATE" "$FINISH" "$HEALTH"; do
+  if grep -Eq 'PIPELINE=v1|`v1` \(default\)|Path A \(|Path B \(' "$f"; then
+    fail "named pipeline policy - $f still exposes retired v1/Path A/B routing"
+  fi
+done
+ok "named pipeline policy - live skills do not expose retired v1/Path A/B routing"
 
 # /start invariants
 
@@ -43,10 +53,10 @@ grep -q "^### 0\. Read the pipeline\.workflow flag" "$START" \
   || fail "case 1 — /start Step 0 (flag read) missing"
 ok "case 1 — /start Step 0 present"
 
-# Case 2: Step 4-v2 (agent-target triage) exists in /start
-grep -q "^### 4-v2\. Agent-target triage" "$START" \
-  || fail "case 2 — /start Step 4-v2 missing"
-ok "case 2 — /start Step 4-v2 present"
+# Case 2: Step 4 (agent-target triage) exists in /start
+grep -q "^### 4\. Agent-target triage" "$START" \
+  || fail "case 2 — /start Step 4 missing"
+ok "case 2 — /start Step 4 present"
 
 # Case 2a: /start honours agent-ready as a contract only after freshness verification
 grep -q "scripts/verify-agent-ready.sh <issue>" "$START" \
@@ -76,16 +86,16 @@ grep -q "do not route it through \`/roadmap agent-prep\`" "$START" \
   || fail "case 2d — /start still routes helper setup failures through agent-prep"
 ok "case 2d — /start handles verify-agent-ready exit 2 separately"
 
-# Case 3: /start v2 everything-else routes to /design (PR2's central edit)
+# Case 3: /start everything-else routes to /design (PR2's central edit)
 grep -q "Hand off to \`/design\` with the issue number" "$START" \
-  || fail "case 3 — /start v2 everything-else does not invoke /design"
-ok "case 3 — /start v2 everything-else routes to /design"
+  || fail "case 3 — /start everything-else does not invoke /design"
+ok "case 3 — /start everything-else routes to /design"
 
-# Case 4: /start no longer falls through to v1 Path A/B under v2
+# Case 4: /start no longer falls through to legacy path routing
 if grep -q "For PR1 of WS2, continue with Step 4 (Path A/B determination)" "$START"; then
-  fail "case 4 — /start v2 everything-else still has the PR1 fallback prose"
+  fail "case 4 — /start everything-else still has the PR1 fallback prose"
 fi
-ok "case 4 — /start v2 everything-else fallback removed"
+ok "case 4 — /start everything-else fallback removed"
 
 # /design invariants
 
@@ -94,57 +104,57 @@ grep -q "^### Step 0: Read the pipeline\.workflow flag" "$DESIGN" \
   || fail "case 5 — /design Step 0 (flag read) missing"
 ok "case 5 — /design Step 0 present"
 
-# Case 6: /design Step 0-v1 exists (the renamed v1-only path-selection step)
-grep -q "^### Step 0-v1: Determine path — A or B?" "$DESIGN" \
-  || fail "case 6 — /design Step 0-v1 missing (rename of old Step 0)"
-ok "case 6 — /design Step 0-v1 present"
+# Case 6: /design no longer exposes legacy path selection
+if grep -q "^### Step 0-v1:" "$DESIGN"; then
+  fail "case 6 — /design still exposes Step 0-v1 legacy path selection"
+fi
+ok "case 6 — /design legacy path-selection section absent"
 
-# Case 7: /design Section v2 exists
-grep -q "^## Section v2: Unified design phase" "$DESIGN" \
-  || fail "case 7 — /design Section v2 missing"
-ok "case 7 — /design Section v2 present"
+# Case 7: /design unified phase exists
+grep -q "^## Unified design phase$" "$DESIGN" \
+  || fail "case 7 — /design Unified design phase missing"
+ok "case 7 — /design Unified design phase present"
 
-# Case 8: /design Section v2 has all 5 sub-sections (v2.1 through v2.5)
-SUBS=$(grep -c "^### v2\." "$DESIGN")
-[ "$SUBS" = "5" ] || fail "case 8 — /design Section v2 expected 5 sub-sections, found $SUBS"
-ok "case 8 — /design Section v2 has 5 sub-sections (v2.1-v2.5)"
-
-# Case 9: /design Section v2 names all 4 Branch 1 modes (D5).
-# Extract just Section v2 (delimited by `## Section v2:` and the next `## ` heading)
-# so v1 occurrences of mode words don't false-pass the check.
-SECTION_V2=$(awk '
-  /^## Section v2:/ { flag = 1; next }
+# Case 8: /design unified phase has all 5 sub-sections
+UNIFIED_DESIGN=$(awk '
+  /^## Unified design phase$/ { flag = 1; next }
   /^## / && flag { flag = 0 }
   flag { print }
 ' "$DESIGN")
+SUBS=$(echo "$UNIFIED_DESIGN" | grep -c "^### [1-5]\. ")
+[ "$SUBS" = "5" ] || fail "case 8 — /design unified phase expected 5 sub-sections, found $SUBS"
+ok "case 8 — /design unified phase has 5 sub-sections"
+
+# Case 9: /design unified phase names all 4 Branch 1 modes (D5).
+SECTION_UNIFIED="$UNIFIED_DESIGN"
 for mode in brainstorm investigate coverage-baseline none; do
-  echo "$SECTION_V2" | grep -q "$mode" \
-    || fail "case 9 — /design Section v2 missing Branch 1 mode: $mode"
+  echo "$SECTION_UNIFIED" | grep -q "$mode" \
+    || fail "case 9 — /design unified phase missing Branch 1 mode: $mode"
 done
-ok "case 9 — /design Section v2 names all 4 Branch 1 modes (scoped to v2 block only)"
+ok "case 9 — /design unified phase names all 4 Branch 1 modes"
 
-# Case 10: /design Section v2 invokes superpowers:writing-plans
+# Case 10: /design unified phase invokes superpowers:writing-plans
 grep -q "superpowers:writing-plans" "$DESIGN" \
-  || fail "case 10 — /design Section v2 does not invoke superpowers:writing-plans"
-ok "case 10 — /design Section v2 folds in planning via superpowers:writing-plans"
+  || fail "case 10 — /design unified phase does not invoke superpowers:writing-plans"
+ok "case 10 — /design unified phase folds in planning via superpowers:writing-plans"
 
-# Case 10a: /design Section v2 requires customer/operator experience guidance
-echo "$SECTION_V2" | grep -Eq "Customer Experience|customer/operator experience" \
-  || fail "case 10a — /design Section v2 missing customer/operator experience guidance"
+# Case 10a: /design unified phase requires customer/operator experience guidance
+echo "$SECTION_UNIFIED" | grep -Eq "Customer Experience|customer/operator experience" \
+  || fail "case 10a — /design unified phase missing customer/operator experience guidance"
 for phrase in "workflow steps" "ship-tail behaviour" "error or warning states" "user decisions or confirmations" "trust boundaries"; do
-  echo "$SECTION_V2" | grep -q "$phrase" \
+  echo "$SECTION_UNIFIED" | grep -q "$phrase" \
     || fail "case 10a — /design customer/operator guidance missing trigger phrase: $phrase"
 done
 for phrase in "normal path" "failure or unknown path" "user decision points"; do
-  echo "$SECTION_V2" | grep -q "$phrase" \
+  echo "$SECTION_UNIFIED" | grep -q "$phrase" \
     || fail "case 10a — /design customer/operator guidance missing coverage phrase: $phrase"
 done
-ok "case 10a — /design Section v2 covers customer/operator experience guidance"
+ok "case 10a — /design unified phase covers customer/operator experience guidance"
 
-# Case 11: /design Section v2 exits to /build with design spec path
+# Case 11: /design unified phase exits to /build with design spec path
 grep -q "/build docs/superpowers/specs" "$DESIGN" \
-  || fail "case 11 — /design Section v2 does not exit to /build with design spec path"
-ok "case 11 — /design Section v2 exits to /build correctly"
+  || fail "case 11 — /design unified phase does not exit to /build with design spec path"
+ok "case 11 — /design unified phase exits to /build correctly"
 
 # PR3: /finish, /consolidate, /health-check invariants
 
@@ -153,10 +163,10 @@ grep -q "^### Step 0: Read the pipeline\.workflow flag" "$FINISH" \
   || fail "case 12 — /finish Step 0 (flag read) missing"
 ok "case 12 — /finish Step 0 present"
 
-# Case 13: /finish has Section v2 note
-grep -q "^## Section v2: Ship-tail under the unified workflow" "$FINISH" \
-  || fail "case 13 — /finish Section v2 missing"
-ok "case 13 — /finish Section v2 present"
+# Case 13: /finish states mandatory security review in the unified ship tail
+grep -q "/security-review\` is \*\*mandatory\*\*" "$FINISH" \
+  || fail "case 13 — /finish does not state mandatory security review"
+ok "case 13 — /finish mandatory security-review rule present"
 
 # Case 13a: /finish Step 1 offers an in-flow commit checkpoint instead of only hard-pausing
 grep -Fq "stage named files + commit checkpoint" "$FINISH" \
@@ -172,58 +182,53 @@ grep -q "^### Step 0: Read the pipeline\.workflow flag" "$HEALTH" \
   || fail "case 14 — /health-check Step 0 (flag read) missing"
 ok "case 14 — /health-check Step 0 present"
 
-# Case 15: /health-check has Section v2 note
-grep -q "^## Section v2: Health-check under the unified workflow" "$HEALTH" \
-  || fail "case 15 — /health-check Section v2 missing"
-ok "case 15 — /health-check Section v2 present"
+# Case 15: /health-check states unified Check 7 interpretation
+grep -q "Drift on a governed spec" "$HEALTH" \
+  || fail "case 15 — /health-check missing unified Check 7 drift interpretation"
+ok "case 15 — /health-check unified Check 7 interpretation present"
 
 # Case 16: /consolidate has Step 0 (flag read)
 grep -q "^### Step 0: Read the pipeline\.workflow flag" "$CONSOLIDATE" \
   || fail "case 16 — /consolidate Step 0 (flag read) missing"
 ok "case 16 — /consolidate Step 0 present"
 
-# Case 17: /consolidate has Section v2
-grep -q "^## Section v2: Unified-workflow reconciliation" "$CONSOLIDATE" \
-  || fail "case 17 — /consolidate Section v2 missing"
-ok "case 17 — /consolidate Section v2 present"
+# Case 17: /consolidate has unified reconciliation details
+grep -q "^## Unified-workflow reconciliation details$" "$CONSOLIDATE" \
+  || fail "case 17 — /consolidate unified reconciliation details missing"
+ok "case 17 — /consolidate unified reconciliation details present"
 
-# Case 18: /consolidate Section v2 has all 5 sub-sections (v2.1 through v2.5).
-# Scope the count to the Section v2 block only — a future unrelated `### v2.`
+# Case 18: /consolidate unified details have all 5 sub-sections.
+# Scope the count to the unified details block — a future unrelated heading
 # heading elsewhere in the file would otherwise let this case pass/fail
 # spuriously. Mirrors the pattern used by cases 9 and 22.
-CONS_SECTION_V2_BLOCK=$(awk '
-  /^## Section v2:/ { flag = 1; next }
+CONS_SECTION_UNIFIED_BLOCK=$(awk '
+  /^## Unified-workflow reconciliation details$/ { flag = 1; next }
   /^## / && flag { flag = 0 }
   flag { print }
 ' "$CONSOLIDATE")
-CONS_SUBS=$(echo "$CONS_SECTION_V2_BLOCK" | grep -c "^### v2\.")
-[ "$CONS_SUBS" = "5" ] || fail "case 18 — /consolidate Section v2 expected 5 sub-sections (scoped to v2 block), found $CONS_SUBS"
-ok "case 18 — /consolidate Section v2 has 5 sub-sections (scoped to v2 block)"
+CONS_SUBS=$(echo "$CONS_SECTION_UNIFIED_BLOCK" | grep -c "^### [1-5]\. ")
+[ "$CONS_SUBS" = "5" ] || fail "case 18 — /consolidate unified details expected 5 sub-sections, found $CONS_SUBS"
+ok "case 18 — /consolidate unified details have 5 sub-sections"
 
-# Case 19: /consolidate v2.2 D3 hybrid supersession exists
+# Case 19: /consolidate D3 hybrid supersession exists
 grep -q "D3 hybrid behaviour-supersession detection" "$CONSOLIDATE" \
-  || fail "case 19 — /consolidate v2.2 D3 supersession heading missing"
-ok "case 19 — /consolidate v2.2 D3 supersession present"
+  || fail "case 19 — /consolidate D3 supersession heading missing"
+ok "case 19 — /consolidate D3 supersession present"
 
-# Case 20: /consolidate v2.3 D5 refactor handling exists
+# Case 20: /consolidate D5 refactor handling exists
 grep -q "D5 refactor-spec handling" "$CONSOLIDATE" \
-  || fail "case 20 — /consolidate v2.3 D5 refactor handling missing"
-ok "case 20 — /consolidate v2.3 D5 refactor handling present"
+  || fail "case 20 — /consolidate D5 refactor handling missing"
+ok "case 20 — /consolidate D5 refactor handling present"
 
-# Case 21: /consolidate Step 5b status-determination prose carries v1-only annotation
-grep -q "Determine status (v1 only — skip under v2" "$CONSOLIDATE" \
-  || fail "case 21 — /consolidate Step 5b status prose missing v1-only annotation"
-ok "case 21 — /consolidate v1-only annotation present on Step 5b status determination"
+# Case 21: /consolidate Step 5b status is active for built-state creates
+grep -q "Status on creation is \`active\`" "$CONSOLIDATE" \
+  || fail "case 21 — /consolidate Step 5b status prose missing active-create rule"
+ok "case 21 — /consolidate Step 5b status creation rule present"
 
-# Case 22: /consolidate v2.1 collapses new-spec status to always-active
-SECTION_V2_CONS=$(awk '
-  /^## Section v2:/ { flag = 1; next }
-  /^## / && flag { flag = 0 }
-  flag { print }
-' "$CONSOLIDATE")
-echo "$SECTION_V2_CONS" | grep -q "always \`active\`" \
-  || fail "case 22 — /consolidate v2.1 does not state status is always \`active\`"
-ok "case 22 — /consolidate v2.1 collapses status to always-active"
+# Case 22: /consolidate unified details collapse new-spec status to always-active
+echo "$CONS_SECTION_UNIFIED_BLOCK" | grep -q "always \`active\`" \
+  || fail "case 22 — /consolidate unified details do not state status is always \`active\`"
+ok "case 22 — /consolidate unified details collapse status to always-active"
 
 # === PR4 cutover invariants ===
 
@@ -248,10 +253,10 @@ for legacy in feature bug-fix refactor documentation; do
 done
 ok "case 25 — 4 legacy workflow docs absent"
 
-# Case 26: pipeline.workflow default is v2
-[ "$(bash scripts/read-pipeline-flag.sh)" = "v2" ] \
-  || fail "case 26 — pipeline.workflow is not v2"
-ok "case 26 — pipeline.workflow default is v2"
+# Case 26: pipeline.workflow default is unified
+[ "$(bash scripts/read-pipeline-flag.sh)" = "unified" ] \
+  || fail "case 26 — pipeline.workflow is not unified"
+ok "case 26 — pipeline.workflow default is unified"
 
 # Case 27: two-path-governance.spec.md is no longer a live spec
 [ ! -f "docs/specs/two-path-governance.spec.md" ] \
@@ -373,4 +378,4 @@ for f in AGENTS.md CLAUDE.md; do
 done
 ok "case 39 - project entrypoints use stage/flow workflow section guidance"
 
-echo "ALL PASS: skill-prose v2 invariants"
+echo "ALL PASS: skill-prose unified invariants"

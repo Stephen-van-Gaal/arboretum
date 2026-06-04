@@ -22,7 +22,10 @@ The seam between the `/design` stage skill and the `/build` stage skill. `/desig
 
 `/design` — `skills/design/SKILL.md`. Producer-type: `skill`.
 
-Under v2 (`pipeline.workflow: v2`), `/design` Section v2 populates all five required frontmatter fields at exit per `/design` v2.2 (Branch 1 mode) and v2.4 (plan fold-in). Under v1, the Path A or Path B exit produces the same five fields. The cross-version definition lives in the `s2-input-contract` shared-concepts stub.
+In the current general-release pipeline, `/design`'s unified design phase
+populates all five required frontmatter fields at exit: Branch 1 mode sets the
+design path and triage context, and plan fold-in sets the `plan:` field. The
+field definition lives in the `s2-input-contract` shared-concepts stub.
 
 ## Consumer
 
@@ -63,7 +66,7 @@ When any one required field is missing or violates its constraint, `/build` writ
 
 ## Test surface
 
-- **S2-1: Producer-completeness.** `/design`'s v2 exit produces a design spec with all five required frontmatter fields (`related-issue`, `test-tiers`, `implementation-mode`, `triage`, `plan`).
+- **S2-1: Producer-completeness.** `/design`'s unified exit produces a design spec with all five required frontmatter fields (`related-issue`, `test-tiers`, `implementation-mode`, `triage`, `plan`).
 - **S2-2: Consumer-strict-gate.** `/build` refuses to run if any required S2 field is missing, naming which field(s) are absent.
 - **S2-3: Consumer-no-self-heal.** `/build` does not prompt for or backfill missing fields; the exit on missing-field is non-zero and the user is redirected to `/design`.
 - **S2-4: Enum-validity.** `/build` rejects `implementation-mode:` values outside the closed enum `{direct, executing-plans, subagent-driven-development}` and `triage:` values outside `{agent-target, everything-else}`.
@@ -72,4 +75,4 @@ When any one required field is missing or violates its constraint, `/build` writ
 
 ## Versioning
 
-- **1.0** (2026-05-24) — initial contract; producer + consumer shapes per WS1 §D3, with the producer side reflecting `/design` v2 behaviour from PR #329 (v2 cutover) and the consumer side reflecting `/build` from PR #321 (WS1 build).
+- **1.0** (2026-05-24) — initial contract; producer + consumer shapes per WS1 §D3, with the producer side reflecting the unified `/design` behaviour from PR #329 and the consumer side reflecting `/build` from PR #321 (WS1 build).

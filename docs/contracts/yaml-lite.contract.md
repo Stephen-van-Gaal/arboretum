@@ -35,7 +35,7 @@ Supported syntax:
 - One-level mappings such as `pipeline.workflow` and `test-tiers.unit`.
 - Block lists such as `owns:`.
 - One-level list-of-mapping entries such as `invokers:`.
-- Simple flow mappings such as `pipeline: { workflow: v2 }`.
+- Simple flow mappings such as `pipeline: { workflow: unified }`.
 - Simple flow lists such as `owns: [scripts/foo.sh]`.
 - Simple flow list-of-mapping entries such as `invokers: [{type: hook}, {type: developer}]`.
 - Inline comments, preserving `#` characters inside single-quoted or double-quoted strings.
@@ -101,8 +101,8 @@ Exit codes:
 
 ## Test surface
 
-- **YL-1:** full-file block mapping `pipeline.workflow: v2` emits `pipeline.workflow=v2`.
-- **YL-2:** flow mapping `pipeline: { workflow: 'v2' }` emits `pipeline.workflow=v2`.
+- **YL-1:** full-file block mapping `pipeline.workflow: unified` emits `pipeline.workflow=unified`.
+- **YL-2:** flow mapping `pipeline: { workflow: 'unified' }` emits `pipeline.workflow=unified`.
 - **YL-3:** inline comments are stripped, but `#` inside quotes is preserved.
 - **YL-4:** frontmatter block lists emit `owns[]=...` lines.
 - **YL-5:** frontmatter nested mappings emit `test-tiers.unit=yes` style lines.

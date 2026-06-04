@@ -2,7 +2,7 @@
 # owner: workflow-unification
 # scope: plugin-only
 # _smoke-test-skill-prose-v2-runtime-boundary.sh - Regression test for stale
-# consumer copies of the plugin-only v2 skill prose smoke test.
+# consumer copies of the plugin-only unified skill prose smoke test.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,7 +29,7 @@ fi
 consumer_out="$tmp/consumer-out.txt"
 consumer_err="$tmp/consumer-err.txt"
 if bash "$CONSUMER/scripts/_smoke-test-skill-prose-v2.sh" >"$consumer_out" 2>"$consumer_err"; then
-  grep -q "SKIP: skill-prose v2 invariants require Arboretum plugin skill files" "$consumer_out" \
+  grep -q "SKIP: skill-prose unified invariants require Arboretum plugin skill files" "$consumer_out" \
     || fail "consumer-shaped invocation exited cleanly without the expected skip message" "$(cat "$consumer_out" "$consumer_err")"
   ok "consumer-shaped invocation skips without top-level skills/"
 else
@@ -42,9 +42,9 @@ plugin_err="$tmp/plugin-err.txt"
 if bash "$PLUGIN_BROKEN/scripts/_smoke-test-skill-prose-v2.sh" >"$plugin_out" 2>"$plugin_err"; then
   fail "plugin-marked invocation unexpectedly skipped missing skill files" "$(cat "$plugin_out" "$plugin_err")"
 else
-  grep -q "FAIL: skill-prose v2 invariants require Arboretum plugin skill files" "$plugin_err" \
+  grep -q "FAIL: skill-prose unified invariants require Arboretum plugin skill files" "$plugin_err" \
     || fail "plugin-marked invocation failed without the expected missing-skill diagnostic" "$(cat "$plugin_out" "$plugin_err")"
   ok "plugin-marked invocation fails when skill files are missing"
 fi
 
-echo "ALL PASS: skill-prose v2 runtime boundary"
+echo "ALL PASS: skill-prose unified runtime boundary"

@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-3
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-design-spec.sh refuses on missing related-issue,
 # naming the field in stderr — no prompting/amending/self-healing.

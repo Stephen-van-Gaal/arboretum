@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-9 (regression — comma-separated KV form parsing)
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-build-exit.sh correctly parses the comma-separated
 # KV form that log-stage.sh actually emits (`exit-status: success,

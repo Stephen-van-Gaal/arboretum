@@ -35,9 +35,9 @@ run_no_yaml() {
 }
 
 mkdir -p "$FIX/project"
-printf 'pipeline:\n  workflow: v2\n' > "$FIX/project/roadmap.config.yaml"
+printf 'pipeline:\n  workflow: unified\n' > "$FIX/project/roadmap.config.yaml"
 out=$(cd "$FIX/project" && run_no_yaml bash "$ROOT/scripts/read-pipeline-flag.sh" 2>"$FIX/rpf.err"); rc=$?
-if [ "$rc" = 0 ] && [ "$out" = "v2" ]; then
+if [ "$rc" = 0 ] && [ "$out" = "unified" ]; then
   pass "runtime: read-pipeline-flag works without PyYAML"
 else
   fail_case "runtime: read-pipeline-flag" "rc=$rc out=$out err=$(cat "$FIX/rpf.err")"

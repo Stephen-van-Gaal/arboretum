@@ -36,7 +36,7 @@ Cross-field invariants: `plan: null` forbids `implementation-mode: executing-pla
 Consumer-type: `script`. Two consumer classes assert on this validator's output:
 
 - **S2 contract-test files** under `tests/contracts/s2/` — `s2-1-producer-completeness.sh` (good fixture → exit 0), `s2-2-consumer-strict-gate.sh` (asserts `triage: missing`), `s2-4-enum-validity.sh` (asserts `implementation-mode: not in`), `s2-6-plan-path-existence.sh` (asserts `plan: file not found`), and the sibling `s2-3`/`s2-5`/`s2-7` files. They invoke the validator against the shared `tests/contracts/fixtures/design-*.md` fixtures and assert exit code + an `assertStderr` substring.
-- **Skill gates** — `/design` runs it at its v2.5 exit (`skills/design/SKILL.md` ~248) and `/build` runs it as the S2 consumer gate before reading any field (`skills/build/SKILL.md` ~40, `bash scripts/validate-design-spec.sh "$DESIGN_SPEC" || { … }`). Both treat a non-zero exit as a hard stop.
+- **Skill gates** — `/design` runs it at its unified exit (`skills/design/SKILL.md` ~248) and `/build` runs it as the S2 consumer gate before reading any field (`skills/build/SKILL.md` ~40, `bash scripts/validate-design-spec.sh "$DESIGN_SPEC" || { … }`). Both treat a non-zero exit as a hard stop.
 
 **Consumer obligations:** consumers MUST treat any non-zero exit as drift and MUST NOT swallow it; they MUST match the `S2-DRIFT:` summary and `  - <field>: <reason>` bullet shape rather than re-implementing the S2 field rules.
 

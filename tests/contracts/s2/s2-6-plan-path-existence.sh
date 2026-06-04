@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-6
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts that when plan: is a path, the file must exist; pointing at
 # a missing file is rejected.

@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-1
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-design-spec.sh accepts a complete, valid design spec
 # (all 5 required frontmatter fields present + valid enums + plan-file exists).

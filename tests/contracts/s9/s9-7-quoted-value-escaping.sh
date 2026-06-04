@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-7
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: context values containing the structural ', ' delimiter
 # are double-quoted; within quoted values, the three escape sequences

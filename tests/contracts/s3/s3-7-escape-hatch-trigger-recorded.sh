@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-7
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-build-exit.sh rejects an escape-hatch exit when
 # the design spec lacks the `escape-hatch:` trigger block.

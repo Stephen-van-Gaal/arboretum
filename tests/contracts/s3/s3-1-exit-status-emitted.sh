@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-1
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-build-exit.sh rejects a /build exit log line that
 # omits the `exit-status:` field.

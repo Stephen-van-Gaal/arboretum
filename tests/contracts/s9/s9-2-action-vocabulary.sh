@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-2
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: every action in any stage-skill's log-stage.sh callsite
 # uses one of the seven-entry vocabulary (CWD-2). The action is the

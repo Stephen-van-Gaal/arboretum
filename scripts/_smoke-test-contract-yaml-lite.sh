@@ -32,7 +32,7 @@ $2
 
 cat > "$FIX/config.yaml" <<'YAML'
 pipeline:
-  workflow: "v2" # inline comment
+  workflow: "unified" # inline comment
 quoted: "value # not comment"
 plain: ok # stripped
 apostrophe: WS4's CI integration
@@ -40,7 +40,7 @@ command: pytest -k "unit#fast" # trailing comment
 YAML
 out=$(bash "$HELPER" file "$FIX/config.yaml" 2>"$FIX/err"); rc=$?
 if [ "$rc" = 0 ] \
-  && assert_has_line "$out" "pipeline.workflow=v2" \
+  && assert_has_line "$out" "pipeline.workflow=unified" \
   && assert_has_line "$out" "quoted=value # not comment" \
   && assert_has_line "$out" "plain=ok" \
   && assert_has_line "$out" "apostrophe=WS4's CI integration" \
@@ -50,9 +50,9 @@ else
   fail_case "YL-1/YL-3/YL-9/YL-10" "rc=$rc out=$out err=$(cat "$FIX/err")"
 fi
 
-printf "pipeline: { workflow: 'v2' }\n" > "$FIX/flow.yaml"
+printf "pipeline: { workflow: 'unified' }\n" > "$FIX/flow.yaml"
 out=$(bash "$HELPER" file "$FIX/flow.yaml" 2>"$FIX/err"); rc=$?
-if [ "$rc" = 0 ] && [ "$out" = "pipeline.workflow=v2" ]; then
+if [ "$rc" = 0 ] && [ "$out" = "pipeline.workflow=unified" ]; then
   pass "YL-2: flow mapping"
 else
   fail_case "YL-2" "rc=$rc out=$out err=$(cat "$FIX/err")"
@@ -94,8 +94,8 @@ else
 fi
 
 cat > "$FIX/bad-indent.yaml" <<'YAML'
-pipeline: v2
-  workflow: v2
+pipeline: unified
+  workflow: unified
 YAML
 out=$(bash "$HELPER" file "$FIX/bad-indent.yaml" 2>"$FIX/err"); rc=$?
 if [ "$rc" -ne 0 ] && grep -q "yaml-lite:" "$FIX/err"; then
@@ -123,7 +123,7 @@ def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
 builtins.__import__ = guarded_import
 PY
 out=$(PYTHONPATH="$FIX/no-yaml" bash "$HELPER" file "$FIX/config.yaml" 2>"$FIX/err"); rc=$?
-if [ "$rc" = 0 ] && assert_has_line "$out" "pipeline.workflow=v2"; then
+if [ "$rc" = 0 ] && assert_has_line "$out" "pipeline.workflow=unified"; then
   pass "YL-8: no PyYAML import required"
 else
   fail_case "YL-8" "rc=$rc out=$out err=$(cat "$FIX/err")"

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-tests.sh — Run every test under tests/contracts/
-# whose declared pipeline-version matches the active flag.
+# whose declared named pipeline selector matches the active flag.
 #
 # Conventions:
 #   - Tests live at tests/contracts/<seam>/<id>.sh (excluding _lib/ and
 #     fixtures/).
-#   - Each test declares its applicable pipeline version in a header
-#     comment: `# pipeline-version: v1 | v2 | any`. Missing header is a
+#   - Each test declares its applicable named pipeline selector in a header
+#     comment: `# pipeline-version: unified | any`. Missing header is a
 #     warning (test still runs as `any`); fix by adding the header.
 #   - Runner reads the active flag via scripts/read-pipeline-flag.sh.
 #   - Tests are executed via plain `bash "$test_file"` and inherit the
@@ -72,7 +72,7 @@ while IFS= read -r test_file; do
     */_lib/*|*/fixtures/*) continue ;;
   esac
 
-  # Extract pipeline-version header. Missing header = warning + treat
+  # Extract named pipeline selector header. Missing header = warning + treat
   # as `any` (per the conventions comment above).
   version=$(grep -m1 -E '^# pipeline-version:' "$test_file" | sed -E 's/^# pipeline-version:[[:space:]]*//')
   if [ -z "$version" ]; then

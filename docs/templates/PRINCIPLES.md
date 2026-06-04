@@ -92,4 +92,4 @@ The two axes are independent: a unit-scope test can be `costly`; an integration-
 
 ## The unified workflow
 
-Arboretum v2 has one development workflow — `build` — covering all changes to existing projects (features, bug fixes, refactors, documentation). The only structural fork is `/start`'s triage between agent-target (fast lane) and everything-else (design-spec lane). Governed specs are written only by `/consolidate` at `/finish` time, born from built state. The workflow invariants are stated centrally in `workflows/README.md ## Workflow invariants`; this principle does not duplicate them.
+Arboretum's current general-release pipeline, `unified`, has one development workflow — `build` — covering all changes to existing projects (features, bug fixes, refactors, documentation). The only structural fork is `/start`'s triage between agent-target (fast lane) and everything-else (design-spec lane). Governed specs are written only by `/consolidate` at `/finish` time, born from built state. The workflow invariants are stated centrally in `workflows/README.md ## Workflow invariants`; this principle does not duplicate them.

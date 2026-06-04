@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-3
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-build-exit.sh rejects a `success` exit whose
 # referenced plan has unchecked checkboxes without a (skipped: <reason>)

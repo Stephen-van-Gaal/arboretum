@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-5
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: a `success` /build exit's post-conditions are enforced at
 # the contract layer — specifically, when the design spec's plan

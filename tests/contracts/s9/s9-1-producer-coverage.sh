@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-1
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: every stage skill in the canonical set invokes
 # `bash scripts/log-stage.sh` on entry and on exit.

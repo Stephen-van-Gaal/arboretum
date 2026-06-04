@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-2
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-design-spec.sh refuses on missing triage field,
 # naming the field in stderr.

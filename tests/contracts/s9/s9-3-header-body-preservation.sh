@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s9-stage-to-log-helper
 # assertion: S9-3
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: the comment-post formatter produces exactly the shape
 # documented by S9's `### Outputs` — a 2-line block with the canonical

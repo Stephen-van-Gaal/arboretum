@@ -45,7 +45,7 @@ These rules hold regardless of which workflow you use. They describe arboretum's
 4. The Behaviour section of the governed spec is human-authored.
 5. PRs scope by intent, not "everything in the tree" — hunk-staging when needed.
 
-Invariant #6 of the legacy two-path model ("pick one governance path per slice — don't mix them") has no analogue under v2. Governed specs are written only by `/consolidate` (design D3), so there is no governance-path selector to mix.
+Invariant #6 of the legacy two-path model ("pick one governance path per slice — don't mix them") has no analogue in the current general-release pipeline. Governed specs are written only by `/consolidate` (design D3), so there is no governance-path selector to mix.
 
 ## Skill legend
 

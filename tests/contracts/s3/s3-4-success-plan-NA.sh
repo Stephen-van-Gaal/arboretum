@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-4
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts validate-build-exit.sh accepts a `success` exit with plan:null
 # (the plan-checkbox check is exempt under null-mode by S3-4 design).

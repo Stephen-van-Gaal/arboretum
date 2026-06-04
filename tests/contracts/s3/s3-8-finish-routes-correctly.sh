@@ -2,7 +2,7 @@
 # owner: pipeline-contracts-template
 # contract: s3-build-to-finish
 # assertion: S3-8
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts: /finish reads the most recent `/build exited` journey-log
 # entry's `exit-status:` value and routes — `success` → continue

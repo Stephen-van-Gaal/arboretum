@@ -2,10 +2,10 @@
 # owner: pipeline-contracts-template
 # contract: s2-design-to-build
 # assertion: S2-7
-# pipeline-version: v2
+# pipeline-version: unified
 #
 # Asserts the validator-as-single-source-of-truth binding (WS4 D4): both
-# the S2 producer skill (/design v2.5 exit) and the S2 consumer skill
+# the S2 producer skill (/design unified exit) and the S2 consumer skill
 # (/build entry) invoke `bash scripts/validate-design-spec.sh`. Without
 # this binding the validator can be silently disconnected — D9's drift-
 # fails proof revealed that on first build (commenting out /design's

@@ -37,15 +37,13 @@ branch_prefixes: [feat, fix, docs, chore, refactor, spike]
 # native sub-issues; downstream projects can opt out by overriding to false.
 sub_issues_enabled: true
 
-# Pipeline overhaul flags — WS2 of the pipeline-overhaul mega-epic
-# (#295 / docs/superpowers/specs/2026-05-20-pipeline-overhaul-design.md).
+# Pipeline workflow selector.
 #
-# `workflow: v2` — unified workflow with agent-target triage fork (the
-#                  default under arboretum v0.14+; sole writer of governed
-#                  specs is /consolidate per design D3).
-# `workflow: v1` — legacy Path A/B routing in /start (historical fallback;
-#                  the v1 prose remains in each skill's SKILL.md under
-#                  conditional sections for projects that explicitly opt
-#                  back to v1).
+# Omit `pipeline.workflow` to use the current general-release pipeline.
+# Set it only when this repo intentionally needs to pin or exercise a named
+# pipeline. Arboretum supports one general-release pipeline at a time; candidate
+# names are feature flags, not compatibility modes.
+#
+# `workflow: unified` — current general-release build workflow.
 pipeline:
-  workflow: v2
+  workflow: unified

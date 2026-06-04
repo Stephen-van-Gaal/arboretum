@@ -6,7 +6,10 @@ requires:
 
 # Workflow: Build
 
-The single development workflow under arboretum v2. Replaces the four legacy workflows (`feature`, `bug-fix`, `refactor`, `documentation`) and the Path A/B governance fork. One workflow, one triage at `/start`, one ship tail.
+The single development workflow under Arboretum's current general-release
+pipeline, `unified`. It replaces the four legacy task-grain workflows
+(`feature`, `bug-fix`, `refactor`, `documentation`) and the old governance-path
+selector. One workflow, one triage at `/start`, one ship tail.
 
 ## When to use
 
@@ -83,7 +86,7 @@ If any criterion is uncertain, the change is everything-else. The escape hatch i
 **Branch 1 modes** (per design D5):
 - **brainstorm** — new or changed behaviour. Invokes `superpowers:brainstorming`.
 - **investigate** — bug-fix. Invokes `superpowers:systematic-debugging` and writes the design spec as a root-cause + corrected-behaviour document.
-- **coverage-baseline** — refactor (preserves behaviour). Design spec is a structure-only variant — no Behaviour section to author; `/consolidate` recognizes the structure-only shape and skips Behaviour-supersession detection (D5 of /consolidate's v2 path).
+- **coverage-baseline** — refactor (preserves behaviour). Design spec is a structure-only variant — no Behaviour section to author; `/consolidate` recognizes the structure-only shape and skips Behaviour-supersession detection.
 - **none** — well-defined or docs-only. Design spec is minimal; for docs-only, `/consolidate` is a no-op at `/finish` since no governed source changed.
 
 Verified `agent-ready` skips this step entirely.
@@ -112,15 +115,15 @@ For coverage-baseline refactors, the wrap adapts: characterization-tests-first, 
 
 ### 4. Finish — `/finish`
 
-`/finish` verifies the implementation, invokes `/consolidate` to reconcile governed specs from built state, and prepares the PR. Under v2, `/consolidate` is the sole writer of `docs/specs/*.spec.md` (per design D3) — no workflow step hand-authors a governed spec.
+`/finish` verifies the implementation, invokes `/consolidate` to reconcile governed specs from built state, and prepares the PR. In the current general-release pipeline, `/consolidate` is the sole writer of `docs/specs/*.spec.md` (per design D3) — no workflow step hand-authors a governed spec.
 
 For docs-only changes, `/consolidate` has nothing to reconcile (no governed source changed); the effective tail is verify → `/pr`.
 
 ### 5. Security review — `/security-review` (B4, MANDATORY)
 
-`/security-review` is **always** invoked under v2 (per design D7 / B4). It self-gates: when the diff presents no injection surface (no hook, skill, script, or agent instruction file changed), it exits fast with "no surface, self-gate". When surface exists, it runs the full analysis and may block the PR.
+`/security-review` is **always** invoked in the current general-release pipeline (per design D7 / B4). It self-gates: when the diff presents no injection surface (no hook, skill, script, or agent instruction file changed), it exits fast with "no surface, self-gate". When surface exists, it runs the full analysis and may block the PR.
 
-The mandatory invocation is the change from v1 — in v1, security review was offered optionally; under the unified workflow it's a guaranteed step. This catches injection surfaces in changes that would otherwise have skipped review.
+The mandatory invocation is now part of the unified workflow. This catches injection surfaces in changes that would otherwise have skipped review.
 
 ### 6. Ship — `/pr` → `/land`
 
