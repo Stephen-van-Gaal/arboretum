@@ -39,7 +39,7 @@ make_ci_fixture() {
   local bin="$tmp/bin"
   local tool
 
-  mkdir -p "$bin" "$repo/scripts" "$repo/.claude/hooks" "$repo/skills"
+  mkdir -p "$bin" "$repo/scripts" "$repo/dev-tools/release" "$repo/.claude/hooks" "$repo/skills"
   cp "$CI" "$repo/scripts/ci-checks.sh"
   chmod +x "$repo/scripts/ci-checks.sh"
 
@@ -52,7 +52,7 @@ make_ci_fixture() {
     "validate-cross-refs.sh" \
     "validate-coverage-manifest.sh" \
     "health-check.sh" \
-    "check-version-bump.sh"
+    "../dev-tools/release/check-version-bump.sh"
   do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/$tool"
     chmod +x "$repo/scripts/$tool"
@@ -69,6 +69,7 @@ make_plugin_root_fixture() {
     "$bin" \
     "$repo/scripts" \
     "$repo/scripts/_fixtures/roadmap" \
+    "$repo/dev-tools/release" \
     "$repo/docs/contracts" \
     "$repo/tests/contracts" \
     "$repo/hooks" \
@@ -87,7 +88,7 @@ make_plugin_root_fixture() {
     "validate-cross-refs.sh" \
     "validate-coverage-manifest.sh" \
     "health-check.sh" \
-    "check-version-bump.sh"
+    "../dev-tools/release/check-version-bump.sh"
   do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/$tool"
     chmod +x "$repo/scripts/$tool"
@@ -140,10 +141,6 @@ echo "reserved-owner framework smoke test should require an explicit consumer sc
 exit 43
 INNER
   chmod +x "$repo/scripts/_smoke-test-reserved-framework-owned.sh"
-
-  cp "$SCRIPT_DIR/check-version-bump.sh" "$repo/scripts/check-version-bump.sh"
-  cp "$SCRIPT_DIR/check-release-gate.sh" "$repo/scripts/check-release-gate.sh"
-  chmod +x "$repo/scripts/check-version-bump.sh" "$repo/scripts/check-release-gate.sh"
 
   for tool in \
     "validate-cross-refs.sh" \
@@ -300,8 +297,8 @@ grep -qF "SKIP: scripts/_smoke-test-reserved-framework-owned.sh (no consumer-app
   echo "$consumer_out" >&2
   exit 1
 }
-grep -qF "SKIP: plugin version manifests not found" <<< "$consumer_out" || {
-  echo "FAIL: real version-bump gate did not skip cleanly in consumer root" >&2
+grep -qF "SKIP: dev-tools/release/check-version-bump.sh not installed in this root" <<< "$consumer_out" || {
+  echo "FAIL: dev-only release gate did not skip cleanly in consumer root" >&2
   echo "$consumer_out" >&2
   exit 1
 }
@@ -441,8 +438,8 @@ grep -qF "SKIP: scripts/validate-coverage-manifest.sh not installed in this root
   echo "$declared_out" >&2
   exit 1
 }
-grep -qF "SKIP: scripts/check-version-bump.sh not installed in this root" <<< "$declared_out" || {
-  echo "FAIL: missing version-bump gate did not print a consumer skip line" >&2
+grep -qF "SKIP: dev-tools/release/check-version-bump.sh not installed in this root" <<< "$declared_out" || {
+  echo "FAIL: missing dev-only release gate did not print a consumer skip line" >&2
   echo "$declared_out" >&2
   exit 1
 }

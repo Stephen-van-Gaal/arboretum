@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
-# Smoke test for docs/contracts/check-release-gate.cli-contract.md.
+# Smoke test for docs/dev-contracts/release/check-release-gate.cli-contract.md.
 # Exercises release-gate behavior via isolated git fixtures.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/check-release-gate.sh"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT="$ROOT/dev-tools/release/check-release-gate.sh"
 GIT_ID=(-c user.email=t@t -c user.name=t)
 FIXTURE_ROOT="$(mktemp -d)"
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
@@ -116,7 +117,7 @@ else
   fail=1
 fi
 
-# C2: shippable non-manifest diff fails when supplied intent input is invalid.
+# C2: shippable non-manifest diff passes when supplied public PR body has no release intent.
 REPO_C2="$FIXTURE_ROOT/repo-c2"
 init_repo "$REPO_C2"
 write_plugin_json "$REPO_C2" "1.0.0"
@@ -129,10 +130,30 @@ printf '## Summary\nmissing intent\n' > "$REPO_C2/body.md"
 commit_all "$REPO_C2" "shippable change with invalid intent"
 rc=0
 out="$(run_gate_with_body "$REPO_C2" "$REPO_C2/body.md" 2>&1)" || rc=$?
-if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing"; then
-  echo "PASS: shippable non-manifest diff with invalid supplied intent fails"
+if [ "$rc" -eq 0 ] && echo "$out" | grep -q "no release intent section declared"; then
+  echo "PASS: shippable non-manifest diff with no supplied release intent passes"
 else
-  echo "FAIL: shippable diff with invalid supplied intent expected failure; rc=$rc output=$out" >&2
+  echo "FAIL: shippable diff with no supplied release intent expected pass; rc=$rc output=$out" >&2
+  fail=1
+fi
+
+# C3: shippable non-manifest diff fails when supplied release intent is malformed.
+REPO_C3="$FIXTURE_ROOT/repo-c3"
+init_repo "$REPO_C3"
+write_plugin_json "$REPO_C3" "1.0.0"
+mkdir -p "$REPO_C3/skills/pr"
+printf 'skill\n' > "$REPO_C3/skills/pr/SKILL.md"
+commit_all "$REPO_C3" "base skill"
+git -C "$REPO_C3" "${GIT_ID[@]}" checkout -q -b pr-branch
+printf 'updated skill\n' > "$REPO_C3/skills/pr/SKILL.md"
+write_intent_body "$REPO_C3/body.md" banana pending
+commit_all "$REPO_C3" "shippable change with malformed intent"
+rc=0
+out="$(run_gate_with_body "$REPO_C3" "$REPO_C3/body.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing or invalid"; then
+  echo "PASS: shippable non-manifest diff with malformed supplied intent fails"
+else
+  echo "FAIL: shippable diff with malformed supplied intent expected failure; rc=$rc output=$out" >&2
   fail=1
 fi
 

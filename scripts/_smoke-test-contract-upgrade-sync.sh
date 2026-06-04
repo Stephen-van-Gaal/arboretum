@@ -26,5 +26,8 @@ plan_default="$(PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" bash "$SYNC" --pla
 [ "$(echo "$plan_default" | jq -r '.policy["ARBORETUM.md"] // "null"')" = "3way" ] \
   || { echo "FAIL: default plan policy for ARBORETUM.md is not 3way"; fail=1; }
 
+grep -q 'obsolete release helper' "$HERE/../docs/contracts/upgrade-sync.cli-contract.md" \
+  || { echo "FAIL: upgrade contract does not document obsolete release helper cleanup"; fail=1; }
+
 [ "$fail" = 0 ] && echo "ok: contract upgrade-sync"
 exit "$fail"

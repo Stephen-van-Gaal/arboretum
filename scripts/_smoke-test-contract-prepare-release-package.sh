@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
-# Smoke test for docs/contracts/prepare-release-package.cli-contract.md.
+# Smoke test for docs/dev-contracts/release/prepare-release-package.cli-contract.md.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/prepare-release-package.sh"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT="$ROOT/dev-tools/release/prepare-release-package.sh"
 GIT_ID=(-c user.email=t@t -c user.name=t)
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -19,8 +20,8 @@ init_repo() {
   mkdir -p "$repo"
   git -C "$repo" "${GIT_ID[@]}" init -q
   git -C "$repo" "${GIT_ID[@]}" checkout -q -b main
-  mkdir -p "$repo/scripts"
-  cat >"$repo/scripts/bump-version.sh" <<'BUMP'
+  mkdir -p "$repo/dev-tools/release"
+  cat >"$repo/dev-tools/release/bump-version.sh" <<'BUMP'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$1" > "${REPO_ROOT:?}/bump-version.called"
@@ -56,13 +57,13 @@ for path, doc in zip(paths, data):
     path.write_text(json.dumps(doc) + "\n", encoding="utf-8")
 PY
 BUMP
-  chmod +x "$repo/scripts/bump-version.sh"
+  chmod +x "$repo/dev-tools/release/bump-version.sh"
   mkdir -p "$repo/.claude-plugin" "$repo/.codex-plugin"
   printf '{"version":"0.24.7"}\n' > "$repo/.claude-plugin/plugin.json"
   printf '{"version":"0.24.7","plugins":[{"version":"0.24.7"}]}\n' \
     > "$repo/.claude-plugin/marketplace.json"
   printf '{"version":"0.24.7"}\n' > "$repo/.codex-plugin/plugin.json"
-  git -C "$repo" "${GIT_ID[@]}" add scripts/bump-version.sh .claude-plugin .codex-plugin
+  git -C "$repo" "${GIT_ID[@]}" add dev-tools/release/bump-version.sh .claude-plugin .codex-plugin
   git -C "$repo" "${GIT_ID[@]}" commit -q -m "base"
 }
 
@@ -100,7 +101,7 @@ else
 fi
 
 rc=0
-out="$(REPO_ROOT="$REPO" bash "$SCRIPT" --body-dir "$BODIES" --checkpoint-version 0.24.7 2>&1)" || rc=$?
+out="$(RELEASE_PACKAGE_BUMP_SCRIPT="$REPO/dev-tools/release/bump-version.sh" REPO_ROOT="$REPO" bash "$SCRIPT" --body-dir "$BODIES" --checkpoint-version 0.24.7 2>&1)" || rc=$?
 if [ "$rc" -eq 0 ] \
    && [ -f "$REPO/docs/releases/v0.25.0.md" ] \
    && grep -q '# Arboretum v0.25.0' "$REPO/docs/releases/v0.25.0.md" \
@@ -132,7 +133,7 @@ fi
 NOOP="$TMP/noop"
 init_repo "$NOOP"
 rc=0
-out="$(BUMP_VERSION_STUB_MODE=noop REPO_ROOT="$NOOP" bash "$SCRIPT" --body-dir "$BODIES" --checkpoint-version 0.24.7 2>&1)" || rc=$?
+out="$(BUMP_VERSION_STUB_MODE=noop RELEASE_PACKAGE_BUMP_SCRIPT="$NOOP/dev-tools/release/bump-version.sh" REPO_ROOT="$NOOP" bash "$SCRIPT" --body-dir "$BODIES" --checkpoint-version 0.24.7 2>&1)" || rc=$?
 if [ "$rc" -ne 0 ] \
    && echo "$out" | grep -q 'manifest version 0.24.7 does not match computed next-version 0.25.0' \
    && [ ! -e "$NOOP/docs/releases/v0.25.0.md" ]; then
@@ -180,6 +181,18 @@ fi
 
 LIVE="$TMP/live"
 init_repo "$LIVE"
+mkdir -p "$LIVE/scripts/roadmap"
+cat >"$LIVE/scripts/roadmap/lib.sh" <<'ROADMAP'
+roadmap_tracker_pr_list() {
+  gh pr list "$@"
+}
+
+roadmap_tracker_pr_show() {
+  number="$1"
+  shift
+  gh pr view "$number" "$@"
+}
+ROADMAP
 GH_BIN="$TMP/gh-bin"
 mkdir -p "$GH_BIN"
 cat >"$GH_BIN/gh" <<'GH'

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
-# Smoke test for docs/contracts/check-version-bump.cli-contract.md.
+# Smoke test for docs/dev-contracts/release/check-version-bump.cli-contract.md.
 # Exercises CLI-1..CLI-8 via fixture git repos driven by REPO_ROOT + BASE_REF.
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/check-version-bump.sh"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT="$ROOT/dev-tools/release/check-version-bump.sh"
 [ -f "$SCRIPT" ] || { echo "FAIL: script not found at $SCRIPT" >&2; exit 1; }
 
 # Identity flags used for every fixture commit — keeps CI runners without a
@@ -146,14 +147,25 @@ else
   fail=1
 fi
 
-# Scenario: CLI-4b — supplied invalid release intent remains blocking
+# Scenario: CLI-4b — supplied public PR body without release intent is allowed
 printf '## Summary\nmissing intent\n' > "$REPO_C/body.md"
 rc=0
 out=$(run_check_with_body "$REPO_C" base "$REPO_C/body.md" 2>&1) || rc=$?
-if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing"; then
-  echo "PASS: CLI-4b — supplied invalid release intent → exit 1"
+if [ "$rc" -eq 0 ] && echo "$out" | grep -q "no release intent section declared"; then
+  echo "PASS: CLI-4b — supplied body without release intent → exit 0"
 else
-  echo "FAIL: CLI-4b — expected exit 1 + 'release intent is missing'; got rc=$rc output: $out" >&2
+  echo "FAIL: CLI-4b — expected exit 0 + 'no release intent section declared'; got rc=$rc output: $out" >&2
+  fail=1
+fi
+
+# Scenario: CLI-4c — malformed supplied release intent remains blocking
+printf '## Release Intent\nrelease-impact: banana\nrelease-state: pending\n' > "$REPO_C/body.md"
+rc=0
+out=$(run_check_with_body "$REPO_C" base "$REPO_C/body.md" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing or invalid"; then
+  echo "PASS: CLI-4c — malformed supplied release intent → exit 1"
+else
+  echo "FAIL: CLI-4c — expected exit 1 + 'release intent is missing or invalid'; got rc=$rc output: $out" >&2
   fail=1
 fi
 
@@ -162,7 +174,8 @@ fi
 # ---------------------------------------------------------------------------
 #   Build: base and HEAD share the same version 1.0.0, but HEAD touches the
 #   issue-form mirror that sync-public.yml copies after excluding .github/.
-#   Expected: pre-PR skip without body; supplied invalid intent fails.
+#   Expected: pre-PR skip without body; supplied public PR body without release
+#   intent also passes; malformed explicit release intent fails.
 REPO_E="$FIXTURE_ROOT/repo-e"
 init_repo "$REPO_E"
 write_plugin_json "$REPO_E" "1.0.0"
@@ -185,10 +198,19 @@ fi
 printf '## Summary\nmissing intent\n' > "$REPO_E/body.md"
 rc=0
 out=$(run_check_with_body "$REPO_E" base "$REPO_E/body.md" 2>&1) || rc=$?
-if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing"; then
-  echo "PASS: CLI-7b — public report issue-form with invalid supplied intent → exit 1"
+if [ "$rc" -eq 0 ] && echo "$out" | grep -q "no release intent section declared"; then
+  echo "PASS: CLI-7b — public report issue-form with no release intent section → exit 0"
 else
-  echo "FAIL: CLI-7b — expected exit 1 + 'release intent is missing'; got rc=$rc output: $out" >&2
+  echo "FAIL: CLI-7b — expected no-release-intent pass; got rc=$rc output: $out" >&2
+  fail=1
+fi
+printf '## Release Intent\nrelease-impact: banana\nrelease-state: pending\n' > "$REPO_E/body.md"
+rc=0
+out=$(run_check_with_body "$REPO_E" base "$REPO_E/body.md" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && echo "$out" | grep -q "release intent is missing or invalid"; then
+  echo "PASS: CLI-7c — public report issue-form with malformed release intent → exit 1"
+else
+  echo "FAIL: CLI-7c — expected malformed intent failure; got rc=$rc output: $out" >&2
   fail=1
 fi
 

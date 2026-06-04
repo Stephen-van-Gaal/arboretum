@@ -116,11 +116,22 @@ YAML
 
 # Files matched by a managed glob but explicitly NOT propagated by /upgrade
 # (mirrors /init's exclusion). rel is repo-root-relative (e.g. scripts/bootstrap-project.sh).
+is_obsolete_release_helper() {
+  case "$1" in
+    scripts/check-release-gate.sh) return 0 ;;
+    scripts/check-version-bump.sh) return 0 ;;
+    scripts/read-release-intent.sh) return 0 ;;
+    scripts/prepare-release-package.sh) return 0 ;;
+    scripts/bump-version.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 is_excluded() {
   case "$1" in
     scripts/bootstrap-project.sh) return 0 ;;
     scripts/_smoke-test-*.sh) return 0 ;;
-    *) return 1 ;;
+    *) is_obsolete_release_helper "$1" ;;
   esac
 }
 

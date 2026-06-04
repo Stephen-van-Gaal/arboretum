@@ -225,11 +225,6 @@ runs its own asynchronous loop where supported; `/finish` does not block on it.
 After the PR is created:
 > "PR created: <url>
 >
-> If this PR carries pending release intent, it may be ready for review or
-> ready to merge while the public plugin release is still release pending. A
-> Release Package created later from `main` materializes the version and
-> customer-visible notes.
->
 > After it's approved and merged, run `/cleanup` to switch to main, pull, and delete this branch. The ship tail is `/cleanup` → `/reflect` → `/handoff`; `/reflect` Q5 is the canonical handoff invocation (queues `next-up` against an issue that is actually-open post-merge)."
 
 At exit, if `$ISSUE` is set, log:

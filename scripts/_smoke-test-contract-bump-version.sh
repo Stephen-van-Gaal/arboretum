@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
-# Smoke test for docs/contracts/bump-version.cli-contract.md.
+# Smoke test for docs/dev-contracts/release/bump-version.cli-contract.md.
 # Exercises CLI-1..CLI-7 via fixture scenarios driving bump-version.sh
 # against mktemp -d temp dirs (never the live repo). Picked up
 # automatically by ci-checks.sh's === Smoke tests === loop.
@@ -8,7 +8,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUMP="$SCRIPT_DIR/bump-version.sh"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUMP="$ROOT/dev-tools/release/bump-version.sh"
 
 [ -f "$BUMP" ] || { echo "FAIL: script not found at $BUMP" >&2; exit 1; }
 

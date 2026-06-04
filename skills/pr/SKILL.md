@@ -164,24 +164,6 @@ If any match, suggest:
 
 This is a suggestion, not a gate. If the user declines, proceed.
 
-### 6.5 Select release intent
-
-Before pushing, classify the release intent that belongs in the PR body:
-
-- `release-impact: none` and `release-state: not-needed` for dev-only changes
-  that do not affect the distributed plugin, public templates, workflows,
-  skills, scripts, docs, hooks, or manifests.
-- `release-impact: patch|minor|major` and `release-state: pending` for
-  shippable plugin changes. Ask the user when the impact is not obvious from
-  the changed surface.
-- `release-impact: none` and `release-state: not-needed` for manifest-touching
-  Release Package materialization PRs. The release gate validates the concrete
-  version bump on those PRs; do not treat the PR-body intent as authority over
-  the manifest version.
-
-Keep the Release Intent section machine-readable: one `release-impact:` line
-and one `release-state:` line, both unquoted.
-
 ### 7. Push
 
 If the branch does not track a remote:
@@ -216,24 +198,7 @@ Draft the PR title and body:
 
 ## Tracker
 <closure or linkage statement from Step 5.5>
-
-## Release Intent
-release-impact: <none|patch|minor|major>
-release-state: <not-needed|pending>
 ```
-
-Before invoking the selected backend create command, write the final PR body to
-a temporary file and validate the release-intent lane:
-
-```bash
-PR_BODY_FILE="$(mktemp)"
-# write the exact final PR body to "$PR_BODY_FILE"
-bash scripts/read-release-intent.sh --body-file "$PR_BODY_FILE"
-RELEASE_INTENT_BODY_FILE="$PR_BODY_FILE" BASE_REF="origin/$BASE" bash scripts/check-release-gate.sh
-```
-
-If either command exits non-zero, fix the PR body or the materialized release
-package state before creating the PR.
 
 Create the PR through the selected backend.
 

@@ -6,8 +6,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUMP="$SCRIPT_DIR/bump-version.sh"
-CHECK="$SCRIPT_DIR/check-version-bump.sh"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+RELEASE_DIR="$ROOT/dev-tools/release"
+BUMP="$RELEASE_DIR/bump-version.sh"
+CHECK="$RELEASE_DIR/check-version-bump.sh"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
@@ -152,8 +154,11 @@ if ! run_check "$D" base-ref >/dev/null 2>&1; then
   fail "shippable change without PR body should skip before /pr"
 fi
 printf '## Summary\nmissing intent\n' > "$D/body.md"
+run_check_with_body "$D" base-ref "$D/body.md" >/dev/null \
+  || fail "shippable change with no supplied release intent should pass"
+printf '## Release Intent\nrelease-impact: banana\nrelease-state: pending\n' > "$D/body.md"
 if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
-  fail "shippable change with invalid supplied body should fail"
+  fail "shippable change with malformed supplied release intent should fail"
 fi
 
 echo "=== check-version-bump.sh: shippable change with a bump passes ==="
@@ -196,9 +201,8 @@ D="$TMP/check-public"; git_fixture "$D"
 echo "more" >> "$D/CLAUDE.public.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit CLAUDE.public.md"
 printf '## Summary\nmissing intent\n' > "$D/body.md"
-if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
-  fail "CLAUDE.public.md change without a bump should fail — sync-public.yml copies it to the published CLAUDE.md"
-fi
+run_check_with_body "$D" base-ref "$D/body.md" >/dev/null \
+  || fail "CLAUDE.public.md change with no release intent section should pass"
 
 echo "=== check-version-bump.sh: root README.md is dev-only ==="
 D="$TMP/check-readme"; git_fixture "$D"
@@ -212,6 +216,7 @@ D="$TMP/check-anchor"; git_fixture "$D"
 echo "more" >> "$D/CLAUDE.md.bak"
 git -C "$D" add -A; git -C "$D" commit -qm "edit CLAUDE.md.bak"
 printf '## Summary\nmissing intent\n' > "$D/body.md"
+printf '## Release Intent\nrelease-impact: banana\nrelease-state: pending\n' > "$D/body.md"
 if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
   fail "CLAUDE.md.bak change without a bump should fail — the CLAUDE.md pattern is \$-anchored"
 fi
@@ -228,9 +233,8 @@ D="$TMP/check-skills-shipped"; git_fixture "$D"
 echo "more" >> "$D/.claude/skills/shipped/SKILL.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit shipped skill"
 printf '## Summary\nmissing intent\n' > "$D/body.md"
-if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
-  fail ".claude/skills/shipped change without a bump should fail — sync-public.yml excludes only dev-*/_archived/"
-fi
+run_check_with_body "$D" base-ref "$D/body.md" >/dev/null \
+  || fail ".claude/skills/shipped change with no release intent section should pass"
 
 echo "=== check-version-bump.sh: .agents/skills/ is dev-only ==="
 D="$TMP/check-agents-skills"; git_fixture "$D"
@@ -244,17 +248,15 @@ D="$TMP/check-agents-plugins"; git_fixture "$D"
 echo "more" >> "$D/.agents/plugins/marketplace.json"
 git -C "$D" add -A; git -C "$D" commit -qm "edit codex marketplace"
 printf '## Summary\nmissing intent\n' > "$D/body.md"
-if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
-  fail ".agents/plugins/ change without a bump should fail"
-fi
+run_check_with_body "$D" base-ref "$D/body.md" >/dev/null \
+  || fail ".agents/plugins/ change with no release intent section should pass"
 
 echo "=== check-version-bump.sh: public report issue form is shippable ==="
 D="$TMP/check-report-form"; git_fixture "$D"
 echo "more" >> "$D/.github/ISSUE_TEMPLATE/arboretum-problem.md"
 git -C "$D" add -A; git -C "$D" commit -qm "edit public report issue form"
 printf '## Summary\nmissing intent\n' > "$D/body.md"
-if run_check_with_body "$D" base-ref "$D/body.md" >/dev/null 2>&1; then
-  fail "arboretum report issue-form change without a bump should fail — sync-public.yml copies it to the public repo"
-fi
+run_check_with_body "$D" base-ref "$D/body.md" >/dev/null \
+  || fail "arboretum report issue-form change with no release intent section should pass"
 
 echo "ALL PASS"

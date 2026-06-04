@@ -97,6 +97,40 @@ else
 fi
 rm -f "$PRJ/scripts/_smoke-test-framework.sh"
 
+# Release helpers used to live under scripts/ and may have leaked into child
+# repositories. They are now dev-only, so safe old copies should be removed
+# without reintroducing them from the plugin.
+PRJ_REL="$TMP/proj-release-residue"; PLG_REL="$TMP/plugin-release-residue"
+mkdir -p "$PRJ_REL/scripts" "$PRJ_REL/.arboretum" "$PLG_REL/scripts"
+printf '#!/usr/bin/env bash\n# owner: arboretum-as-plugin\n' > "$PRJ_REL/scripts/check-release-gate.sh"
+PROJECT_DIR="$PRJ_REL" bash "$SYNC" --write-manifest-entry \
+  scripts/check-release-gate.sh 0.1.0 "$(shasum -a 256 "$PRJ_REL/scripts/check-release-gate.sh" | awk '{print $1}')"
+plan_release_obsolete="$(PROJECT_DIR="$PRJ_REL" UPGRADE_PLUGIN_ROOT="$PLG_REL" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
+check "plan: obsolete release helper marked obsolete" remove-obsolete "$(echo "$plan_release_obsolete" | jq -r '.actions["scripts/check-release-gate.sh"] // "null"')"
+PROJECT_DIR="$PRJ_REL" UPGRADE_PLUGIN_ROOT="$PLG_REL" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.2.3 bash "$SYNC" --apply >/dev/null
+if [ -e "$PRJ_REL/scripts/check-release-gate.sh" ]; then
+  echo "FAIL: apply removed obsolete release helper — file still present"; fail=1
+else
+  echo "ok: apply removed obsolete release helper"
+fi
+
+PRJ_REL_LOCAL="$TMP/proj-release-local"; PLG_REL_LOCAL="$TMP/plugin-release-local"
+mkdir -p "$PRJ_REL_LOCAL/scripts" "$PRJ_REL_LOCAL/.arboretum" "$PLG_REL_LOCAL/scripts"
+printf '#!/usr/bin/env bash\n# owner: arboretum-as-plugin\n' > "$PRJ_REL_LOCAL/scripts/check-release-gate.sh"
+PROJECT_DIR="$PRJ_REL_LOCAL" bash "$SYNC" --write-manifest-entry \
+  scripts/check-release-gate.sh 0.1.0 "$(shasum -a 256 "$PRJ_REL_LOCAL/scripts/check-release-gate.sh" | awk '{print $1}')"
+printf '#!/usr/bin/env bash\n# owner: arboretum-as-plugin\n# local edit\n' > "$PRJ_REL_LOCAL/scripts/check-release-gate.sh"
+plan_release_local="$(PROJECT_DIR="$PRJ_REL_LOCAL" UPGRADE_PLUGIN_ROOT="$PLG_REL_LOCAL" UPGRADE_MANAGED_GLOBS='scripts/*.sh' bash "$SYNC" --plan)"
+check "plan: locally edited release helper not auto-removed" null "$(echo "$plan_release_local" | jq -r '.actions["scripts/check-release-gate.sh"] // "null"')"
+PROJECT_DIR="$PRJ_REL_LOCAL" UPGRADE_PLUGIN_ROOT="$PLG_REL_LOCAL" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \
+  UPGRADE_PLUGIN_VERSION=0.2.4 bash "$SYNC" --apply >/dev/null
+if [ -f "$PRJ_REL_LOCAL/scripts/check-release-gate.sh" ]; then
+  echo "ok: apply preserved locally edited release helper"
+else
+  echo "FAIL: apply preserved locally edited release helper — file was deleted"; fail=1
+fi
+
 # Fix 1: --plan must be read-only — no manifest created when none exists
 PRJ_NOMNF="$TMP/proj-nomanifest"
 mkdir -p "$PRJ_NOMNF/scripts"

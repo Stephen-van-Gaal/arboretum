@@ -344,7 +344,7 @@ echo "CI mode: $EFFECTIVE_CI_MODE"
 echo "=== ShellCheck ==="
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck_roots=()
-  for root in scripts .claude/hooks skills; do
+  for root in scripts .claude/hooks skills dev-tools; do
     [ -d "$root" ] && shellcheck_roots+=("$root")
   done
 
@@ -393,6 +393,6 @@ echo "=== Health check (non-blocking) ==="
 bash scripts/health-check.sh "$ROOT" || echo "(health-check reported issues — non-blocking)"
 
 echo "=== Release gate ==="
-run_plugin_check_if_available "scripts/check-version-bump.sh"
+run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"
 
 exit $fail

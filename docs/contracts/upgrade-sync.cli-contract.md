@@ -1,6 +1,6 @@
 ---
 script: scripts/upgrade-sync.sh
-version: 1.6
+version: 1.7
 invokers:
   - type: skill
     name: arboretum:/upgrade (project-upgrade)
@@ -76,7 +76,7 @@ No other action values are emitted. Any value outside this set is a contract vio
 
 ### Managed file set
 
-Default managed globs cover root `ARBORETUM.md` and operational framework files under `scripts/*.sh`, `scripts/lib/*`, `scripts/roadmap/*`, `.claude/hooks/*`, `.githooks/*`, `docs/templates/*`, `docs/definitions/*`, and `workflows/*`. Exclusions apply after the glob union is computed: `scripts/bootstrap-project.sh` is legacy bootstrap-only, and `scripts/_smoke-test-*.sh` are plugin/dev self-tests. Neither path class is propagated by `/upgrade`, including when `UPGRADE_MANAGED_GLOBS` is set for tests. If such an excluded file already exists in a project and is safe framework residue (manifest-base match or current-plugin-copy match), `--plan` emits `remove-obsolete` and `--apply` deletes it. Locally edited excluded files are left in place.
+Default managed globs cover root `ARBORETUM.md` and operational framework files under `scripts/*.sh`, `scripts/lib/*`, `scripts/roadmap/*`, `.claude/hooks/*`, `.githooks/*`, `docs/templates/*`, `docs/definitions/*`, and `workflows/*`. Exclusions apply after the glob union is computed: `scripts/bootstrap-project.sh` is legacy bootstrap-only, `scripts/_smoke-test-*.sh` are plugin/dev self-tests, and release-lane helpers that previously lived under `scripts/` are obsolete release helper residue. Neither path class is propagated by `/upgrade`, including when `UPGRADE_MANAGED_GLOBS` is set for tests. If such an excluded file already exists in a project and is safe framework residue (manifest-base match or current-plugin-copy match), `--plan` emits `remove-obsolete` and `--apply` deletes it. Locally edited excluded files are left in place.
 
 ### Exit codes
 
@@ -108,7 +108,7 @@ No other exit codes. `1` is never emitted by this script.
 
 - **US-1: Plan shape and closed enums.** `scripts/_smoke-test-contract-upgrade-sync.sh` asserts `--plan` emits `plugin_root`, `actions`, `policy`, and `removal_detection`; verifies `removal_detection` is inside `active | inconclusive`; and verifies every emitted action is inside the closed action enum.
 - **US-2: Default managed root contract.** `scripts/_smoke-test-contract-upgrade-sync.sh` asserts the default plan treats root `ARBORETUM.md` as a `3way` managed file and emits `add` when the plugin has it and the project does not.
-- **US-3: Classification and apply behavior.** `scripts/_smoke-test-upgrade-sync.sh` exercises classification, manifest I/O, read-only `--plan`, `--apply`, `--bootstrap-manifest`, plugin-wins overwrite behavior, obsolete excluded-file cleanup, version-bump gating, removal-detection honesty, and root `ARBORETUM.md` copy/manifest tracking.
+- **US-3: Classification and apply behavior.** `scripts/_smoke-test-upgrade-sync.sh` exercises classification, manifest I/O, read-only `--plan`, `--apply`, `--bootstrap-manifest`, plugin-wins overwrite behavior, obsolete excluded-file cleanup including obsolete release helper residue, version-bump gating, removal-detection honesty, and root `ARBORETUM.md` copy/manifest tracking.
 - **US-4: Invocation arity.** `scripts/_smoke-test-upgrade-sync.sh` asserts `--read-manifest-sha` without a required path exits `2`.
 
 ## Test-only environment overrides
@@ -128,6 +128,9 @@ This script consumes `definitions/install-manifest-schema.md @v1` — the schema
 
 ## Versioning
 
+- **1.7** — treats release helpers formerly installed under `scripts/` as
+  obsolete dev-only residue: excluded from propagation and removed only when
+  safe under the existing remove-obsolete rule (2026-06-04).
 - **1.6** — adds root `ARBORETUM.md` to the default 3-way managed set so initialized projects receive canonical agent workflow contract updates via `/upgrade` (2026-06-03, issue #487 review fix).
 - **1.5** — delegates legacy backend reads to `scripts/lib/yaml-lite.sh`,
   normalizes YAML null-ish backend values to the GitHub default, and initializes

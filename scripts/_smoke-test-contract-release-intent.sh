@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
-# Smoke test for docs/contracts/release-intent.cli-contract.md.
+# Smoke test for docs/dev-contracts/release/release-intent.cli-contract.md.
 # Exercises release-intent parsing from PR body files and GitHub event JSON.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/read-release-intent.sh"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT="$ROOT/dev-tools/release/read-release-intent.sh"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 

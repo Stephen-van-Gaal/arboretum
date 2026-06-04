@@ -216,14 +216,6 @@ Classify the change using the PR's actual diff (correct in both chained and stan
 - **`code`** -> do not enable auto-merge. Notify the human: the PR is
   merge-ready and awaits their merge.
 
-When the PR body carries `release-state: pending`, include this in the
-merge-ready summary:
-
-```text
-Merge-ready: yes
-Release state: release pending until scripts/prepare-release-package.sh creates a Release Package on main.
-```
-
 ## Azure DevOps path
 
 This path exists so ADO-backed projects can ship without GitHub commands. It is

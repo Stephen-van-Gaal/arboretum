@@ -138,6 +138,13 @@ else
   fail=1
 fi
 
+if grep -q 'for root in scripts .claude/hooks skills dev-tools' "$TARGET"; then
+  echo "PASS: CLI-6d — ShellCheck includes dev-tools"
+else
+  echo "FAIL: CLI-6d — ShellCheck roots do not include dev-tools" >&2
+  fail=1
+fi
+
 # ---------------------------------------------------------------------------
 # CLI-7: Consumer-root applicability
 # Consumer roots may not have the plugin development tree. ShellCheck must
@@ -181,6 +188,13 @@ if grep -q '^run_plugin_check_if_available()' "$TARGET" \
   echo "PASS: CLI-7e — plugin-only script checks are file-guarded for consumer roots"
 else
   echo "FAIL: CLI-7e — plugin-only script checks are not guarded by root/file availability" >&2
+  fail=1
+fi
+
+if grep -q 'run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"' "$TARGET"; then
+  echo "PASS: CLI-7f — release gate uses dev-only tooling path"
+else
+  echo "FAIL: CLI-7f — release gate does not use dev-tools/release/check-version-bump.sh" >&2
   fail=1
 fi
 
