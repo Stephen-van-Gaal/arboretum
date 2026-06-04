@@ -13,7 +13,7 @@ selector. One workflow, one triage at `/start`, one ship tail.
 
 ## When to use
 
-Any change to behaviour, structure, or documentation of an existing project. New features, bug fixes, refactors, and docs-only changes all run through this workflow. The only structural fork is the triage at step 1 (verified `agent-ready` fast lane vs. everything-else); all other variation is handled by mode dispatch inside the shared body.
+Any change to behaviour, structure, or documentation of an existing project. New features, bug fixes, refactors, and docs-only changes all run through this workflow. The main structural fork is the triage at step 1 (verified `agent-ready` fast lane vs. everything-else); the experimental `/start-bugfix` front half can also produce a verified patch brief for authority-backed local fixes. All other variation is handled by mode dispatch inside the shared body.
 
 The other workflows are reserved for shapes the build workflow does not cover:
 
@@ -34,6 +34,10 @@ The other workflows are reserved for shapes the build workflow does not cover:
                           └── none           │
                           human review       │
                                              ▼
+/start-bugfix (experimental patch lane)
+  ├── patchable → patch brief ───────────────┤
+  └── not patchable → issue update + stop    │
+                                             ▼
                        /build (Branch 2 + Branch 3)
                           ├── TDD (any applicable tier)
                           └── implementation mode (direct / executing-plans / subagent)
@@ -49,12 +53,14 @@ The other workflows are reserved for shapes the build workflow does not cover:
 ```
 
 Review gate: everything-else -> /design -> human review -> /build.
+Patch-lane exception: verified patch-lane briefs produced by `/start-bugfix` may enter `/build` without the everything-else design review.
 
 ## Artifact Flow
 
 | Step | Reads | Produces | Location | Authority |
 |---|---|---|---|---|
 | 1. `/start` (triage) | issue, git state, register | triage decision (agent-target / everything-else); for agent-target only: crisp task brief | `.arboretum/agent-briefs/<issue>.md` (agent-target only) | — |
+| 1a. `/start-bugfix` (experimental patch lane) | tracker issue, patch-lane config, authority bundle | patchability decision; patch brief or not-patchable issue update | `.arboretum/patch-briefs/<issue>.md` or tracker issue | existing authority |
 | 2. `/design` (everything-else only) | issue, principles, architecture | design spec + plan | `docs/superpowers/specs/` + `docs/plans/` | ephemeral |
 | 3. `/build` | design spec OR agent brief | code + tests; pipeline-state log entries | source dirs, `tests/`, GitHub issue body | source |
 | 4. `/finish` | code + tests + design spec | reconciled governed spec via `/consolidate` | `docs/specs/` | owning |
@@ -64,7 +70,7 @@ Review gate: everything-else -> /design -> human review -> /build.
 
 ### 1. Triage — `/start`
 
-`/start` classifies the change as verified **agent-ready** or **everything-else**. Only verified `agent-ready` work may skip the review-before-build pause. Unlabelled agent-target inference can identify a good candidate for `/roadmap agent-prep`, but it does not authorize direct no-review implementation.
+`/start` classifies the change as verified **agent-ready** or **everything-else**. Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` may skip the review-before-build pause. Unlabelled agent-target inference can identify a good candidate for `/roadmap agent-prep`, but it does not authorize direct no-review implementation.
 
 Agent-target fit is conservative: a change fits the fast-lane shape only when all four criteria hold unambiguously:
 
@@ -78,6 +84,20 @@ If any criterion is uncertain, the change is everything-else. The escape hatch i
 **Verified agent-ready output:** a crisp task brief at `.arboretum/agent-briefs/<issue>.md`, written by `scripts/write-agent-brief.sh`. No design spec, no plan.
 
 **Everything-else output:** `/start` hands off to `/design` with the issue number and the user's original request.
+
+### 1a. Experimental Patch Lane — `/start-bugfix`
+
+`/start-bugfix` is a narrow bug-report front half. It requires tracker intake,
+reads `patch_lane.investigation_budget_minutes` from project config, produces a
+compact authority bundle, and applies the patchability gate before implementation
+starts. Patchable reports write an S2-compatible patch brief at
+`.arboretum/patch-briefs/<issue>.md` with `triage: agent-target`,
+`implementation-mode: direct`, `plan: null`, `test-tiers:`, and `lane:
+patch-lane`. Not-patchable reports update or create a shaped issue and stop.
+
+The patch lane reuses the existing terminal flow from `/build` onward. It opens
+a ready-for-review PR and collects configured or observable AI reviewer feedback
+where available. It does not merge; merge remains human-owned.
 
 ### 2. Design — `/design` (everything-else only)
 

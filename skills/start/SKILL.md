@@ -156,6 +156,10 @@ unlabelled issues, the criteria below are a cheap fit check, not a no-review
 authorization: if the issue has not passed `agent-ready` verification, classify
 the work as everything-else and hand off to `/design` for the review gate.
 
+Experimental patch-lane note: raw bug reports that need a cheap investigation
+before normal everything-else routing may be routed to `/start-bugfix`. `/start`
+remains the default router, and verified `agent-ready` semantics are unchanged.
+
 **Agent-target fit requires all four criteria to hold unambiguously:**
 
 1. **Decision-free** — exactly one sensible implementation; no choice between approaches.

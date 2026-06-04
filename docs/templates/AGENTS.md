@@ -13,7 +13,7 @@ The canonical workflow contract is `ARBORETUM.md`. Follow `ARBORETUM.md ## COMMO
 File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.
 
 Everything-else work stops after `/design` for human review before `/build`.
-Only verified `agent-ready` work skips the review-before-build pause.
+Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.
 
 ## Project Overview
 
@@ -61,7 +61,7 @@ The project's test command and cost-class tiers are declared in `docs/specs/test
 
 ## Skills
 
-**Workflow:** `/start`, `/design`, `/finish`, `/cleanup`, `/reflect`
+**Workflow:** `/start`, `/start-bugfix`, `/design`, `/finish`, `/cleanup`, `/reflect`
 
 **Governance:** `/consolidate`, `/pr`, `/publish`
 

@@ -51,6 +51,9 @@ Create `.arboretum.yml` in the target directory with the selected layer:
 layer: <selected-layer>
 # Tracker/repo backend. Default: github. Future: azure-devops.
 backend: github
+# Patch-lane workflow config.
+patch_lane:
+  investigation_budget_minutes: 15
 ```
 
 Present what was created:

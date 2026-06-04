@@ -23,6 +23,7 @@
 | scripts/read-doc-profile.sh | docs/contracts/read-doc-profile.cli-contract.md | cli |
 | scripts/read-doc-section.sh | docs/contracts/read-doc-section.cli-contract.md | cli |
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
+| scripts/read-patch-lane-config.sh | docs/contracts/read-patch-lane-config.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
 | scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |

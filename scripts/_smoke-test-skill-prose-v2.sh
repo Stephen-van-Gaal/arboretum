@@ -329,8 +329,8 @@ grep -q 'File-changing work enters `/start` unless the user explicitly asks for 
   || fail "case 35 - ARBORETUM.md missing file-changing-work /start contract"
 grep -q 'Everything-else work stops after `/design` for human review before `/build`.' ARBORETUM.md \
   || fail "case 35 - ARBORETUM.md missing review-before-build contract"
-grep -q 'Only verified `agent-ready` work skips the review-before-build pause.' ARBORETUM.md \
-  || fail "case 35 - ARBORETUM.md missing verified agent-ready exception"
+grep -q 'Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.' ARBORETUM.md \
+  || fail "case 35 - ARBORETUM.md missing verified agent-ready / patch-lane exception"
 grep -q "pipeline-state tracking remains the observable state layer" ARBORETUM.md \
   || fail "case 35 - ARBORETUM.md missing pipeline-state boundary"
 ok "case 35 - ARBORETUM.md states the common workflow contract"
@@ -343,8 +343,8 @@ for f in CLAUDE.md AGENTS.md CLAUDE.public.md docs/templates/CLAUDE.md docs/temp
     || fail "case 36 - $f missing local file-changing-work tripwire"
   grep -q 'Everything-else work stops after `/design` for human review before `/build`.' "$f" \
     || fail "case 36 - $f missing local review-before-build tripwire"
-  grep -q 'Only verified `agent-ready` work skips the review-before-build pause.' "$f" \
-    || fail "case 36 - $f missing local verified agent-ready exception"
+  grep -q 'Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.' "$f" \
+    || fail "case 36 - $f missing local verified agent-ready / patch-lane exception"
 done
 ok "case 36 - tool entrypoints point to ARBORETUM.md and repeat the tripwire"
 

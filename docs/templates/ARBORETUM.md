@@ -29,9 +29,11 @@ Everything-else work stops after `/design` for human review before `/build`.
 The review covers goals, requirements, done criteria, design decisions, test
 approach, and implementation plan before coding begins.
 
-Only verified `agent-ready` work skips the review-before-build pause. A cheap
-or inferred `agent-target` classification is not enough; the issue must pass
-the freshness and verification path designated for `agent-ready`.
+Only verified `agent-ready` work and verified patch-lane briefs produced by
+`/start-bugfix` skip the review-before-build pause. A cheap or inferred
+`agent-target` classification is not enough; `agent-ready` issues must pass the
+freshness and verification path designated for `agent-ready`, and patch-lane
+briefs must pass `/start-bugfix`'s patchability gate.
 
 The pipeline-state tracking remains the observable state layer. This contract
 does not add a runtime guardrail, a blocking hook, or a second stage-state
@@ -55,7 +57,7 @@ instructions.
 File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.
 
 Everything-else work stops after `/design` for human review before `/build`.
-Only verified `agent-ready` work skips the review-before-build pause.
+Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.
 ```
 
 ## CLAUDE
@@ -76,7 +78,7 @@ instructions.
 File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.
 
 Everything-else work stops after `/design` for human review before `/build`.
-Only verified `agent-ready` work skips the review-before-build pause.
+Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.
 ```
 
 ## DATABRICKS
@@ -97,5 +99,5 @@ The canonical workflow contract is `ARBORETUM.md`. Follow
 File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.
 
 Everything-else work stops after `/design` for human review before `/build`.
-Only verified `agent-ready` work skips the review-before-build pause.
+Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.
 ```

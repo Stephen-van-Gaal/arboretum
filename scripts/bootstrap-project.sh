@@ -287,6 +287,9 @@ else
 layer: 0
 # Tracker/repo backend. Default: github. Future: azure-devops.
 backend: github
+# Patch-lane workflow config.
+patch_lane:
+  investigation_budget_minutes: 15
 ARBORETUM
   echo "  created: .arboretum.yml"
 fi

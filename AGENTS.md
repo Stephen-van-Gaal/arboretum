@@ -7,7 +7,7 @@ The canonical workflow contract is `ARBORETUM.md`. Follow `ARBORETUM.md ## COMMO
 File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.
 
 Everything-else work stops after `/design` for human review before `/build`.
-Only verified `agent-ready` work skips the review-before-build pause.
+Only verified `agent-ready` work and verified patch-lane briefs produced by `/start-bugfix` skip the review-before-build pause.
 
 ## Project Overview
 
@@ -74,7 +74,7 @@ Arboretum does not replace superpowers — it sequences their invocation and ens
 
 User-facing skills live in `skills/` (the plugin location, where the loader resolves `<plugin-root>/skills/<name>/SKILL.md`). Dev-only skills (e.g. `dev-manage-workflows`) and archived skills stay at `.claude/skills/` and are excluded from the public sync. Each skill's frontmatter `description` is the authoritative source for what it does.
 
-**Workflow (5):** `/start`, `/design`, `/finish`, `/cleanup`, `/reflect`
+**Workflow (6):** `/start`, `/start-bugfix`, `/design`, `/finish`, `/cleanup`, `/reflect`
 
 **Governance (6):** `/consolidate`, `/init-project`, `/architect`, `/pr`, `/publish`, `/receive-review`
 
