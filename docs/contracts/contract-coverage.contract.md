@@ -1,6 +1,6 @@
 ---
 seam: contract-coverage
-version: 1.3
+version: 1.4
 producer-type: script
 consumer-type: script
 consumes:
@@ -35,7 +35,7 @@ Walks the governance-script surface (`scripts/**/*.sh` and `.claude/hooks/**/*.s
 
 Verifies the committed `_coverage.md` is both **fresh** (matches a fresh `generate-coverage.sh` run) and **complete** (every in-scope surface has a row). It regenerates into an isolated temp dir — symlinking the real `scripts/` and `.claude/` trees, copying the contract files, copying the YAML-lite helper beside the copied generator, and placing the regenerator at `$tmp/_regen.sh` *outside* the scanned tree so its own presence does not pollute the table — then `diff`s the fresh output against the committed file. It never modifies the committed manifest. Two-mode progression (post-re-tightening):
 
-- **Bootstrap** — no `docs/contracts/` directory in a consumer root, or zero `*.cli-contract.md` files in `docs/contracts/` (PR-1-of-WS5 only for plugin roots; consumer roots may legitimately have no contract directory). Emits a stderr note and exits 0 before requiring `_coverage.md`. Structurally unreachable in plugin roots once any cli-contract lands (PR 2): deleting all manifest rows cannot re-enter bootstrap, because the cli-contract file remains on disk. A plugin-capable root (plugin manifests or top-level plugin skills/hooks present) with no `docs/contracts/` fails instead of entering bootstrap, so destructive contract-scaffolding loss stays blocking.
+- **Bootstrap** — no `docs/contracts/` directory in a consumer root, or zero `*.cli-contract.md` files in `docs/contracts/` (PR-1-of-WS5 only for plugin roots; consumer roots may legitimately have no contract directory). Emits a stderr note and exits 0 before requiring `_coverage.md`. Structurally unreachable in plugin roots once any cli-contract lands (PR 2): deleting all manifest rows cannot re-enter it, because the cli-contract file remains on disk. A plugin manifest root (`.claude-plugin/plugin.json` or `.codex-plugin/plugin.json`) with no `docs/contracts/` fails instead of entering bootstrap, so destructive contract-scaffolding loss stays blocking. Vendored framework directories such as top-level `skills/` or `hooks/` alone do not prove the root is a plugin package.
 - **Strict** — no `MISSING` rows permitted. Fails (`COVERAGE-MANIFEST-INCOMPLETE`, non-zero) if any in-scope surface is uncovered. **This is the live steady state.** A `MISSING` row is now only reachable as a regression — a new uncovered governance surface — and it fails the build.
 
 The contract originally specified a third, transitional **Ramp** tier: while the WS5 sweep PRs (6 / 7a / 7b) were still populating the manifest, a `MISSING` row exited 0 with a warning naming the remaining count and the sweep PRs, keeping every intermediate PR CI-green without sweeping coverage prematurely. That tier was a rollout-window scaffold; the **re-tightening event that removed it** is the deletion of the ramp branch from `validate-coverage-manifest.sh`. The WS5 design and this contract pinned that deletion to PR 7b, but PR 7b shipped without it (it auto-removed the manifest's *"rollout in progress"* comment — a `generate-coverage.sh` behaviour — and mistook that for re-tightening the validator). The deletion was completed as a Pass-2 reconciliation finding (see the WS5 follow-up issue), restoring strict enforcement.
@@ -71,7 +71,7 @@ The contract originally specified a third, transitional **Ramp** tier: while the
 - **Duplicate-ownership rejection.** `generate-coverage.sh` exits non-zero with `DUPLICATE-OWNERSHIP` when two contracts claim the same surface. This guards the one-contract-per-surface invariant the manifest depends on. (CC-5.)
 - **Strict-mode completeness.** With the rollout-window ramp tier removed (the PR-7b re-tightening, completed during Pass 2), any `MISSING` row in the committed manifest fails the validator non-zero with `COVERAGE-MANIFEST-INCOMPLETE`. A regression that adds an uncovered governance surface fails the build rather than passing with a warning. (CC-6.)
 - **Scan-scope exclusion.** Surfaces under a `_*` path component (`_smoke-test-*.sh`, `_archived/`, `_fixtures/`) are excluded from the manifest — they never get a row. This is what lets this contract's own smoke test live in `scripts/` without creating a `MISSING` row. (CC-7.)
-- **No-contract bootstrap.** `validate-coverage-manifest.sh` exits 0 with a bootstrap diagnostic when `docs/contracts/` is absent in a consumer root, and does so before requiring a committed `_coverage.md`. The same missing directory fails in plugin-capable roots. This lets consumer roots without contract scaffolding keep the validator installed without treating missing plugin contracts as release-gate failures, while preserving plugin-root drift detection. (CC-8.)
+- **No-contract bootstrap.** `validate-coverage-manifest.sh` exits 0 with a bootstrap diagnostic when `docs/contracts/` is absent in a consumer root, and does so before requiring a committed `_coverage.md`. The same missing directory fails in plugin manifest roots. Vendored `skills/`/`hooks/` directories without plugin manifests remain consumer bootstrap state. This lets consumer roots without contract scaffolding keep the validator installed without treating missing plugin contracts as release-gate failures, while preserving plugin-root drift detection. (CC-8.)
 - **Bare-checkout portable.** Coverage regeneration does not require PyYAML, yq, jq, or any package install.
 
 ## Test surface
@@ -85,10 +85,11 @@ Asserted by `scripts/_smoke-test-contract-contract-coverage.sh` against fixture 
 - **CC-5: Duplicate-ownership detection.** `generate-coverage.sh` exits non-zero with `DUPLICATE-OWNERSHIP` when two contracts claim the same surface.
 - **CC-6: Strict-mode completeness.** With the ramp tier removed, a `MISSING` row (a regression) makes the validator exit non-zero with `COVERAGE-MANIFEST-INCOMPLETE`.
 - **CC-7: Scan-scope exclusion.** Surfaces under a `_*` path component are excluded from the manifest — no row is emitted for them.
-- **CC-8: No-contract bootstrap.** When `docs/contracts/` is absent in a consumer root, the validator exits 0 with a bootstrap diagnostic before requiring `_coverage.md`; when `docs/contracts/` is absent in a plugin-capable root, the validator exits non-zero.
+- **CC-8: No-contract bootstrap.** When `docs/contracts/` is absent in a consumer root, the validator exits 0 with a bootstrap diagnostic before requiring `_coverage.md`; this remains true when the consumer root has vendored framework directories such as `skills/`. When `docs/contracts/` is absent in a plugin manifest root, the validator exits non-zero.
 
 ## Versioning
 
+- **1.4** (2026-06-04) — narrow the no-contract failure case to plugin manifest roots. Consumer roots with vendored framework directories such as top-level `skills/` remain bootstrap and exit 0 when `docs/contracts/` is absent. CC-8 gains the vendored-skills consumer fixture.
 - **1.3** (2026-06-02) — plugin-capable roots now fail when `docs/contracts/` is absent, while consumer roots retain the no-contract bootstrap skip. CC-8 gains the plugin-capable negative case.
 - **1.2** (2026-06-02) — consumer-root bootstrap: `validate-coverage-manifest.sh` exits 0 when `docs/contracts/` is absent, before requiring `_coverage.md`. Adds CC-8.
 - **1.1** (2026-05-31) — re-tightening: the transitional ramp tier was removed from `validate-coverage-manifest.sh`, making strict mode the live steady state. CC-6 flips from "ramp-mode discipline" to "strict-mode completeness." This is the PR-7b re-tightening event the 1.0 contract pinned but PR 7b shipped without; completed as a Pass-2 reconciliation finding. No producer behaviour change.

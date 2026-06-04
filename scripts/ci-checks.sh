@@ -42,6 +42,11 @@ is_plugin_root() {
     && [ -f .github/ISSUE_TEMPLATE/agent-ready.md ]
 }
 
+is_plugin_manifest_root() {
+  [ -f .claude-plugin/plugin.json ] \
+    || [ -f .codex-plugin/plugin.json ]
+}
+
 smoke_test_applicable() {
   local f="$1"
   local owner_line owner_name scope_line scope
@@ -136,6 +141,28 @@ run_plugin_check_if_available() {
   else
     echo "SKIP: $script not installed in this root"
   fi
+}
+
+run_contract_coverage_check_if_available() {
+  local script="scripts/validate-coverage-manifest.sh"
+
+  if [ ! -d docs/contracts ] && is_plugin_manifest_root; then
+    echo "FAIL: docs/contracts missing in plugin root; cannot run $script" >&2
+    fail=1
+    return
+  fi
+
+  if [ ! -f "$script" ]; then
+    run_plugin_check_if_available "$script"
+    return
+  fi
+
+  if [ ! -d docs/contracts ]; then
+    echo "SKIP: $script requires docs/contracts in this root"
+    return
+  fi
+
+  bash "$script" || fail=1
 }
 
 ci_mode_triggered_by_path() {
@@ -387,7 +414,7 @@ echo "=== Cross-reference validation ==="
 bash scripts/validate-cross-refs.sh || fail=1
 
 echo "=== Contract coverage validation ==="
-run_plugin_check_if_available "scripts/validate-coverage-manifest.sh"
+run_contract_coverage_check_if_available
 
 echo "=== Health check (non-blocking) ==="
 bash scripts/health-check.sh "$ROOT" || echo "(health-check reported issues — non-blocking)"

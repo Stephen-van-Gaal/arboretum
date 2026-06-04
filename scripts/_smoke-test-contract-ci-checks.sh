@@ -191,10 +191,19 @@ else
   fail=1
 fi
 
-if grep -q 'run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"' "$TARGET"; then
-  echo "PASS: CLI-7f — release gate uses dev-only tooling path"
+if grep -q '^run_contract_coverage_check_if_available()' "$TARGET" \
+  && grep -q 'requires docs/contracts in this root' "$TARGET" \
+  && grep -q 'docs/contracts missing in plugin root' "$TARGET"; then
+  echo "PASS: CLI-7f — installed contract-coverage validator is input-guarded in consumer roots"
 else
-  echo "FAIL: CLI-7f — release gate does not use dev-tools/release/check-version-bump.sh" >&2
+  echo "FAIL: CLI-7f — contract-coverage validator is not guarded by docs/contracts availability" >&2
+  fail=1
+fi
+
+if grep -q 'run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"' "$TARGET"; then
+  echo "PASS: CLI-7g — release gate uses dev-only tooling path"
+else
+  echo "FAIL: CLI-7g — release gate does not use dev-tools/release/check-version-bump.sh" >&2
   fail=1
 fi
 

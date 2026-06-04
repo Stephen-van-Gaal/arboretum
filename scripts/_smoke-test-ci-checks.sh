@@ -205,6 +205,41 @@ default-command: bash scripts/product-test.sh
 INNER
 }
 
+make_consumer_installed_coverage_fixture() {
+  local tmp="$1"
+  local repo="$tmp/repo"
+  local bin="$tmp/bin"
+  local tool
+
+  mkdir -p "$bin" "$repo/scripts" "$repo/skills"
+  cp "$CI" "$repo/scripts/ci-checks.sh"
+  cp "$SCRIPT_DIR/validate-coverage-manifest.sh" "$repo/scripts/validate-coverage-manifest.sh"
+  cp "$SCRIPT_DIR/generate-coverage.sh" "$repo/scripts/generate-coverage.sh"
+  chmod +x \
+    "$repo/scripts/ci-checks.sh" \
+    "$repo/scripts/validate-coverage-manifest.sh" \
+    "$repo/scripts/generate-coverage.sh"
+
+  for tool in bash cat chmod dirname find grep head mkdir mktemp rm sed touch xargs; do
+    ln -s "$(command -v "$tool")" "$bin/$tool"
+  done
+
+  cat > "$bin/shellcheck" <<'INNER'
+#!/usr/bin/env bash
+exit 0
+INNER
+  chmod +x "$bin/shellcheck"
+
+  for tool in \
+    "validate-cross-refs.sh" \
+    "health-check.sh" \
+    "check-version-bump.sh"
+  do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/$tool"
+    chmod +x "$repo/scripts/$tool"
+  done
+}
+
 run_ci_fixture() {
   local tmp="$1"
   PATH="$tmp/bin" "$(command -v bash)" "$tmp/repo/scripts/ci-checks.sh"
@@ -444,3 +479,21 @@ grep -qF "SKIP: dev-tools/release/check-version-bump.sh not installed in this ro
   exit 1
 }
 echo "PASS: consumer roots run declared default-command and skip absent plugin-only checks"
+
+tmp="$(new_tmp_dir)"
+make_consumer_installed_coverage_fixture "$tmp"
+set +e
+installed_coverage_out="$(run_ci_fixture "$tmp" 2>&1)"
+installed_coverage_status=$?
+set -e
+if [ "$installed_coverage_status" -ne 0 ]; then
+  echo "FAIL: consumer root with installed coverage validator but no docs/contracts should exit cleanly" >&2
+  echo "$installed_coverage_out" >&2
+  exit 1
+fi
+grep -qF "SKIP: scripts/validate-coverage-manifest.sh requires docs/contracts in this root" <<< "$installed_coverage_out" || {
+  echo "FAIL: installed coverage validator without docs/contracts did not print a clear consumer skip line" >&2
+  echo "$installed_coverage_out" >&2
+  exit 1
+}
+echo "PASS: consumer roots skip installed contract-coverage validator when docs/contracts is absent"

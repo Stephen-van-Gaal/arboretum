@@ -19,6 +19,11 @@ COMMITTED="$CONTRACTS_DIR/_coverage.md"
 
 [ -x "$GEN" ]       || { echo "validate-coverage-manifest: $GEN not executable" >&2; exit 1; }
 
+is_plugin_manifest_root() {
+  [ -f "$ROOT/.claude-plugin/plugin.json" ] \
+    || [ -f "$ROOT/.codex-plugin/plugin.json" ]
+}
+
 # Bootstrap state — allowed only when docs/contracts/ has zero CLI-contract files.
 # WS5 introduces *.cli-contract.md; pre-WS5 seam contracts (e.g. WS3b's
 # s2/s3/s9) shipped under *.contract.md without owns: lists for governance
@@ -28,11 +33,8 @@ COMMITTED="$CONTRACTS_DIR/_coverage.md"
 # _coverage.md cannot re-enter it, because the cli-contract file remains on
 # disk.
 if [ ! -d "$CONTRACTS_DIR" ]; then
-  if [ -f "$ROOT/.claude-plugin/plugin.json" ] \
-    || [ -f "$ROOT/.codex-plugin/plugin.json" ] \
-    || [ -d "$ROOT/skills" ] \
-    || [ -d "$ROOT/hooks" ]; then
-    echo "validate-coverage-manifest: $CONTRACTS_DIR missing in plugin-capable root" >&2
+  if is_plugin_manifest_root; then
+    echo "validate-coverage-manifest: $CONTRACTS_DIR missing in plugin manifest root" >&2
     exit 1
   fi
   echo "validate-coverage-manifest: bootstrap state — docs/contracts/ not found; no cli-contracts to validate" >&2

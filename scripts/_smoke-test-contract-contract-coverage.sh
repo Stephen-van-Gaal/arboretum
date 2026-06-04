@@ -241,14 +241,25 @@ else
 fi
 
 F=$(new_bare_fixture)
+: > "$F/scripts/foo.sh"
+mkdir -p "$F/skills"
+out_no_contracts_with_skills=$( cd "$F" && bash "$VALIDATOR" 2>&1 ); rc_no_contracts_with_skills=$?
+if [ "$rc_no_contracts_with_skills" -eq 0 ] \
+   && echo "$out_no_contracts_with_skills" | grep -qF "docs/contracts/ not found"; then
+  pass "CC-8a: consumer root with vendored skills but no docs/contracts remains bootstrap"
+else
+  fail_case "CC-8a: vendored-skills consumer root should remain bootstrap (rc=$rc_no_contracts_with_skills)" "$out_no_contracts_with_skills"
+fi
+
+F=$(new_bare_fixture)
 mkdir -p "$F/.codex-plugin"
 printf '{"version":"0.0.0"}\n' > "$F/.codex-plugin/plugin.json"
 out_missing_contracts=$( cd "$F" && bash "$VALIDATOR" 2>&1 ); rc_missing_contracts=$?
 if [ "$rc_missing_contracts" -ne 0 ] \
-   && echo "$out_missing_contracts" | grep -qF "missing in plugin-capable root"; then
-  pass "CC-8b: plugin-capable root fails when docs/contracts is absent"
+   && echo "$out_missing_contracts" | grep -qF "missing in plugin manifest root"; then
+  pass "CC-8b: plugin manifest root fails when docs/contracts is absent"
 else
-  fail_case "CC-8b: plugin-capable root did not fail for missing docs/contracts (rc=$rc_missing_contracts)" "$out_missing_contracts"
+  fail_case "CC-8b: plugin manifest root did not fail for missing docs/contracts (rc=$rc_missing_contracts)" "$out_missing_contracts"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────
