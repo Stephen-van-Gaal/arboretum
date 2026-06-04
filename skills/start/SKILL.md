@@ -184,7 +184,12 @@ fi
   the diagnostic and stop; do not treat this as an issue-readiness failure and
   do not route it through `/roadmap agent-prep`.
 
-**Agent-target requires all four criteria to hold unambiguously:**
+Only verified `agent-ready` work may skip the review-before-build pause. For
+unlabelled issues, the criteria below are a cheap fit check, not a no-review
+authorization: if the issue has not passed `agent-ready` verification, classify
+the work as everything-else and hand off to `/design` for the review gate.
+
+**Agent-target fit requires all four criteria to hold unambiguously:**
 
 1. **Decision-free** — exactly one sensible implementation; no choice between approaches.
 2. **Bounded** — one owner/spec, a handful of files, no architecture or cross-spec impact.
@@ -193,7 +198,7 @@ fi
 
 **Precedence:** if any criterion is uncertain or borderline, classify as **everything-else**. The triage never rounds up — the escape hatch in `/build` recovers anything that slips through.
 
-**When classified as agent-target:**
+**When verified `agent-ready` work is classified as agent-target:**
 
 1. Author the crisp task statement (one or two sentences naming the change and the file(s) it touches).
 2. Write the task brief. **Use a quoted heredoc** so the task statement is written verbatim even if it contains `$`, backticks, or other shell metacharacters (the original user request is untrusted input):
@@ -212,7 +217,8 @@ fi
    /build .arboretum/agent-briefs/<issue>.md
    ```
 
-   No `/design`, no plan — the brief is the implementation brief (WS2 D2).
+   No `/design`, no plan — the verified `agent-ready` brief is the
+   implementation brief (WS2 D2).
 
 **When classified as everything-else:**
 

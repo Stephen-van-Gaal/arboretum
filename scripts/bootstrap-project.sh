@@ -63,6 +63,9 @@ TEMPLATES_DIR="$(realpath "$SCRIPT_DIR/../docs/templates")"
 # message — never runs. Simple path construction lets the existence
 # check be the source of the user-facing error.
 PRINCIPLES_FILE="$SCRIPT_DIR/../docs/templates/PRINCIPLES.md"
+ARBORETUM_FILE="$SCRIPT_DIR/../docs/templates/ARBORETUM.md"
+CLAUDE_TEMPLATE="$SCRIPT_DIR/../docs/templates/CLAUDE.md"
+AGENTS_TEMPLATE="$SCRIPT_DIR/../docs/templates/AGENTS.md"
 # Workflows are at ../workflows/
 WORKFLOWS_DIR="$(realpath "$SCRIPT_DIR/../workflows")"
 # Hooks are at ../.claude/
@@ -73,7 +76,7 @@ GITHOOKS_DIR="$(realpath "$SCRIPT_DIR/../.githooks")"
 SKILLS_DIR="$(realpath "$SCRIPT_DIR/../.claude/skills")"
 
 # Verify source files exist
-for f in "$TEMPLATES_DIR/spec.md" "$PRINCIPLES_FILE" "$WORKFLOWS_DIR/README.md"; do
+for f in "$TEMPLATES_DIR/spec.md" "$PRINCIPLES_FILE" "$ARBORETUM_FILE" "$CLAUDE_TEMPLATE" "$AGENTS_TEMPLATE" "$WORKFLOWS_DIR/README.md"; do
   if [ ! -f "$f" ]; then
     echo "Error: source file not found: $f"
     echo "Run this script from the arboretum project directory."
@@ -127,6 +130,7 @@ mkdir_if_missing "$TARGET_DIR/.claude/hooks"
 echo ""
 echo "Copying principles and workflows..."
 copy_if_missing "$PRINCIPLES_FILE" "$TARGET_DIR/PRINCIPLES.md"
+copy_if_missing "$ARBORETUM_FILE" "$TARGET_DIR/ARBORETUM.md"
 for wf in "$WORKFLOWS_DIR"/*.md; do
   basename_wf="$(basename "$wf")"
   copy_if_missing "$wf" "$TARGET_DIR/workflows/$basename_wf"
@@ -242,8 +246,20 @@ if [ -f "$TARGET_DIR/CLAUDE.md" ]; then
   echo "  exists: CLAUDE.md"
 else
   sed "s/# CLAUDE.md/# CLAUDE.md — $PROJECT_NAME/" \
-    "$TEMPLATES_DIR/CLAUDE.md" > "$TARGET_DIR/CLAUDE.md"
+    "$CLAUDE_TEMPLATE" > "$TARGET_DIR/CLAUDE.md"
   echo "  created: CLAUDE.md"
+fi
+
+# ── Create AGENTS.md from template ───────────────────────────────────
+
+echo ""
+echo "Creating AGENTS.md..."
+if [ -f "$TARGET_DIR/AGENTS.md" ]; then
+  echo "  exists: AGENTS.md"
+else
+  sed "s/# AGENTS.md/# AGENTS.md — $PROJECT_NAME/" \
+    "$AGENTS_TEMPLATE" > "$TARGET_DIR/AGENTS.md"
+  echo "  created: AGENTS.md"
 fi
 
 # ── Create empty contracts.yaml ──────────────────────────────────────
@@ -304,6 +320,8 @@ echo "Done. Project structure:"
 echo ""
 echo "  $TARGET_DIR/"
 echo "  ├── CLAUDE.md                    # AI entry point"
+echo "  ├── AGENTS.md                    # Codex entry point"
+echo "  ├── ARBORETUM.md                 # Agent workflow contract"
 echo "  ├── PRINCIPLES.md                # Seven principles"
 echo "  ├── contracts.yaml               # Version pins (empty)"
 echo "  ├── .publishignore               # Public repo exclusions"
@@ -322,6 +340,6 @@ echo "      ├── reference/               # (empty — add domain knowledge
 echo "      └── plans/                   # (empty — add during implementation)"
 echo ""
 echo "Next steps:"
-echo "  1. Edit CLAUDE.md with your project overview"
+echo "  1. Edit CLAUDE.md / AGENTS.md with your project overview"
 echo "  2. Run /architect to design your architecture"
 echo "  3. Use /start to begin your first feature"

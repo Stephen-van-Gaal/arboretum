@@ -300,4 +300,72 @@ if grep -q 'az boards work-item update' "$CLEANUP"; then
 fi
 ok "case 32 — /cleanup closure verification keeps ADO read-only"
 
+# === Agent pipeline contract invariants ===
+
+# Case 33: root and template ARBORETUM.md contracts exist
+[ -f "ARBORETUM.md" ] || fail "case 33 - ARBORETUM.md missing"
+[ -f "docs/templates/ARBORETUM.md" ] || fail "case 33 - docs/templates/ARBORETUM.md missing"
+ok "case 33 - ARBORETUM.md contract files present"
+
+# Case 34: ARBORETUM.md has common and adapter sections
+for section in COMMON CODEX CLAUDE DATABRICKS; do
+  grep -q "^## $section$" ARBORETUM.md \
+    || fail "case 34 - ARBORETUM.md missing $section section"
+done
+ok "case 34 - ARBORETUM.md has common and adapter sections"
+
+# Case 35: ARBORETUM.md states the common workflow contract
+grep -q 'File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.' ARBORETUM.md \
+  || fail "case 35 - ARBORETUM.md missing file-changing-work /start contract"
+grep -q 'Everything-else work stops after `/design` for human review before `/build`.' ARBORETUM.md \
+  || fail "case 35 - ARBORETUM.md missing review-before-build contract"
+grep -q 'Only verified `agent-ready` work skips the review-before-build pause.' ARBORETUM.md \
+  || fail "case 35 - ARBORETUM.md missing verified agent-ready exception"
+grep -q "pipeline-state tracking remains the observable state layer" ARBORETUM.md \
+  || fail "case 35 - ARBORETUM.md missing pipeline-state boundary"
+ok "case 35 - ARBORETUM.md states the common workflow contract"
+
+# Case 36: tool entrypoints point to ARBORETUM.md and repeat the local tripwire
+for f in CLAUDE.md AGENTS.md CLAUDE.public.md docs/templates/CLAUDE.md docs/templates/AGENTS.md; do
+  grep -q "ARBORETUM.md" "$f" \
+    || fail "case 36 - $f does not point to ARBORETUM.md"
+  grep -q 'File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.' "$f" \
+    || fail "case 36 - $f missing local file-changing-work tripwire"
+  grep -q 'Everything-else work stops after `/design` for human review before `/build`.' "$f" \
+    || fail "case 36 - $f missing local review-before-build tripwire"
+  grep -q 'Only verified `agent-ready` work skips the review-before-build pause.' "$f" \
+    || fail "case 36 - $f missing local verified agent-ready exception"
+done
+ok "case 36 - tool entrypoints point to ARBORETUM.md and repeat the tripwire"
+
+# Case 37: stage prose states the review-before-build pause
+grep -q 'Only verified `agent-ready` work may skip the review-before-build pause.' "$START" \
+  || fail "case 37 - /start missing verified agent-ready review-pause rule"
+grep -q 'Before exiting to `/build`, stop for human review of the design package.' "$DESIGN" \
+  || fail "case 37 - /design missing design-package review pause"
+grep -q 'Do not log `/design exited` or hand off to `/build` until that approval has' "$DESIGN" \
+  || fail "case 37 - /design does not keep stage exit logging behind human approval"
+grep -q "everything-else -> /design -> human review -> /build" workflows/build.md \
+  || fail "case 37 - build workflow missing human review transition"
+ok "case 37 - stage prose states the review-before-build pause"
+
+# Case 38: AGENTS.md no longer presents legacy workflows as the active lifecycle
+for legacy in feature bug-fix refactor documentation; do
+  if grep -q "| \\*\\*$legacy\\*\\* |" AGENTS.md; then
+    fail "case 38 - AGENTS.md still lists legacy workflow as active: $legacy"
+  fi
+done
+ok "case 38 - AGENTS.md legacy active workflow rows absent"
+
+# Case 39: project entrypoints point agents at workflow stage sections, not a
+# stale Flow-only heading that no longer exists on every workflow.
+for f in AGENTS.md CLAUDE.md; do
+  if grep -q 'Parse only `## Flow` sections' "$f"; then
+    fail "case 39 - $f still instructs agents to parse only ## Flow sections"
+  fi
+  grep -q '## Stages.*## Flow' "$f" \
+    || fail "case 39 - $f does not mention the ## Stages/## Flow fallback"
+done
+ok "case 39 - project entrypoints use stage/flow workflow section guidance"
+
 echo "ALL PASS: skill-prose v2 invariants"

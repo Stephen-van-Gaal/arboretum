@@ -97,14 +97,25 @@ skip_note "CLI-3: .githooks/ and .claude/skills/ (require post-abort section)"
 
 # ── CLI-4: CLAUDE.md rendered with project name ──────────────────────────────
 # The rendered CLAUDE.md at the project root requires the post-abort section.
-# The CLAUDE.md template is copied to docs/templates/CLAUDE.md (pre-abort).
+# The agent adapter templates are copied to docs/templates/ (pre-abort).
 if [ -f "$TARGET/docs/templates/CLAUDE.md" ]; then
   pass "CLI-4a: CLAUDE.md template copied to docs/templates/"
 else
   fail_msg "CLI-4a: CLAUDE.md template not found in docs/templates/"
 fi
-# Rendered root CLAUDE.md requires post-abort code — skip.
+if [ -f "$TARGET/docs/templates/AGENTS.md" ]; then
+  pass "CLI-4a: AGENTS.md template copied to docs/templates/"
+else
+  fail_msg "CLI-4a: AGENTS.md template not found in docs/templates/"
+fi
+if [ -f "$TARGET/ARBORETUM.md" ]; then
+  pass "CLI-10: ARBORETUM.md copied to project root"
+else
+  fail_msg "CLI-10: ARBORETUM.md not copied to project root"
+fi
+# Rendered root adapter files require post-abort code — skip.
 skip_note "CLI-4b: rendered CLAUDE.md at project root (requires post-abort section)"
+skip_note "CLI-4c: rendered AGENTS.md at project root (requires post-abort section)"
 
 # ── CLI-5: .arboretum.yml created ────────────────────────────────────────────
 skip_note "CLI-5: .arboretum.yml creation (requires post-abort section)"

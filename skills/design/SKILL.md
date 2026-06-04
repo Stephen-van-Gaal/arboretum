@@ -260,7 +260,15 @@ bash scripts/validate-design-spec.sh <design-spec-path>
 
 If the validator exits non-zero, the spec is malformed against the S2 contract — fix the named field(s) and re-run before handing off. Per the S2 contract's D4 single-source-of-truth property, this is the same validator `/build` invokes at its entry step; passing it here guarantees `/build` will accept the spec.
 
-At exit, if `$ISSUE` is set, log:
+Before exiting to `/build`, stop for human review of the design package.
+Everything-else work must not proceed into implementation until the user
+approves the goals, requirements, done criteria, design decisions, test
+approach, and plan. The only no-review exception is work that entered the
+low-friction path from verified `agent-ready` and therefore skipped `/design`.
+Do not log `/design exited` or hand off to `/build` until that approval has
+happened; while waiting for review, the stage is still in `/design`.
+
+After approval, if `$ISSUE` is set, log:
 
 ```bash
 if [ -n "${ISSUE:-}" ]; then
@@ -268,7 +276,7 @@ if [ -n "${ISSUE:-}" ]; then
 fi
 ```
 
-Hand off to `/build` with the design spec path:
+After approval, hand off to `/build` with the design spec path:
 
 ```
 /build docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md

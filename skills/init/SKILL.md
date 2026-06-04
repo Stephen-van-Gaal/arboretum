@@ -1,7 +1,7 @@
 ---
 name: init
 owner: arboretum-as-plugin
-description: Initialize a new arboretum-governed project — scaffolds the directory structure, copies templates and hooks from the plugin, generates CLAUDE.md, configures git, and hands off to /architect for the project-shape interview. Use after installing the arboretum plugin in an empty (or near-empty) directory.
+description: Initialize a new arboretum-governed project — scaffolds the directory structure, copies templates and hooks from the plugin, generates CLAUDE.md and AGENTS.md, configures git, and hands off to /architect for the project-shape interview. Use after installing the arboretum plugin in an empty (or near-empty) directory.
 allowed-tools:
   - Bash
   - Read
@@ -31,7 +31,7 @@ Determine the project name. Default is the basename of the target directory. Con
 Detect existing state by checking which of these already exist in the target:
 
 ```bash
-for f in CLAUDE.md PRINCIPLES.md docs workflows .claude .githooks; do
+for f in CLAUDE.md AGENTS.md ARBORETUM.md PRINCIPLES.md docs workflows .claude .githooks; do
   [ -e "$f" ] && echo "exists: $f"
 done
 ```
@@ -94,6 +94,7 @@ copy_if_missing() {
 # lives under docs/templates/ in the plugin so adopters know to edit
 # the broken cross-refs).
 copy_if_missing "$PLUGIN_ROOT/docs/templates/PRINCIPLES.md" "PRINCIPLES.md"
+copy_if_missing "$PLUGIN_ROOT/docs/templates/ARBORETUM.md" "ARBORETUM.md"
 
 # Workflows
 for wf in "$PLUGIN_ROOT/workflows/"*.md; do
@@ -159,9 +160,9 @@ done
 chmod +x scripts/lib/*.sh 2>/dev/null || true
 ```
 
-### Step 5: Generate CLAUDE.md from template
+### Step 5: Generate CLAUDE.md and AGENTS.md from templates
 
-CLAUDE.md is the AI entry point. The template lives at `${CLAUDE_PLUGIN_ROOT}/docs/templates/CLAUDE.md`. Substitute the project name into the title.
+CLAUDE.md and AGENTS.md are thin tool entrypoints. Their templates live at `${CLAUDE_PLUGIN_ROOT}/docs/templates/CLAUDE.md` and `${CLAUDE_PLUGIN_ROOT}/docs/templates/AGENTS.md`. Substitute the project name into each title.
 
 ```bash
 # PROJECT_NAME comes from Step 1 (basename or user-confirmed override).
@@ -175,6 +176,14 @@ else
   sed "s/^# CLAUDE.md\$/# CLAUDE.md — $PROJECT_NAME/" \
     "$PLUGIN_ROOT/docs/templates/CLAUDE.md" > CLAUDE.md
   echo "  created: CLAUDE.md"
+fi
+
+if [ -f AGENTS.md ]; then
+  echo "  exists: AGENTS.md"
+else
+  sed "s/^# AGENTS.md\$/# AGENTS.md — $PROJECT_NAME/" \
+    "$PLUGIN_ROOT/docs/templates/AGENTS.md" > AGENTS.md
+  echo "  created: AGENTS.md"
 fi
 ```
 
@@ -246,6 +255,8 @@ Report what was created vs. what was already present. Then describe the layout i
 ```
 project/
 ├── CLAUDE.md                AI entry point
+├── AGENTS.md                Codex entry point
+├── ARBORETUM.md             Agent workflow contract
 ├── PRINCIPLES.md            Seven principles (read-only)
 ├── contracts.yaml           Version pins (Layer 2+)
 ├── .publishignore           Public-repo exclusions

@@ -1,5 +1,14 @@
 # CLAUDE.md — arboretum
 
+## Arboretum Contract
+
+The canonical workflow contract is `ARBORETUM.md`. Follow `ARBORETUM.md ## COMMON` before applying tool-specific or project-specific instructions.
+
+File-changing work enters `/start` unless the user explicitly asks for read-only work or explicitly asks to skip the pipeline.
+
+Everything-else work stops after `/design` for human review before `/build`.
+Only verified `agent-ready` work skips the review-before-build pause.
+
 ## Project Overview
 
 Arboretum is an organizational framework for building software with AI code agents. It gives domain experts a repeatable way to create projects that are well-organized, maintainable, and understandable — even when the human didn't write most of the code.
@@ -13,7 +22,7 @@ See `PRINCIPLES.md` for the seven principles that guide all design decisions.
 As a human using arboretum, your role is to **decide what to build** and **review what Claude produces**. Here's what that looks like:
 
 1. **You describe what you want** — in plain language, as a GitHub issue or a conversation with Claude.
-2. **Claude routes to a workflow** — it picks the right sequence of steps (feature, bug-fix, explore, etc.) and follows it.
+2. **Claude routes to a workflow** — it enters `/start`, which picks the right sequence of steps and follows it.
 3. **You review specs** — before code is written, Claude presents a spec describing what will be built. You approve, adjust, or reject.
 4. **Claude builds** — following the spec, using TDD, with ownership tracking.
 5. **You review the result** — via pull request, with governance context (which specs were touched, health-check status).

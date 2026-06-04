@@ -1,6 +1,6 @@
 ---
 script: scripts/upgrade-sync.sh
-version: 1.5
+version: 1.6
 invokers:
   - type: skill
     name: arboretum:/upgrade (project-upgrade)
@@ -17,6 +17,10 @@ related-designs:
 CLI helper invoked by the `/upgrade` skill to sync vendored framework files from the installed arboretum plugin into a project. Operates in two phases: `--plan` (pure read — emits a JSON manifest of required actions) and `--apply` (writes safe actions, merges settings, bumps the install manifest, then echoes the plan). Additional subcommands expose manifest I/O primitives for skill orchestration. Consumes `definitions/install-manifest-schema.md @v1`.
 
 ## Protocol
+
+### Arguments
+
+`upgrade-sync.sh` accepts exactly one subcommand per invocation. Subcommand-specific positional arguments are documented in the subcommands table below. It does not accept global flags; orchestration-only configuration is provided through the test/environment seams documented later in this contract.
 
 ### Subcommands
 
@@ -72,7 +76,7 @@ No other action values are emitted. Any value outside this set is a contract vio
 
 ### Managed file set
 
-Default managed globs cover operational framework files under `scripts/*.sh`, `scripts/lib/*`, `scripts/roadmap/*`, `.claude/hooks/*`, `.githooks/*`, `docs/templates/*`, `docs/definitions/*`, and `workflows/*`. Exclusions apply after the glob union is computed: `scripts/bootstrap-project.sh` is legacy bootstrap-only, and `scripts/_smoke-test-*.sh` are plugin/dev self-tests. Neither path class is propagated by `/upgrade`, including when `UPGRADE_MANAGED_GLOBS` is set for tests. If such an excluded file already exists in a project and is safe framework residue (manifest-base match or current-plugin-copy match), `--plan` emits `remove-obsolete` and `--apply` deletes it. Locally edited excluded files are left in place.
+Default managed globs cover root `ARBORETUM.md` and operational framework files under `scripts/*.sh`, `scripts/lib/*`, `scripts/roadmap/*`, `.claude/hooks/*`, `.githooks/*`, `docs/templates/*`, `docs/definitions/*`, and `workflows/*`. Exclusions apply after the glob union is computed: `scripts/bootstrap-project.sh` is legacy bootstrap-only, and `scripts/_smoke-test-*.sh` are plugin/dev self-tests. Neither path class is propagated by `/upgrade`, including when `UPGRADE_MANAGED_GLOBS` is set for tests. If such an excluded file already exists in a project and is safe framework residue (manifest-base match or current-plugin-copy match), `--plan` emits `remove-obsolete` and `--apply` deletes it. Locally edited excluded files are left in place.
 
 ### Exit codes
 
@@ -93,12 +97,19 @@ No other exit codes. `1` is never emitted by this script.
 - Initializes `<project>/.arboretum/install-manifest.json` before applying
   actions so no-op legacy applies can still create a manifest baseline and bump
   `framework_version` when no unresolved items remain.
-- Copies managed files for `add`, `overwrite-safe`, `overwrite-local`, `converged` actions.
+- Copies managed files, including root `ARBORETUM.md`, for `add`, `overwrite-safe`, `overwrite-local`, `converged` actions.
 - Deletes safe obsolete excluded framework files for `remove-obsolete` actions and drops their manifest entries.
 - Merges plugin's `docs/templates/settings.json.template` into `.claude/settings.json` (via `seed-settings.sh`; degrades gracefully if `jq` absent).
 - Rewrites `.arboretum/install-manifest.json` via `bump_manifest_version`.
 
 `--bootstrap-manifest` and `--write-manifest-entry` write `.arboretum/install-manifest.json`.
+
+## Test surface
+
+- **US-1: Plan shape and closed enums.** `scripts/_smoke-test-contract-upgrade-sync.sh` asserts `--plan` emits `plugin_root`, `actions`, `policy`, and `removal_detection`; verifies `removal_detection` is inside `active | inconclusive`; and verifies every emitted action is inside the closed action enum.
+- **US-2: Default managed root contract.** `scripts/_smoke-test-contract-upgrade-sync.sh` asserts the default plan treats root `ARBORETUM.md` as a `3way` managed file and emits `add` when the plugin has it and the project does not.
+- **US-3: Classification and apply behavior.** `scripts/_smoke-test-upgrade-sync.sh` exercises classification, manifest I/O, read-only `--plan`, `--apply`, `--bootstrap-manifest`, plugin-wins overwrite behavior, obsolete excluded-file cleanup, version-bump gating, removal-detection honesty, and root `ARBORETUM.md` copy/manifest tracking.
+- **US-4: Invocation arity.** `scripts/_smoke-test-upgrade-sync.sh` asserts `--read-manifest-sha` without a required path exits `2`.
 
 ## Test-only environment overrides
 
@@ -117,6 +128,7 @@ This script consumes `definitions/install-manifest-schema.md @v1` — the schema
 
 ## Versioning
 
+- **1.6** — adds root `ARBORETUM.md` to the default 3-way managed set so initialized projects receive canonical agent workflow contract updates via `/upgrade` (2026-06-03, issue #487 review fix).
 - **1.5** — delegates legacy backend reads to `scripts/lib/yaml-lite.sh`,
   normalizes YAML null-ish backend values to the GitHub default, and initializes
   the install manifest at the start of `--apply` so no-op legacy migrations do

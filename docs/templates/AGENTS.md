@@ -2,7 +2,7 @@
 version: 1
 ---
 
-# CLAUDE.md
+# AGENTS.md
 
 > *Arboretum is choreography. Superpowers does the work.*
 

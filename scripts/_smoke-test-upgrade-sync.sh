@@ -120,6 +120,23 @@ plan_lib="$(PROJECT_DIR="$PRJ_LIB" UPGRADE_PLUGIN_ROOT="$PLG_LIB" bash "$SYNC" -
 check "plan: scripts/lib/upgrade-classify.sh classified as add" \
   add "$(echo "$plan_lib" | jq -r '.actions["scripts/lib/upgrade-classify.sh"] // "null"')"
 
+# Issue #487 review fix: root ARBORETUM.md is a same-path framework contract,
+# so default /upgrade must manage it directly.
+PLG_ROOTFILE="$TMP/plugin-rootfile"; PRJ_ROOTFILE="$TMP/proj-rootfile"
+mkdir -p "$PLG_ROOTFILE" "$PRJ_ROOTFILE/.arboretum"
+echo 'canonical agent contract' > "$PLG_ROOTFILE/ARBORETUM.md"
+jq -n '{schema_version:1, framework_version:"0.1.0", updated_at:null, files:{}}' \
+  > "$PRJ_ROOTFILE/.arboretum/install-manifest.json"
+plan_rootfile="$(PROJECT_DIR="$PRJ_ROOTFILE" UPGRADE_PLUGIN_ROOT="$PLG_ROOTFILE" bash "$SYNC" --plan)"
+check "plan: ARBORETUM.md classified as add" \
+  add "$(echo "$plan_rootfile" | jq -r '.actions["ARBORETUM.md"] // "null"')"
+PROJECT_DIR="$PRJ_ROOTFILE" UPGRADE_PLUGIN_ROOT="$PLG_ROOTFILE" \
+  UPGRADE_PLUGIN_VERSION=0.2.3 bash "$SYNC" --apply >/dev/null
+check "apply: ARBORETUM.md copied" "canonical agent contract" "$(cat "$PRJ_ROOTFILE/ARBORETUM.md")"
+check "apply: ARBORETUM.md manifest tracked" \
+  "$(shasum -a 256 "$PLG_ROOTFILE/ARBORETUM.md" | awk '{print $1}')" \
+  "$(PROJECT_DIR="$PRJ_ROOTFILE" bash "$SYNC" --read-manifest-sha ARBORETUM.md)"
+
 # Task 5: --apply and --bootstrap-manifest
 # apply: overwrite-safe copies theirs, add creates, manifest bumps
 PROJECT_DIR="$PRJ" UPGRADE_PLUGIN_ROOT="$PLG" UPGRADE_MANAGED_GLOBS='scripts/*.sh' \

@@ -10,7 +10,7 @@ The single development workflow under arboretum v2. Replaces the four legacy wor
 
 ## When to use
 
-Any change to behaviour, structure, or documentation of an existing project. New features, bug fixes, refactors, and docs-only changes all run through this workflow. The only structural fork is the triage at step 1 (agent-target vs. everything-else); all other variation is handled by mode dispatch inside the shared body.
+Any change to behaviour, structure, or documentation of an existing project. New features, bug fixes, refactors, and docs-only changes all run through this workflow. The only structural fork is the triage at step 1 (verified `agent-ready` fast lane vs. everything-else); all other variation is handled by mode dispatch inside the shared body.
 
 The other workflows are reserved for shapes the build workflow does not cover:
 
@@ -23,12 +23,13 @@ The other workflows are reserved for shapes the build workflow does not cover:
 
 ```
 /start (triage)
-  ├── agent-target ─────────────────────────┐
+  ├── verified agent-ready ─────────────────┐
   └── everything-else → /design (Branch 1)  │
                           ├── brainstorm     │
                           ├── investigate    │
                           ├── coverage-baseline │
                           └── none           │
+                          human review       │
                                              ▼
                        /build (Branch 2 + Branch 3)
                           ├── TDD (any applicable tier)
@@ -44,6 +45,8 @@ The other workflows are reserved for shapes the build workflow does not cover:
                                   /pr → /land → /cleanup → /reflect
 ```
 
+Review gate: everything-else -> /design -> human review -> /build.
+
 ## Artifact Flow
 
 | Step | Reads | Produces | Location | Authority |
@@ -58,7 +61,9 @@ The other workflows are reserved for shapes the build workflow does not cover:
 
 ### 1. Triage — `/start`
 
-`/start` classifies the change as **agent-target** or **everything-else**. The classification is conservative: a change is agent-target only when all four criteria hold unambiguously:
+`/start` classifies the change as verified **agent-ready** or **everything-else**. Only verified `agent-ready` work may skip the review-before-build pause. Unlabelled agent-target inference can identify a good candidate for `/roadmap agent-prep`, but it does not authorize direct no-review implementation.
+
+Agent-target fit is conservative: a change fits the fast-lane shape only when all four criteria hold unambiguously:
 
 1. **Decision-free** — exactly one sensible implementation.
 2. **Bounded** — one owner/spec, a handful of files, no architecture impact.
@@ -67,13 +72,13 @@ The other workflows are reserved for shapes the build workflow does not cover:
 
 If any criterion is uncertain, the change is everything-else. The escape hatch in `/build` recovers anything that slips through.
 
-**Agent-target output:** a crisp task brief at `.arboretum/agent-briefs/<issue>.md`, written by `scripts/write-agent-brief.sh`. No design spec, no plan.
+**Verified agent-ready output:** a crisp task brief at `.arboretum/agent-briefs/<issue>.md`, written by `scripts/write-agent-brief.sh`. No design spec, no plan.
 
 **Everything-else output:** `/start` hands off to `/design` with the issue number and the user's original request.
 
 ### 2. Design — `/design` (everything-else only)
 
-`/design` runs SURVEY, dispatches Branch 1 by change kind, writes the design spec at `docs/superpowers/specs/<date>-<topic>-design.md`, and folds in planning by invoking `superpowers:writing-plans` directly. Output is a complete design spec with S2 frontmatter populated for `/build`'s strict gate.
+`/design` runs SURVEY, dispatches Branch 1 by change kind, writes the design spec at `docs/superpowers/specs/<date>-<topic>-design.md`, and folds in planning by invoking `superpowers:writing-plans` directly. Output is a complete design spec with S2 frontmatter populated for `/build`'s strict gate. Everything-else work stops here for human review before `/build`.
 
 **Branch 1 modes** (per design D5):
 - **brainstorm** — new or changed behaviour. Invokes `superpowers:brainstorming`.
@@ -81,7 +86,7 @@ If any criterion is uncertain, the change is everything-else. The escape hatch i
 - **coverage-baseline** — refactor (preserves behaviour). Design spec is a structure-only variant — no Behaviour section to author; `/consolidate` recognizes the structure-only shape and skips Behaviour-supersession detection (D5 of /consolidate's v2 path).
 - **none** — well-defined or docs-only. Design spec is minimal; for docs-only, `/consolidate` is a no-op at `/finish` since no governed source changed.
 
-Agent-target skips this step entirely.
+Verified `agent-ready` skips this step entirely.
 
 ### 3. Build — `/build`
 

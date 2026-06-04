@@ -146,6 +146,7 @@ managed_globs() {
     return
   fi
   cat <<'EOF'
+ARBORETUM.md	3way
 scripts/*.sh	3way
 scripts/lib/*	3way
 scripts/roadmap/*	3way
@@ -156,8 +157,10 @@ docs/definitions/*	3way
 workflows/*	3way
 EOF
 }
-# NOTE: narrative-file report-only (adopter root CLAUDE.md / PRINCIPLES.md) is
-# deferred. Those files are *templated* at /init (docs/templates/<X> → root <X>),
+# NOTE: root ARBORETUM.md is a same-path canonical framework contract, so it is
+# managed directly. Narrative-file report-only (adopter root CLAUDE.md /
+# PRINCIPLES.md / AGENTS.md) is deferred. Those files are *templated* at /init
+# (docs/templates/<X> → root <X>),
 # so a same-path glob compares the wrong files (root vs plugin-root, or
 # template-vs-template). Correct reporting needs a target→source-template mapping;
 # tracked as a follow-up. The `report-only` policy + cmd_plan branch are retained
