@@ -37,15 +37,15 @@ ok "seam 2 — agent-brief written for #12345"
 
 # Seam 3: read-s2-frontmatter.sh accepts the brief (the contract /build enforces)
 out=$(bash "$REPO_ROOT/scripts/read-s2-frontmatter.sh" "$BRIEF")
-echo "$out" | grep -q "^related-issue=12345" || fail "seam 3 — related-issue not parsed" "$out"
-echo "$out" | grep -q "^triage=agent-target" || fail "seam 3 — triage not parsed" "$out"
-echo "$out" | grep -q "^implementation-mode=direct" || fail "seam 3 — mode not parsed" "$out"
-echo "$out" | grep -q "^plan=null" || fail "seam 3 — plan not parsed" "$out"
+grep -q "^related-issue=12345" <<<"$out" || fail "seam 3 — related-issue not parsed" "$out"
+grep -q "^triage=agent-target" <<<"$out" || fail "seam 3 — triage not parsed" "$out"
+grep -q "^implementation-mode=direct" <<<"$out" || fail "seam 3 — mode not parsed" "$out"
+grep -q "^plan=null" <<<"$out" || fail "seam 3 — plan not parsed" "$out"
 ok "seam 3 — /build's S2 reader accepts the brief"
 
 # Seam 4: every required field /build expects is present (whole-schema gate)
 for field in related-issue test-tiers implementation-mode triage plan; do
-  echo "$out" | grep -qE "^${field}(\\.|=)" || fail "seam 4 — missing field: $field" "$out"
+  grep -qE "^${field}(\\.|=)" <<<"$out" || fail "seam 4 — missing field: $field" "$out"
 done
 ok "seam 4 — all five S2 required fields present in brief frontmatter"
 

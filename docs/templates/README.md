@@ -37,9 +37,12 @@ read_profiles:
       - 'Edge Cases: punctuation & symbols?'
 ```
 
-Section names are exact, case-sensitive Markdown heading names. Quote section
-names that contain YAML metacharacters such as `:` so the shared YAML-lite
-parser treats them as scalar list items.
+Profile names are exact and case-sensitive. Section names are resolved by
+document-access tooling through normalized heading matching: leading/trailing
+whitespace is trimmed, internal whitespace is collapsed, and case is ignored;
+punctuation remains significant. Quote section names that contain YAML
+metacharacters such as `:` so the shared YAML-lite parser treats them as scalar
+list items.
 
 ## Core Rule
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: customer-validation
+# owner: document-access
 set -euo pipefail
 
 [ "$#" -eq 2 ] || { echo "Usage: $0 <markdown-file> <profile-name>" >&2; exit 2; }

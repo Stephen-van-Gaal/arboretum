@@ -26,6 +26,10 @@ read_profiles:
     sections:
       - Purpose
       - 'Edge Cases: punctuation & symbols?'
+  normalized:
+    sections:
+      - purpose
+      - nested   detail
   nested-only:
     sections:
       - Nested Detail
@@ -101,6 +105,16 @@ if [ "$rc" = 0 ] \
   pass "profiles may target nested section headings exactly"
 else
   fail_case "nested profile extraction" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
+out=$(bash "$PROBE" "$DOC" "normalized" 2>"$FIX/err"); rc=$?
+if [ "$rc" = 0 ] \
+  && printf '%s\n' "$out" | grep -q '^## Purpose$' \
+  && printf '%s\n' "$out" | grep -q '^### Nested Detail$' \
+  && ! printf '%s\n' "$out" | grep -q '^## Edge Cases: punctuation & symbols?$'; then
+  pass "profiles resolve section names with normalized heading matching"
+else
+  fail_case "normalized profile extraction" "rc=$rc out=$out err=$(cat "$FIX/err")"
 fi
 
 out=$(bash "$PROBE" "$DOC" "missing-profile" 2>"$FIX/err"); rc=$?

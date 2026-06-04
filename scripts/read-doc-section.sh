@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: customer-validation
+# owner: document-access
 set -euo pipefail
 
 [ "$#" -eq 2 ] || { echo "Usage: $0 <markdown-file> <section-heading>" >&2; exit 2; }
@@ -30,9 +30,13 @@ heading_re = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(.+?)[ \t]*$")
 fence_re = re.compile(r"^[ \t]{0,3}(```+|~~~+)")
 
 
-def normalize_heading(raw):
+def display_heading(raw):
     raw = re.sub(r"[ \t]+#+[ \t]*$", "", raw)
     return raw.strip()
+
+
+def match_key(raw):
+    return re.sub(r"\s+", " ", raw.strip()).casefold()
 
 
 headings = []
@@ -62,10 +66,11 @@ for index, line in enumerate(lines):
     if not match:
         continue
     level = len(match.group(1))
-    title = normalize_heading(match.group(2))
-    headings.append({"line": index, "level": level, "title": title})
+    title = display_heading(match.group(2))
+    headings.append({"line": index, "level": level, "title": title, "key": match_key(title)})
 
-matches = [heading for heading in headings if heading["title"] == target]
+target_key = match_key(target)
+matches = [heading for heading in headings if heading["key"] == target_key]
 if not matches:
     fail(f"section not found: {target}")
 if len(matches) > 1:

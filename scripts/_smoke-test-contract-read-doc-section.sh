@@ -61,6 +61,32 @@ First repeated body.
 Second repeated body.
 EOF
 
+NORMALIZED="$FIX/normalized.md"
+cat > "$NORMALIZED" <<'EOF'
+# Normalized Fixture
+
+##   Mixed   Case   Heading   
+
+Normalized body.
+
+## Boundary
+
+Boundary body.
+EOF
+
+NORMALIZED_DUP="$FIX/normalized-duplicate.md"
+cat > "$NORMALIZED_DUP" <<'EOF'
+# Normalized Duplicate Fixture
+
+## Purpose
+
+Upper body.
+
+## purpose
+
+Lower body.
+EOF
+
 FRONTMATTER_ONLY="$FIX/frontmatter-only.md"
 cat > "$FRONTMATTER_ONLY" <<'EOF'
 ---
@@ -113,6 +139,16 @@ else
   fail_case "punctuation section extraction" "rc=$rc out=$out err=$(cat "$FIX/err")"
 fi
 
+out=$(bash "$PROBE" "$NORMALIZED" "mixed case heading" 2>"$FIX/err"); rc=$?
+if [ "$rc" = 0 ] \
+  && printf '%s\n' "$out" | grep -q 'Mixed   Case   Heading' \
+  && printf '%s\n' "$out" | grep -q 'Normalized body' \
+  && ! printf '%s\n' "$out" | grep -q '^## Boundary$'; then
+  pass "heading matching is case-insensitive and whitespace-normalized"
+else
+  fail_case "normalized heading matching" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
 out=$(bash "$PROBE" "$DOC" "Missing Section" 2>"$FIX/err"); rc=$?
 if [ "$rc" != 0 ] \
   && [ -z "$out" ] \
@@ -129,6 +165,15 @@ if [ "$rc" != 0 ] \
   pass "duplicate section headings fail as ambiguous"
 else
   fail_case "duplicate section should fail" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
+out=$(bash "$PROBE" "$NORMALIZED_DUP" "PURPOSE" 2>"$FIX/err"); rc=$?
+if [ "$rc" != 0 ] \
+  && [ -z "$out" ] \
+  && grep -qi "duplicate" "$FIX/err"; then
+  pass "normalized duplicate headings fail as ambiguous"
+else
+  fail_case "normalized duplicate section should fail" "rc=$rc out=$out err=$(cat "$FIX/err")"
 fi
 
 out=$(bash "$PROBE" "$FRONTMATTER_ONLY" "Purpose" 2>"$FIX/err"); rc=$?
