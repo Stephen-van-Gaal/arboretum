@@ -1,5 +1,6 @@
 ---
 version: 1
+document-shape: plan
 ---
 
 # [Spec Name] — Implementation Plan

@@ -11,6 +11,7 @@
 | scripts/cleanup-merged-session.sh | docs/contracts/cleanup-merged-session.cli-contract.md | cli |
 | scripts/cleanup-tracker-closure.sh | docs/contracts/cleanup-tracker-closure.cli-contract.md | cli |
 | scripts/collect-review.sh | docs/contracts/collect-review.cli-contract.md | cli |
+| scripts/explore-doc.sh | docs/contracts/explore-doc.cli-contract.md | cli |
 | scripts/generate-coverage.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/generate-register.sh | docs/contracts/register-pipeline.contract.md | full |
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
@@ -23,6 +24,7 @@
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
 | scripts/read-doc-profile.sh | docs/contracts/read-doc-profile.cli-contract.md | cli |
 | scripts/read-doc-section.sh | docs/contracts/read-doc-section.cli-contract.md | cli |
+| scripts/read-doc-sections.sh | docs/contracts/read-doc-sections.cli-contract.md | cli |
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
 | scripts/read-patch-lane-config.sh | docs/contracts/read-patch-lane-config.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |

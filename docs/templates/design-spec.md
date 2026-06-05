@@ -4,6 +4,7 @@ topic: {{topic}}
 status: design
 related-issue: {{issue-number}}
 triage: everything-else
+document-shape: design-spec
 implementation-mode: direct
 plan: docs/plans/YYYY-MM-DD-{{topic}}.md
 test-tiers:

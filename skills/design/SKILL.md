@@ -66,6 +66,19 @@ Survey is owned exclusively by this skill for everything-else work. `/start`
 does the cheap routing pass; `/design` owns the contextual read of governed
 specs, architecture, and register entries.
 
+When a relevant governed spec, design spec, plan, or shipped template is
+structured enough for bounded access, prefer discovery before whole-file reads:
+
+```bash
+bash scripts/explore-doc.sh <document>
+bash scripts/read-doc-sections.sh <document> purpose behaviour
+```
+
+Choose semantic keys from the discovery output. If discovery is unavailable,
+missing, or insufficient for the design question, fall back to
+`scripts/read-doc-section.sh` for explicit headings, then to a whole-file read
+with the reason recorded in the survey summary.
+
 ### 2. Triage change kind to Branch 1 mode
 
 Branch 1 has four modes; each converges on a design spec but the dialogue shape differs. Ask the user (via `AskUserQuestion`) which mode fits, with the default inferred from the request type:

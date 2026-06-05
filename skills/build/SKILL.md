@@ -65,6 +65,17 @@ PLAN=$(echo "$FRONTMATTER"  | grep -E '^plan=' | cut -d= -f2-)
 TRIAGE=$(echo "$FRONTMATTER" | grep -E '^triage=' | cut -d= -f2)
 ```
 
+When `$PLAN` is a path and plan context is useful, prefer bounded discovery and
+semantic retrieval before whole-file plan reads:
+
+```bash
+bash scripts/explore-doc.sh "$PLAN"
+bash scripts/read-doc-sections.sh "$PLAN" file-structure tests final-verification
+```
+
+If the plan came from an external provider without shape metadata, keep the
+existing plan-path handoff and read the full plan only when needed.
+
 ### Step 2: Write the WS9 entry-state
 
 Every state write goes through WS9's helper — never inline `gh` calls (D6).

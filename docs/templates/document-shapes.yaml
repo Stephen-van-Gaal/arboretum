@@ -1,0 +1,95 @@
+document_shapes:
+  governed-spec:
+    template: docs/templates/spec.md
+    description: Durable module-level authority for purpose, behaviour, boundaries, dependencies, tests, and decisions.
+    sections:
+      - key: purpose
+        heading: Purpose
+        content: Why the governed component exists and what problem it solves.
+        required: yes
+      - key: boundaries
+        heading: Boundaries (non-goals)
+        content: What this component deliberately does not own.
+        required: yes
+        aliases:
+          - Non-goals
+      - key: behaviour
+        heading: Behaviour
+        content: Current system promise the implementation must satisfy.
+        required: yes
+      - key: requires
+        heading: Requires
+        content: Inbound dependencies, shared definitions, contracts, specs, or external systems.
+        required: yes
+      - key: provides
+        heading: Provides
+        content: Public surfaces, exports, contracts, commands, files, schemas, or behaviours.
+        required: yes
+      - key: tests
+        heading: Tests
+        content: Verification surfaces by tier.
+        required: yes
+      - key: implementation-notes
+        heading: Implementation Notes
+        content: Implementation guidance and design-record citations.
+        required: yes
+      - key: decisions
+        heading: Decisions
+        content: Durable decisions harvested or authored for this component.
+        required: yes
+  design-spec:
+    template: docs/templates/design-spec.md
+    description: Pre-build authority for non-trivial everything-else work.
+    sections:
+      - key: context
+        heading: Context
+        content: What prompted the change and relevant prior authority.
+        required: yes
+      - key: problem
+        heading: Problem
+        content: What is wrong, missing, confusing, risky, or newly required.
+        required: yes
+      - key: intended-behaviour
+        heading: Intended Behaviour
+        content: What should be true after the change.
+        required: yes
+      - key: out-of-scope
+        heading: Out Of Scope
+        content: Boundaries agents must not cross without escalation.
+        required: yes
+      - key: existing-authority
+        heading: Existing Authority
+        content: Governed specs, definitions, contracts, architecture sections, and files found during survey.
+        required: yes
+      - key: implementation-shape
+        heading: Implementation Shape
+        content: High-level implementation approach, not task steps.
+        required: yes
+      - key: test-strategy
+        heading: Test Strategy
+        content: Test tiers and domain cases that matter for the change.
+        required: yes
+      - key: build-handoff
+        heading: Build Handoff
+        content: Plan path, required evidence, and escape-hatch triggers.
+        required: yes
+  plan:
+    template: docs/templates/plan.md
+    description: Agent execution plan consumed by build-stage implementation.
+    sections:
+      - key: external-interface-reliability
+        heading: External Interface Reliability Pass
+        content: Interfaces, contracts, fixtures, safety rules, and stop conditions for multi-agent or multi-workstream work.
+        required: no
+      - key: tests
+        heading: Tests
+        content: Test tiers and evidence required from code-bearing tasks.
+        required: yes
+      - key: file-structure
+        heading: File Structure
+        content: Files to create or modify and their responsibilities.
+        required: yes
+      - key: final-verification
+        heading: Final Verification
+        content: End-of-plan verification checklist.
+        required: yes

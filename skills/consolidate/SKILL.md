@@ -101,6 +101,19 @@ born from built state, behaviour supersession is surfaced explicitly, and
 
    If either is missing, error: "Required template missing: `docs/templates/<name>.md`. Cannot proceed." Stop.
 
+   Before whole-file reading `docs/templates/spec.md` or an existing governed
+   spec, try bounded document discovery and semantic retrieval:
+
+   ```bash
+   bash scripts/explore-doc.sh docs/templates/spec.md
+   bash scripts/read-doc-sections.sh docs/templates/spec.md purpose boundaries behaviour requires provides
+   ```
+
+   If discovery or semantic retrieval is absent or invalid, fall back to the
+   current explicit section or whole-template read. Template files remain
+   required; shape metadata is a progressive-disclosure aid, not a hard
+   precondition.
+
 2. Check `docs/REGISTER.md`:
    - If yes: read it. Build a map of file → owning spec from the "Spec Index" table's "Owns" column.
    - If no: bootstrap from `docs/templates/register.md`.

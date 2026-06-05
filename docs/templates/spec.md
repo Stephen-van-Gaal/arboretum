@@ -3,6 +3,7 @@ version: 1
 name: {{spec-name}}
 status: draft
 owner: {{group-name or "architecture"}}
+document-shape: governed-spec
 owns: []
 # governs-narrative: docs/ARCHITECTURE.md §X.Y    # optional; required when status=active and owns:[] — cites the narrative section this spec governs inside a shared document
 ---
