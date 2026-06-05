@@ -108,7 +108,12 @@ explicit:
 - If the information explains a user outcome or product commitment, put it in
   the vision or a governed spec's Behaviour section.
 - If it explains system topology, put it in architecture or a group document.
-- If it names a shared concept, put it in a definition.
+- If it names a shared framework concept or cross-document vocabulary, check
+  `docs/definitions/concept-catalog.md` first. If the concept is new and can
+  drift across specs, add or update a catalog row before scattering the term
+  across templates, skills, or issue bodies. If it is a data structure or
+  versioned noun consumed by multiple specs, put the detailed shape in its own
+  definition and cite it from the catalog where useful.
 - If it names a producer/consumer protocol, put it in a contract.
 - If it explains why a change is being made now, put it in a provider-owned
   design spec or equivalent build-support artifact.
