@@ -34,8 +34,9 @@
 #      standard hooks file (hooks/hooks.json) — that would duplicate-load it.
 #   4. The Codex marketplace points the `arboretum` plugin at the resolver-
 #      visible `./plugins/arboretum` package path.
-#   5. When the `codex` CLI is available, an isolated marketplace list command
-#      can see `arboretum@arboretum`.
+#   5. When the `codex` CLI is available, an isolated marketplace can list and
+#      install `arboretum@arboretum`, and the installed cache excludes dev-only
+#      or generated source trees that are not part of the public plugin.
 
 set -euo pipefail
 
@@ -160,13 +161,52 @@ if command -v codex >/dev/null 2>&1; then
   cleanup_codex_smoke() { rm -rf "$CODEX_SMOKE_HOME"; }
   trap cleanup_codex_smoke EXIT
 
-  CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin marketplace add "$ROOT" >/dev/null \
+  CODEX_MARKETPLACE_ROOT="$CODEX_SMOKE_HOME/marketplace-root"
+  mkdir -p "$CODEX_MARKETPLACE_ROOT"
+  bash "$ROOT/scripts/stage-codex-plugin-marketplace.sh" "$CODEX_MARKETPLACE_ROOT" >/dev/null \
+    || fail "could not stage a public-shaped Codex marketplace root"
+
+  CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin marketplace add "$CODEX_MARKETPLACE_ROOT" >/dev/null \
     || fail "Codex marketplace resolver could not add the Arboretum marketplace"
   CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin list --marketplace arboretum \
     | grep -q 'arboretum@arboretum' \
     || fail "Codex marketplace resolver did not list arboretum@arboretum"
+
+  CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin add arboretum@arboretum >/dev/null \
+    || fail "Codex marketplace resolver could not install arboretum@arboretum"
+
+  CODEX_CACHE_PARENT="$CODEX_SMOKE_HOME/plugins/cache/arboretum/arboretum"
+  [ -d "$CODEX_CACHE_PARENT" ] \
+    || fail "Codex installed cache parent not found: $CODEX_CACHE_PARENT"
+
+  CODEX_CACHE_COUNT=$(find "$CODEX_CACHE_PARENT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+  [ "$CODEX_CACHE_COUNT" = "1" ] \
+    || fail "expected exactly one Codex installed cache directory, found $CODEX_CACHE_COUNT"
+  CODEX_CACHE_DIR=$(find "$CODEX_CACHE_PARENT" -mindepth 1 -maxdepth 1 -type d | sed -n '1p')
+
+  for forbidden_path in \
+    ".git" \
+    ".arboretum" \
+    ".worktrees" \
+    "customer-testbeds" \
+    "docs/specs" \
+    "docs/plans" \
+    "docs/superpowers"
+  do
+    [ ! -e "$CODEX_CACHE_DIR/$forbidden_path" ] \
+      || fail "Codex installed cache includes dev-only path: $forbidden_path"
+  done
+
+  ROADMAP_HELPERS=$(find "$CODEX_CACHE_DIR" -path '*/scripts/roadmap/lib.sh' -print \
+    | sed "s#^$CODEX_CACHE_DIR/##" \
+    | sort)
+  ROADMAP_HELPER_COUNT=$(printf '%s\n' "$ROADMAP_HELPERS" | sed '/^$/d' | wc -l | tr -d ' ')
+  [ "$ROADMAP_HELPER_COUNT" = "1" ] \
+    || fail "expected exactly one installed scripts/roadmap/lib.sh, found $ROADMAP_HELPER_COUNT"
+  [ "$ROADMAP_HELPERS" = "scripts/roadmap/lib.sh" ] \
+    || fail "unexpected installed roadmap helper path: $ROADMAP_HELPERS"
 else
   echo "SKIP: codex CLI not found; skipped Codex marketplace resolver smoke"
 fi
 
-echo "PASS: plugin metadata — valid JSON; Claude paths './'-prefixed; hooks not duplicated; Codex marketplace lists arboretum@arboretum when codex is available; /init excludes plugin smoke tests"
+echo "PASS: plugin metadata — valid JSON; Claude paths './'-prefixed; hooks not duplicated; Codex marketplace lists and installs arboretum@arboretum with a public-shaped cache when codex is available; /init excludes plugin smoke tests"

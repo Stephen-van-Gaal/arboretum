@@ -45,6 +45,7 @@
 | scripts/roadmap/nag.sh | docs/contracts/roadmap-nag.contract.md | full |
 | scripts/roadmap/render-run.sh | docs/contracts/roadmap-render-run.contract.md | full |
 | scripts/seed-settings.sh | docs/contracts/seed-settings.cli-contract.md | cli |
+| scripts/stage-codex-plugin-marketplace.sh | docs/contracts/stage-codex-plugin-marketplace.cli-contract.md | cli |
 | scripts/sync-contracts.sh | docs/contracts/sync-contracts.contract.md | full |
 | scripts/upgrade-sync.sh | docs/contracts/upgrade-sync.cli-contract.md | cli |
 | scripts/validate-build-exit.sh | docs/contracts/validate-build-exit.contract.md | full |
