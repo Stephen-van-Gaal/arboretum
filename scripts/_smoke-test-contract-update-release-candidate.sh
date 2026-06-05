@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+# owner: pipeline-contracts-template
+# Smoke test for docs/dev-contracts/release/update-release-candidate.cli-contract.md.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT="$ROOT/dev-tools/release/update-release-candidate.sh"
+CONTRACT="$ROOT/docs/dev-contracts/release/update-release-candidate.cli-contract.md"
+GIT_ID=(-c user.email=t@t -c user.name=t)
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+fail=0
+
+check() {
+  local name="$1" expected="$2" actual="$3"
+  if [ "$expected" = "$actual" ]; then
+    echo "PASS: $name"
+  else
+    echo "FAIL: $name expected '$expected' got '$actual'" >&2
+    fail=1
+  fi
+}
+
+contains() {
+  local name="$1" pattern="$2" file="$3"
+  if grep -q "$pattern" "$file"; then
+    echo "PASS: $name"
+  else
+    echo "FAIL: $name" >&2
+    fail=1
+  fi
+}
+
+[ -f "$CONTRACT" ] || { echo "FAIL: contract not found at $CONTRACT" >&2; exit 1; }
+[ -f "$SCRIPT" ] || { echo "FAIL: script not found at $SCRIPT" >&2; exit 1; }
+
+contains "contract names generated marker" 'arboretum-release-candidate:bot-owned' "$CONTRACT"
+contains "contract forbids auto-merge" 'It does not merge' "$CONTRACT"
+contains "contract names bot email" 'RELEASE_CANDIDATE_BOT_EMAIL' "$CONTRACT"
+
+make_fixture() {
+  local name="$1" repo origin
+  repo="$TMP/$name/repo"
+  origin="$TMP/$name/origin.git"
+  mkdir -p "$TMP/$name"
+  git init -q --bare "$origin"
+  git init -q "$repo"
+  git -C "$repo" "${GIT_ID[@]}" checkout -q -b main
+  mkdir -p "$repo/.claude-plugin" "$repo/.codex-plugin" "$repo/dev-tools/release"
+  printf '{"version":"0.24.7"}\n' >"$repo/.claude-plugin/plugin.json"
+  printf '{"version":"0.24.7","plugins":[{"version":"0.24.7"}]}\n' >"$repo/.claude-plugin/marketplace.json"
+  printf '{"version":"0.24.7"}\n' >"$repo/.codex-plugin/plugin.json"
+  git -C "$repo" "${GIT_ID[@]}" add .claude-plugin .codex-plugin
+  git -C "$repo" "${GIT_ID[@]}" commit -q -m "base"
+  git -C "$repo" remote add origin "$origin"
+  git -C "$repo" push -q -u origin main
+  printf '%s\n' "$repo"
+}
+
+write_prepare_stub() {
+  local repo="$1"
+  cat >"$repo/dev-tools/release/prepare-stub.sh" <<'PREPARE'
+#!/usr/bin/env bash
+set -euo pipefail
+mode="${PREPARE_MODE:?}"
+case "$mode" in
+  none)
+    echo "release-ready=no"
+    exit 0
+    ;;
+  ready)
+    python3 - "${REPO_ROOT:?}" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+updates = [
+    root / ".claude-plugin" / "plugin.json",
+    root / ".claude-plugin" / "marketplace.json",
+    root / ".codex-plugin" / "plugin.json",
+]
+for path in updates:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["version"] = "0.25.0"
+    if path.name == "marketplace.json":
+        data["plugins"][0]["version"] = "0.25.0"
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+(root / "docs" / "releases").mkdir(parents=True, exist_ok=True)
+(root / "docs" / "releases" / "v0.25.0.md").write_text("# Arboretum v0.25.0\n", encoding="utf-8")
+(root / "CHANGELOG.md").write_text("# Changelog\n\n- [v0.25.0](docs/releases/v0.25.0.md) - fixture.\n", encoding="utf-8")
+PY
+    echo "release-impact=patch"
+    echo "checkpoint-version=0.24.7"
+    echo "next-version=0.25.0"
+    echo "included-count=1"
+    echo "release-ready=yes"
+    echo "release-notes=docs/releases/v0.25.0.md"
+    ;;
+  *)
+    echo "unexpected PREPARE_MODE=$mode" >&2
+    exit 9
+    ;;
+esac
+PREPARE
+  chmod +x "$repo/dev-tools/release/prepare-stub.sh"
+  git -C "$repo" "${GIT_ID[@]}" add dev-tools/release/prepare-stub.sh
+  git -C "$repo" "${GIT_ID[@]}" commit -q -m "add prepare stub"
+  git -C "$repo" push -q origin main
+}
+
+make_gh_stub() {
+  local dir="$1"
+  mkdir -p "$dir"
+  cat >"$dir/gh" <<'GH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${GH_LOG:?}"
+case "$*" in
+  "pr list --state open --head automation/release-candidate --json number,body,createdAt,headRefOid,headRepositoryOwner,isCrossRepository --limit 20")
+    cat "${GH_PR_LIST:?}"
+    ;;
+  pr\ create*) echo "https://github.example/release-pr" ;;
+  pr\ edit*) exit 0 ;;
+  pr\ close*) exit 0 ;;
+  pr\ comment*) exit 0 ;;
+  *) echo "unexpected gh call: $*" >&2; exit 9 ;;
+esac
+GH
+  chmod +x "$dir/gh"
+}
+
+run_helper() {
+  local repo="$1" pr_json="$2" prepare_mode="$3" log="$4" extra_env="${5:-}"
+  local gh_dir
+  gh_dir="$TMP/gh-bin-$(basename "$(dirname "$repo")")"
+  make_gh_stub "$gh_dir"
+  write_prepare_stub "$repo"
+  printf '%s\n' "$pr_json" >"$TMP/pr.json"
+  GH_LOG="$log" GH_PR_LIST="$TMP/pr.json" PATH="$gh_dir:$PATH" PREPARE_MODE="$prepare_mode" REPO_ROOT="$repo" RELEASE_CANDIDATE_PREPARE="$repo/dev-tools/release/prepare-stub.sh" env $extra_env bash "$SCRIPT"
+}
+
+INVALID="$(make_fixture invalid)"
+write_prepare_stub "$INVALID"
+printf '[]\n' >"$TMP/pr-invalid.json"
+rc=0
+GH_LOG="$TMP/gh-invalid.log" GH_PR_LIST="$TMP/pr-invalid.json" PATH="$TMP/no-gh:$PATH" PREPARE_MODE=none REPO_ROOT="$INVALID" RELEASE_CANDIDATE_PREPARE="$INVALID/dev-tools/release/prepare-stub.sh" RELEASE_CANDIDATE_STALE_DAYS=abc bash "$SCRIPT" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "invalid stale days exits 2" "2" "$rc"
+contains "invalid stale days diagnostic" 'STALE_DAYS must be a non-negative integer' /tmp/update-rc.err
+
+NON_GIT="$TMP/non-git-root"
+mkdir -p "$NON_GIT"
+make_gh_stub "$TMP/gh-non-git"
+printf '[]\n' >"$TMP/pr-non-git.json"
+rc=0
+GH_LOG="$TMP/gh-non-git.log" GH_PR_LIST="$TMP/pr-non-git.json" PATH="$TMP/gh-non-git:$PATH" REPO_ROOT="$NON_GIT" bash "$SCRIPT" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "non-git repo root exits 2" "2" "$rc"
+contains "non-git repo root diagnostic" 'not a git worktree' /tmp/update-rc.err
+
+DEFAULT_ROOT="$(make_fixture default-root)"
+write_prepare_stub "$DEFAULT_ROOT"
+make_gh_stub "$TMP/gh-default-root"
+printf '[]\n' >"$TMP/pr-default-root.json"
+rc=0
+(
+  cd "$DEFAULT_ROOT" || exit 99
+  GH_LOG="$TMP/gh-default-root.log" GH_PR_LIST="$TMP/pr-default-root.json" PATH="$TMP/gh-default-root:$PATH" PREPARE_MODE=none RELEASE_CANDIDATE_PREPARE="$DEFAULT_ROOT/dev-tools/release/prepare-stub.sh" bash "$SCRIPT"
+) >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "default repo root exits 0" "0" "$rc"
+
+HUMAN_PR="$(make_fixture human-pr)"
+rc=0
+run_helper "$HUMAN_PR" '[{"number":7,"body":"human body","createdAt":"2026-06-01T00:00:00Z","headRefOid":"abc","isCrossRepository":false}]' ready "$TMP/gh-human-pr.log" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "human-owned PR exits 1" "1" "$rc"
+contains "human-owned PR diagnostic" 'lacks generated marker' /tmp/update-rc.err
+
+NO_PENDING="$(make_fixture no-pending)"
+rc=0
+run_helper "$NO_PENDING" '[]' none "$TMP/gh-no-pending.log" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "no pending with no PR exits 0" "0" "$rc"
+if grep -q 'pr create' "$TMP/gh-no-pending.log"; then
+  echo "FAIL: no-pending run should not create PR" >&2
+  fail=1
+else
+  echo "PASS: no-pending run does not create PR"
+fi
+
+CREATE="$(make_fixture create)"
+rc=0
+run_helper "$CREATE" '[]' ready "$TMP/gh-create.log" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "pending release creates PR" "0" "$rc"
+contains "create call logged" 'pr create' "$TMP/gh-create.log"
+if git -C "$CREATE" show-ref --verify --quiet refs/heads/automation/release-candidate \
+   && git -C "$CREATE" log -1 --format=%s automation/release-candidate | grep -q 'chore: prepare release package v0.25.0' \
+   && git -C "$CREATE" ls-remote --exit-code --heads origin automation/release-candidate >/dev/null 2>&1; then
+  echo "PASS: release branch committed and pushed"
+else
+  echo "FAIL: release branch was not committed and pushed" >&2
+  fail=1
+fi
+check "release branch commit uses bot identity" \
+  "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>" \
+  "$(git -C "$CREATE" log -1 --format='%an <%ae>' automation/release-candidate)"
+
+UPDATE="$(make_fixture update)"
+rc=0
+run_helper "$UPDATE" '[{"number":8,"body":"<!-- arboretum-release-candidate:bot-owned -->","createdAt":"2000-01-01T00:00:00Z","headRefOid":"abc","isCrossRepository":false}]' ready "$TMP/gh-update.log" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "existing bot PR updates" "0" "$rc"
+contains "edit call logged" 'pr edit 8 --title Release package: next Arboretum release --body-file' "$TMP/gh-update.log"
+contains "stale comment logged" 'pr comment 8 --body' "$TMP/gh-update.log"
+
+FORK_ONLY="$(make_fixture fork-only)"
+rc=0
+run_helper "$FORK_ONLY" '[{"number":10,"body":"<!-- arboretum-release-candidate:bot-owned -->","createdAt":"2026-06-01T00:00:00Z","headRefOid":"abc","isCrossRepository":true}]' ready "$TMP/gh-fork-only.log" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "fork-owned PR ignored" "0" "$rc"
+contains "fork-owned PR creates same-repo PR" 'pr create' "$TMP/gh-fork-only.log"
+
+PINNED_BASE="$(make_fixture pinned-base)"
+write_prepare_stub "$PINNED_BASE"
+pinned_sha="$(git -C "$PINNED_BASE" rev-parse HEAD)"
+printf 'remote advance\n' >"$PINNED_BASE/remote-advance.txt"
+git -C "$PINNED_BASE" "${GIT_ID[@]}" add remote-advance.txt
+git -C "$PINNED_BASE" "${GIT_ID[@]}" commit -q -m "remote advance"
+git -C "$PINNED_BASE" push -q origin main
+git -C "$PINNED_BASE" reset -q --hard "$pinned_sha"
+rc=0
+run_helper "$PINNED_BASE" '[]' ready "$TMP/gh-pinned-base.log" "RELEASE_CANDIDATE_BASE_SHA=$pinned_sha" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "pinned base creates PR" "0" "$rc"
+if [ "$(git -C "$PINNED_BASE" rev-parse automation/release-candidate^)" = "$pinned_sha" ] \
+   && ! git -C "$PINNED_BASE" ls-tree -r --name-only automation/release-candidate | grep -qx 'remote-advance.txt'; then
+  echo "PASS: release branch uses preflighted base"
+else
+  echo "FAIL: release branch did not use preflighted base" >&2
+  fail=1
+fi
+
+HUMAN_BRANCH="$(make_fixture human-branch)"
+git -C "$HUMAN_BRANCH" "${GIT_ID[@]}" checkout -q -b automation/release-candidate
+printf 'human\n' >"$HUMAN_BRANCH/human.txt"
+git -C "$HUMAN_BRANCH" -c user.email=h@h -c user.name=Human add human.txt
+git -C "$HUMAN_BRANCH" -c user.email=h@h -c user.name=Human commit -q -m "human edit"
+git -C "$HUMAN_BRANCH" push -q origin automation/release-candidate
+git -C "$HUMAN_BRANCH" checkout -q main
+rc=0
+run_helper "$HUMAN_BRANCH" '[{"number":9,"body":"<!-- arboretum-release-candidate:bot-owned -->","createdAt":"2026-06-01T00:00:00Z","headRefOid":"abc","isCrossRepository":false}]' ready "$TMP/gh-human-branch.log" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "human branch commit exits 1" "1" "$rc"
+contains "human branch diagnostic" 'contains non-bot commits' /tmp/update-rc.err
+
+if [ "$fail" -ne 0 ]; then
+  echo "SMOKE TEST FAILED" >&2
+  exit 1
+fi
+
+echo "SMOKE TEST PASSED"

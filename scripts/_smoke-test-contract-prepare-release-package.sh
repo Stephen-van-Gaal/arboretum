@@ -158,6 +158,21 @@ fi
 NONE="$TMP/none"
 mkdir -p "$NONE"
 write_body "$NONE/5.md" "Dev-only" none not-needed
+IF_NEEDED="$TMP/if-needed"
+init_repo "$IF_NEEDED"
+rc=0
+out="$(RELEASE_PACKAGE_BUMP_SCRIPT="$IF_NEEDED/dev-tools/release/bump-version.sh" REPO_ROOT="$IF_NEEDED" bash "$SCRIPT" --body-dir "$NONE" --checkpoint-version 0.24.7 --if-needed 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ] \
+   && echo "$out" | grep -Fxq 'release-ready=no' \
+   && [ ! -e "$IF_NEEDED/docs/releases" ] \
+   && [ ! -e "$IF_NEEDED/CHANGELOG.md" ] \
+   && [ ! -e "$IF_NEEDED/bump-version.called" ]; then
+  echo "PASS: if-needed no-pending fixture exits cleanly"
+else
+  echo "FAIL: if-needed no-pending fixture should exit cleanly; rc=$rc output=$out" >&2
+  fail=1
+fi
+
 rc=0
 out="$(REPO_ROOT="$REPO" bash "$SCRIPT" --body-dir "$NONE" --checkpoint-version 0.25.0 --dry-run 2>&1)" || rc=$?
 if [ "$rc" -ne 0 ] && echo "$out" | grep -q 'no pending release intents found'; then
