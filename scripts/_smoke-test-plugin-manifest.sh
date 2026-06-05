@@ -158,13 +158,31 @@ PY
 
 if command -v codex >/dev/null 2>&1; then
   CODEX_SMOKE_HOME="$(mktemp -d)"
-  cleanup_codex_smoke() { rm -rf "$CODEX_SMOKE_HOME"; }
+  UNTRACKED_SENTINEL="$ROOT/LOCAL_ONLY_REVIEW_PROBE"
+  IN_REPO_PARENT="$ROOT/.stage-codex-plugin-marketplace-smoke"
+  cleanup_codex_smoke() {
+    rm -rf "$CODEX_SMOKE_HOME"
+    rm -rf "$IN_REPO_PARENT"
+    rm -f "$UNTRACKED_SENTINEL"
+  }
   trap cleanup_codex_smoke EXIT
+
+  if bash "$ROOT/scripts/stage-codex-plugin-marketplace.sh" "$IN_REPO_PARENT/dest" >/dev/null 2>&1; then
+    fail "staging helper must reject destinations inside the source checkout"
+  fi
+  [ ! -e "$IN_REPO_PARENT" ] \
+    || fail "staging helper wrote inside the source checkout before rejecting it"
+
+  printf 'local-only review probe\n' >"$UNTRACKED_SENTINEL"
 
   CODEX_MARKETPLACE_ROOT="$CODEX_SMOKE_HOME/marketplace-root"
   mkdir -p "$CODEX_MARKETPLACE_ROOT"
   bash "$ROOT/scripts/stage-codex-plugin-marketplace.sh" "$CODEX_MARKETPLACE_ROOT" >/dev/null \
     || fail "could not stage a public-shaped Codex marketplace root"
+  [ ! -e "$CODEX_MARKETPLACE_ROOT/LOCAL_ONLY_REVIEW_PROBE" ] \
+    || fail "staging helper copied an untracked local-only file"
+  (cd "$CODEX_MARKETPLACE_ROOT" && bash scripts/validate-coverage-manifest.sh >/dev/null) \
+    || fail "staged marketplace root has stale contract coverage"
 
   CODEX_HOME="$CODEX_SMOKE_HOME" codex plugin marketplace add "$CODEX_MARKETPLACE_ROOT" >/dev/null \
     || fail "Codex marketplace resolver could not add the Arboretum marketplace"
@@ -183,6 +201,9 @@ if command -v codex >/dev/null 2>&1; then
   [ "$CODEX_CACHE_COUNT" = "1" ] \
     || fail "expected exactly one Codex installed cache directory, found $CODEX_CACHE_COUNT"
   CODEX_CACHE_DIR=$(find "$CODEX_CACHE_PARENT" -mindepth 1 -maxdepth 1 -type d | sed -n '1p')
+
+  (cd "$CODEX_CACHE_DIR" && bash scripts/validate-coverage-manifest.sh >/dev/null) \
+    || fail "Codex installed cache has stale contract coverage"
 
   for forbidden_path in \
     ".git" \

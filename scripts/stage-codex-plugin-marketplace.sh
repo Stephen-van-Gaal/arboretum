@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 usage() {
   echo "usage: stage-codex-plugin-marketplace.sh <empty-destination-dir>" >&2
@@ -16,17 +16,46 @@ if [ "$#" -ne 1 ]; then
   exit 2
 fi
 
-DEST="$1"
+DEST_INPUT="$1"
 
 command -v rsync >/dev/null 2>&1 || {
   echo "stage-codex-plugin-marketplace.sh: rsync not found" >&2
   exit 1
 }
+command -v git >/dev/null 2>&1 || {
+  echo "stage-codex-plugin-marketplace.sh: git not found" >&2
+  exit 1
+}
 
-if [ -e "$DEST" ] && [ ! -d "$DEST" ]; then
-  echo "stage-codex-plugin-marketplace.sh: destination is not a directory: $DEST" >&2
+if [ -e "$DEST_INPUT" ] && [ ! -d "$DEST_INPUT" ]; then
+  echo "stage-codex-plugin-marketplace.sh: destination is not a directory: $DEST_INPUT" >&2
   exit 1
 fi
+
+DEST_PARENT="$(dirname "$DEST_INPUT")"
+DEST_NAME="$(basename "$DEST_INPUT")"
+
+case "$DEST_INPUT" in
+  "$ROOT"|"$ROOT"/*)
+    echo "stage-codex-plugin-marketplace.sh: destination must not be inside source checkout: $DEST_INPUT" >&2
+    exit 1
+    ;;
+esac
+
+if [ ! -d "$DEST_PARENT" ]; then
+  echo "stage-codex-plugin-marketplace.sh: destination parent directory does not exist: $DEST_PARENT" >&2
+  exit 1
+fi
+
+DEST_PARENT_ABS="$(cd "$DEST_PARENT" && pwd -P)"
+DEST="$DEST_PARENT_ABS/$DEST_NAME"
+
+case "$DEST/" in
+  "$ROOT/"*)
+    echo "stage-codex-plugin-marketplace.sh: destination must not be inside source checkout: $DEST" >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p "$DEST"
 if find "$DEST" -mindepth 1 -print -quit | grep -q .; then
@@ -34,39 +63,48 @@ if find "$DEST" -mindepth 1 -print -quit | grep -q .; then
   exit 1
 fi
 
-rsync -a --checksum \
-  --exclude='.git/' \
-  --exclude='.git' \
-  --exclude='.worktrees/' \
-  --exclude='docs/specs/' \
-  --exclude='docs/plans/' \
-  --exclude='docs/superpowers/' \
-  --exclude='docs/reviews/' \
-  --exclude='docs/dev-contracts/' \
-  --exclude='docs/customer-validation/' \
-  --exclude='docs/ARCHITECTURE.md' \
-  --exclude='docs/reference/' \
-  --exclude='.github/' \
-  --exclude='customer-testbeds/' \
-  --exclude='dev-tools/' \
-  --exclude='/CLAUDE.md' \
-  --exclude='CLAUDE.public.md' \
-  --exclude='README.public.md' \
-  --exclude='.agents/skills/' \
-  --exclude='.claude/skills/dev-*' \
-  --exclude='.claude/skills/_archived/' \
-  --exclude='.claude/projects/' \
-  --exclude='scripts/_archived/' \
-  --exclude='scripts/prepare-customer-testbed.sh' \
-  --exclude='scripts/_smoke-test-customer-testbed.sh' \
-  --exclude='docs/contracts/prepare-customer-testbed.cli-contract.md' \
-  --exclude='docs/REGISTER.md' \
-  --exclude='.arboretum.yml' \
-  --exclude='.arboretum/' \
-  --exclude='.arboretum' \
-  --exclude='.gitmodules' \
-  --exclude='contracts.yaml' \
-  "$ROOT/" "$DEST/"
+TRACKED_LIST="$(mktemp)"
+cleanup_tracked_list() { rm -f "$TRACKED_LIST"; }
+trap cleanup_tracked_list EXIT
+
+git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do
+  case "$path" in
+    .git|.git/*) continue ;;
+    .worktrees|.worktrees/*) continue ;;
+    docs/specs|docs/specs/*) continue ;;
+    docs/plans|docs/plans/*) continue ;;
+    docs/superpowers|docs/superpowers/*) continue ;;
+    docs/reviews|docs/reviews/*) continue ;;
+    docs/dev-contracts|docs/dev-contracts/*) continue ;;
+    docs/customer-validation|docs/customer-validation/*) continue ;;
+    docs/ARCHITECTURE.md) continue ;;
+    docs/reference|docs/reference/*) continue ;;
+    .github|.github/*) continue ;;
+    customer-testbeds|customer-testbeds/*) continue ;;
+    dev-tools|dev-tools/*) continue ;;
+    CLAUDE.md) continue ;;
+    CLAUDE.public.md) continue ;;
+    README.public.md) continue ;;
+    .agents/skills|.agents/skills/*) continue ;;
+    .claude/skills/dev-*) continue ;;
+    .claude/skills/_archived|.claude/skills/_archived/*) continue ;;
+    .claude/projects|.claude/projects/*) continue ;;
+    scripts/_archived|scripts/_archived/*) continue ;;
+    scripts/prepare-customer-testbed.sh) continue ;;
+    scripts/_smoke-test-customer-testbed.sh) continue ;;
+    docs/contracts/prepare-customer-testbed.cli-contract.md) continue ;;
+    docs/REGISTER.md) continue ;;
+    .arboretum.yml) continue ;;
+    .arboretum|.arboretum/*) continue ;;
+    .gitmodules) continue ;;
+    contracts.yaml)
+      continue
+      ;;
+  esac
+  printf '%s\0' "$path"
+done >"$TRACKED_LIST"
+
+rsync -a --checksum --from0 --files-from="$TRACKED_LIST" "$ROOT/" "$DEST/"
 
 if [ -f "$ROOT/.github/ISSUE_TEMPLATE/arboretum-problem.md" ]; then
   mkdir -p "$DEST/.github/ISSUE_TEMPLATE"
@@ -87,6 +125,10 @@ if [ -f "$ROOT/README.public.md" ]; then
   cp "$ROOT/README.public.md" "$DEST/README.md"
 elif [ -f "$ROOT/README.md" ]; then
   cp "$ROOT/README.md" "$DEST/README.md"
+fi
+
+if [ -f "$DEST/scripts/generate-coverage.sh" ] && [ -d "$DEST/docs/contracts" ]; then
+  (cd "$DEST" && bash scripts/generate-coverage.sh >/dev/null)
 fi
 
 echo "Staged Codex marketplace root: $DEST"
