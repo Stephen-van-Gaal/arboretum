@@ -238,7 +238,24 @@ do not run further commands from the removed path.
 
 ### Step 4: Suggest reflection
 
-> "Before moving on — want to run `/reflect` to capture what you learned from this work?"
+Resolve the reflection handoff through the workflow skill slot resolver before
+prompting:
+
+```bash
+REFLECT_SLOT_RESULT="$(bash scripts/resolve-workflow-slot.sh ship-tail.reflect)" || {
+  echo "Workflow skill slot resolution failed. Repair .arboretum.yml or the target skill metadata before reflecting."
+  exit 1
+}
+REFLECT_TARGET="$(printf '%s\n' "$REFLECT_SLOT_RESULT" | awk -F= '$1 == "target" { print substr($0, index($0, "=") + 1); exit }')"
+[ -n "$REFLECT_TARGET" ] || {
+  echo "Workflow skill slot resolution returned no target for ship-tail.reflect."
+  exit 1
+}
+```
+
+Then ask:
+
+> "Before moving on — want to run `$REFLECT_TARGET` to capture what you learned from this work?"
 
 If the user declines, move on immediately. Do not push.
 

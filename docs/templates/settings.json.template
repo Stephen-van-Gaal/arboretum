@@ -8,6 +8,7 @@
       "Bash(bash scripts/read-journey-log.sh *)",
       "Bash(bash scripts/land-handler.sh *)",
       "Bash(bash scripts/cleanup-merged-session.sh *)",
+      "Bash(bash scripts/resolve-workflow-slot.sh *)",
       "Bash(bash scripts/refresh-stage-cache.sh *)",
       "Bash(bash scripts/parse-plan-checkboxes.sh *)",
       "Bash(bash scripts/read-s2-frontmatter.sh *)",

@@ -36,6 +36,7 @@
 | scripts/refresh-update-cache.sh | docs/contracts/refresh-update-cache.contract.md | full |
 | scripts/refresh-workspace-cache.sh | docs/contracts/refresh-workspace-cache.contract.md | full |
 | scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
+| scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
 | scripts/roadmap/audit-board.sh | docs/contracts/roadmap-audit-board.cli-contract.md | cli |
 | scripts/roadmap/build-orientation.sh | docs/contracts/roadmap-build-orientation.cli-contract.md | cli |
 | scripts/roadmap/install-labels.sh | docs/contracts/roadmap-install-labels.cli-contract.md | cli |

@@ -2,6 +2,8 @@
 name: reflect
 owner: workflow-unification
 description: "Post-cycle reflection — surfaces agent observations on workflow, process, and capability patterns; captures follow-ups and next-up. Replaces the prior user-interview format."
+implements-slots:
+  - ship-tail.reflect
 allowed-tools:
   - Read
   - Write

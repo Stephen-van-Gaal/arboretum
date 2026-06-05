@@ -18,11 +18,12 @@ START="skills/start/SKILL.md"
 DESIGN="skills/design/SKILL.md"
 FINISH="skills/finish/SKILL.md"
 CLEANUP="skills/cleanup/SKILL.md"
+REFLECT="skills/reflect/SKILL.md"
 CONSOLIDATE="skills/consolidate/SKILL.md"
 HEALTH="skills/health-check/SKILL.md"
 
 missing_skill_files=()
-for skill_file in "$START" "$DESIGN" "$FINISH" "$CLEANUP" "$CONSOLIDATE" "$HEALTH"; do
+for skill_file in "$START" "$DESIGN" "$FINISH" "$CLEANUP" "$REFLECT" "$CONSOLIDATE" "$HEALTH"; do
   [ -f "$skill_file" ] || missing_skill_files+=("$skill_file")
 done
 
@@ -335,6 +336,21 @@ grep -q 'Never call provider-specific close or work-item mutation commands direc
 grep -q 'untrusted display data' "$CLEANUP" \
   || fail "case 32 — /cleanup does not treat tracker display fields as untrusted data"
 ok "case 32 — /cleanup tracker-close prompt and helper delegation present"
+
+# Case 32a: /cleanup resolves the reflection handoff through the workflow slot
+# resolver instead of hard-coding the default /reflect target.
+grep -q "ship-tail.reflect" "$CLEANUP" \
+  || fail "case 32a — /cleanup does not name the ship-tail.reflect slot"
+grep -q "resolve-workflow-slot.sh ship-tail.reflect" "$CLEANUP" \
+  || fail "case 32a — /cleanup does not invoke resolve-workflow-slot.sh for reflection"
+if grep -Fq 'run `/reflect`' "$CLEANUP"; then
+  fail "case 32a — /cleanup still hard-codes the default /reflect handoff"
+fi
+grep -q "^implements-slots:$" "$REFLECT" \
+  || fail "case 32a — /reflect does not declare implements-slots metadata"
+grep -q "  - ship-tail.reflect" "$REFLECT" \
+  || fail "case 32a — /reflect does not implement ship-tail.reflect"
+ok "case 32a — /cleanup reflection handoff resolves through workflow slot metadata"
 
 # === Agent pipeline contract invariants ===
 
