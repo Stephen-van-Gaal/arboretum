@@ -530,6 +530,93 @@ roadmap_ado_work_item_patch() {
   return "$rc"
 }
 
+roadmap_ado_markdown_to_html() {
+  python3 - "$1" <<'PY'
+import html
+import re
+import sys
+
+text = sys.argv[1]
+lines = text.splitlines()
+out = []
+paragraph = []
+list_open = False
+code_open = False
+code_lines = []
+
+
+def render_inline(value):
+    escaped = html.escape(value, quote=False)
+    escaped = re.sub(r"`([^`]+)`", lambda m: f"<code>{m.group(1)}</code>", escaped)
+    escaped = re.sub(r"\*\*([^*]+)\*\*", lambda m: f"<strong>{m.group(1)}</strong>", escaped)
+    return escaped
+
+
+def close_list():
+    global list_open
+    if list_open:
+        out.append("</ul>")
+        list_open = False
+
+
+def flush_paragraph():
+    if paragraph:
+        out.append(f"<p>{render_inline(' '.join(paragraph))}</p>")
+        paragraph.clear()
+
+
+for line in lines:
+    stripped = line.strip()
+
+    if stripped.startswith("```"):
+        flush_paragraph()
+        close_list()
+        if code_open:
+            out.append(f"<pre><code>{html.escape(chr(10).join(code_lines), quote=False)}</code></pre>")
+            code_lines.clear()
+            code_open = False
+        else:
+            code_open = True
+        continue
+
+    if code_open:
+        code_lines.append(line)
+        continue
+
+    if not stripped:
+        flush_paragraph()
+        close_list()
+        continue
+
+    heading = re.match(r"^(#{2,3})\s+(.+)$", stripped)
+    if heading:
+        flush_paragraph()
+        close_list()
+        level = len(heading.group(1))
+        out.append(f"<h{level}>{render_inline(heading.group(2))}</h{level}>")
+        continue
+
+    item = re.match(r"^[-*]\s+(.+)$", stripped)
+    if item:
+        flush_paragraph()
+        if not list_open:
+            out.append("<ul>")
+            list_open = True
+        out.append(f"<li>{render_inline(item.group(1))}</li>")
+        continue
+
+    close_list()
+    paragraph.append(stripped)
+
+flush_paragraph()
+close_list()
+if code_open:
+    out.append(f"<pre><code>{html.escape(chr(10).join(code_lines), quote=False)}</code></pre>")
+
+sys.stdout.write("\n".join(out))
+PY
+}
+
 roadmap_ado_issue_list() {
   local state="open"
   local limit=""
@@ -683,6 +770,7 @@ roadmap_ado_issue_update() {
     esac
   done
   if $has_body; then
+    body="$(roadmap_ado_markdown_to_html "$body")" || return $?
     patch_ops="$(printf '%s' "$patch_ops" | jq --arg body "$body" \
       '. + [{op:"add", path:"/fields/System.Description", value:$body}]')" || return $?
   fi
@@ -752,7 +840,10 @@ roadmap_ado_issue_create() {
   done
   [ -n "$title" ] || { echo "roadmap_tracker_issue_create: --title is required for azure-devops" >&2; return 2; }
   local args=(boards work-item create --title "$title" --type "$(roadmap_ado_work_item_type)" --output json --only-show-errors)
-  $has_body && args+=(--description "$body")
+  if $has_body; then
+    body="$(roadmap_ado_markdown_to_html "$body")" || return $?
+    args+=(--description "$body")
+  fi
   if [ "${#labels[@]}" -gt 0 ]; then
     tags="$(roadmap_ado_merge_tags "" "$(roadmap_ado_normalize_label_args "${labels[@]}")" "")" || return $?
     [ -n "$tags" ] && args+=(--fields "System.Tags=$tags")

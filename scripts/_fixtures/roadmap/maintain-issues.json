@@ -62,5 +62,13 @@
     "labels": [{ "name": "type:bug" }, { "name": "horizon:now" }],
     "createdAt": "2026-05-05T00:00:00Z",
     "updatedAt": "2026-05-13T00:00:00Z"
+  },
+  {
+    "number": 9,
+    "title": "Preserve ADO-shaped issue body formatting",
+    "body": "<h2>Problem</h2><p>Azure DevOps stores work item descriptions as HTML-rich text. Arboretum should still recognize this shaped item as ready when it has enough body detail and a heading rendered as HTML.</p><h2>Outcome</h2><p>The maintain scan treats HTML headings the same way it treats Markdown headings for shaped horizon:next items.</p>",
+    "labels": [{ "name": "type:bug" }, { "name": "horizon:next" }],
+    "createdAt": "2026-05-11T00:00:00Z",
+    "updatedAt": "2026-05-15T00:00:00Z"
   }
 ]

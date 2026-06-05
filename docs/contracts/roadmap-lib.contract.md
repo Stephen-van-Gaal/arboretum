@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.12
+version: 1.13
 producer-type: script
 consumer-type: script
 consumes:
@@ -81,7 +81,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **`roadmap_backend_config_get KEY [ROOT]`** — one scalar value when configured; empty when absent. For Azure DevOps organization values, the adapter normalizes bare organization slugs to `https://dev.azure.com/<org>` before invoking Azure CLI.
 - **`roadmap_require_backend`** — no stdout on success; stderr diagnostic + nonzero on missing tools/auth or unsupported backend.
 - **`roadmap_probe_backend_access`** — no stdout on success; stderr diagnostic + nonzero on missing tools, auth/config setup, unsupported backend, or live API read failure. If local prerequisites pass but the live read fails while running under Codex (`CODEX_SANDBOX` or `CODEX_SHELL` present), stderr includes a concrete Codex network configuration snippet for the selected backend. GitHub diagnostics mention `GH_TOKEN` / `GITHUB_TOKEN` precedence because stale token env vars can mask keychain auth.
-- **`roadmap_tracker_*` helpers** — stdout/stderr/exit code of the selected backend adapter. For `github`, this is the corresponding `gh` subcommand except `roadmap_tracker_pr_closure_status`, which emits the neutral closure-status protocol below. For `azure-devops`, issue/work-item responses normalize to objects with `number`, `title`, `url`, `body`, `labels[].name`, `createdAt`, `updatedAt`, `closedAt`, `state`, and `comments[]` when requested; PR-show responses normalize to `number`, `title`, `body`, `state`, and `mergedAt`.
+- **`roadmap_tracker_*` helpers** — stdout/stderr/exit code of the selected backend adapter. For `github`, this is the corresponding `gh` subcommand except `roadmap_tracker_pr_closure_status`, which emits the neutral closure-status protocol below. For `azure-devops`, issue/work-item responses normalize to objects with `number`, `title`, `url`, `body`, `labels[].name`, `createdAt`, `updatedAt`, `closedAt`, `state`, and `comments[]` when requested; PR-show responses normalize to `number`, `title`, `body`, `state`, and `mergedAt`. Azure DevOps body writes render the Arboretum-authored Markdown subset to HTML before writing `System.Description`; reads expose the backend's canonical stored body.
 - **`roadmap_tracker_pr_closure_status PR ISSUE`** — four newline-delimited key/value lines:
   - `provider=<github|azure-devops>`
   - `intent=close|reference|none|unknown`
@@ -105,6 +105,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **Sourceable shell portability.** Skill snippets may source this library from bash or zsh. Backend selection, CSV helper parsing, ADO closed-state parsing, and pulse read/write helpers MUST preserve the same output contract under both shells.
 - **GitHub adapter preservation.** With `backend: github`, the tracker helpers delegate to `gh` and preserve the existing GitHub output shape for migrated consumers.
 - **Azure DevOps adapter normalization.** With `backend: azure-devops`, work item IDs are exposed as `number`, Azure tags are exposed as `labels[].name`, comments are exposed with `authorAssociation: "MEMBER"`, label creation is a no-op because ADO tags materialize on first use, PR show normalizes Azure Repos fields to the neutral PR shape, and PR list returns an empty array so maintain flows degrade gracefully when merged-PR evidence is unavailable.
+- **ADO rich-text description writes.** Azure DevOps `System.Description` is an HTML-rich field. The ADO adapter renders the Markdown subset Arboretum emits in issue bodies (`##` / `###` headings, paragraphs, unordered lists, fenced code blocks, inline code, bold spans, and escaped literal text) to HTML before create/update description writes. Unsupported Markdown degrades as escaped text; GitHub body writes remain raw Markdown.
 - **ADO tag merge output is raw.** The Azure DevOps tag-merge helper emits the semicolon-delimited `System.Tags` scalar as raw text, never as a JSON-encoded string. Callers may pass the value directly to `System.Tags=...` without stripping quotes.
 - **Closure evidence is controlled.** `roadmap_tracker_pr_closure_status` MUST NOT echo raw PR titles or body text. Evidence strings are generated from provider, PR number, issue number, and classification only.
 - **ADO closure verification is read-only.** Azure DevOps closure-status verification MUST NOT transition or close work items. It may report supported close evidence only for the specific linked work item whose current state is already in the configured closed-state set.
@@ -145,9 +146,12 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-25:** The same helper returns `intent=none` / `verification=unknown` when the PR has linked work items but not the requested target issue.
 - **RL-26:** The same helper returns `intent=unknown` / `verification=unknown` when ADO PR work-item lookup fails.
 - **RL-27:** ADO closure verification trims work item states and falls back to default closed states when `azure_devops.closed_states` / `azure_devops_closed_states` is effectively empty.
+- **RL-28:** `roadmap_tracker_issue_update --body` on Azure DevOps renders the supported Markdown subset to escaped HTML before patching `System.Description`.
+- **RL-29:** `roadmap_tracker_issue_create --body` on Azure DevOps sends the same rendered HTML description to Azure Boards while preserving the normalized created-item response shape.
 
 ## Versioning
 
+- **1.13** (2026-06-04) — renders Arboretum-authored Markdown bodies to HTML for Azure DevOps `System.Description` create/update writes, while keeping GitHub raw Markdown unchanged. Issue #540.
 - **1.12** (2026-06-03) — pins raw Azure DevOps `System.Tags` merge output so ADO labels created through `/idea` and roadmap helper paths do not store JSON quote characters. Issue #506.
 - **1.11** (2026-06-03) — implements read-only Azure DevOps closure-status verification for the target linked work item and pins open/closed/missing/failure/defaulted-state cases. Issue #489.
 - **1.10** (2026-06-03) — adds neutral PR detail and closure-status helpers so the ship tail can record and verify tracker closure intent without embedding provider-specific tracker commands in skills. Issue #484.

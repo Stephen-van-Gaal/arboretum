@@ -21,7 +21,7 @@
 #   agent_ready_stale        agent-ready verified >7d ago, still unused
 #   orphan         updated >90d ago
 #   untriaged      no horizon:* label
-#   unshaped_next  horizon:next but body lacks a ## heading or is <200 chars
+#   unshaped_next  horizon:next but body lacks a Markdown ## or HTML <h2> heading or is <200 chars
 #   healthy        none of the above
 #
 # Output JSON:
@@ -139,7 +139,7 @@ jq -n \
       | (days_since($iss.updatedAt)) as $updated_d
       | (any($labels[]; startswith("horizon:"))) as $has_horizon
       | (any($labels[]; . == "horizon:next")) as $has_next
-      | (($body | test("(?m)^##[[:space:]]")) and (($body | length) >= 200)) as $shaped
+      | ((($body | test("(?m)^##[[:space:]]")) or ($body | test("(?i)<h2([[:space:]>])"))) and (($body | length) >= 200)) as $shaped
       | (([$iss.labels[].name] | index("agent-ready")) != null) as $is_ar
       | ($agent_ready[($n | tostring)]) as $ar
       | (
@@ -177,7 +177,7 @@ jq -n \
               "agent-ready verified \(days_since($ar.markerDate + "T00:00:00Z")) days ago, unused — past the 7-day window"
             elif ($updated_d > 90) then "Open \($updated_d) days; no merged-PR reference, no recent activity"
             elif ($has_horizon | not) then "No horizon:* label — needs triage"
-            elif ($has_next and ($shaped | not)) then "horizon:next but body lacks shape (needs a ## heading and >=200 chars)"
+            elif ($has_next and ($shaped | not)) then "horizon:next but body lacks shape (needs a Markdown ## or HTML <h2> heading and >=200 chars)"
             else "" end
           )
         }

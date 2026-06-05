@@ -485,6 +485,26 @@ PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_update 42 --add-label next-up >
   && pass "RL-14 (add-only labels)" \
   || fail_case "RL-14 (add-only labels)" "add-only update helper failed"
 
+ado_markdown_body=$'## Summary\n\nThis keeps **bold** and `code` while escaping <unsafe>.\n\n- one\n- two'
+: > "$AZ_STUB_PATCH_LOG"
+PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_update 42 --body "$ado_markdown_body" >/dev/null \
+  || fail_case "RL-28 (ADO body update renders Markdown)" "body update helper failed"
+if jq -e '
+  .[]
+  | select(
+      .path == "/fields/System.Description"
+      and (.value | contains("<h2>Summary</h2>"))
+      and (.value | contains("<strong>bold</strong>"))
+      and (.value | contains("<code>code</code>"))
+      and (.value | contains("&lt;unsafe&gt;"))
+      and (.value | contains("<ul>"))
+    )
+' "$AZ_STUB_PATCH_LOG" >/dev/null; then
+  pass "RL-28 (ADO body update renders Markdown)"
+else
+  fail_case "RL-28 (ADO body update renders Markdown)" "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
+fi
+
 PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_comment 42 --body "hello from roadmap" >/dev/null \
   || fail_case "RL-15 (comment)" "comment helper failed"
 PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_close 42 --reason completed --comment "done from roadmap" >/dev/null \
@@ -507,12 +527,19 @@ else
   fail_case RL-16 "labels=[$ado_labels]"
 fi
 
-ado_created=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_create --title "Captured idea" --label "horizon:later,component:skills" --body "Body")
+ado_created=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_create --title "Captured idea" --label "horizon:later,component:skills" --body "$ado_markdown_body")
 if printf '%s' "$ado_created" | jq -e '.number == 77 and (.labels | map(.name) | index("component:skills"))' >/dev/null \
    && grep -q 'boards work-item create --title Captured idea --type Issue' "$AZ_STUB_LOG"; then
   pass RL-17
 else
   fail_case RL-17 "out=[$ado_created] log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
+fi
+if grep -Fq '<h2>Summary</h2>' "$AZ_STUB_LOG" \
+   && grep -Fq '<strong>bold</strong>' "$AZ_STUB_LOG" \
+   && grep -Fq '&lt;unsafe&gt;' "$AZ_STUB_LOG"; then
+  pass "RL-29 (ADO create renders Markdown body)"
+else
+  fail_case "RL-29 (ADO create renders Markdown body)" "log=$(cat "$AZ_STUB_LOG" 2>/dev/null)"
 fi
 
 # RL-20 — Cedar-shaped Azure DevOps config: no .arboretum.yml, backend in

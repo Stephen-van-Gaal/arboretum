@@ -29,8 +29,8 @@ echo "$scan" | jq -e . >/dev/null || {
 fail=0
 
 # Each fixture issue maps to exactly one expected bucket.
-nums=(1 2 3 4 5 6 7 8)
-expected=(auto_close auto_close soft_resolved orphan untriaged unshaped_next healthy auto_close)
+nums=(1 2 3 4 5 6 7 8 9)
+expected=(auto_close auto_close soft_resolved orphan untriaged unshaped_next healthy auto_close healthy)
 descriptions=(
   "merged PR closing-keyword reference"
   "all acceptance checkboxes ticked"
@@ -40,6 +40,7 @@ descriptions=(
   "horizon:next but body unshaped"
   "horizon:next, shaped — control"
   "closing keyword in PR title only"
+  "horizon:next, ADO HTML shaped — control"
 )
 
 bucket_of() {
@@ -75,9 +76,9 @@ for i in "${!nums[@]}"; do
   fi
 done
 
-# Counts sum to all 8 fixture issues
+# Counts sum to all 9 fixture issues
 total="$(echo "$scan" | jq '[.counts | to_entries[].value] | add')"
-[ "$total" = "8" ] || { echo "FAIL: counts sum to $total, expected 8"; fail=1; }
+[ "$total" = "9" ] || { echo "FAIL: counts sum to $total, expected 9"; fail=1; }
 
 # Evidence strings are non-empty for every bucketed issue
 empty_ev="$(echo "$scan" | jq '[.buckets[][] | select(.evidence == "")] | length')"
