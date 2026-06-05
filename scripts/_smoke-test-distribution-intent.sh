@@ -41,6 +41,8 @@ forbid_grep() {
 }
 
 require_grep "--exclude='dev-tools/'" "$ROOT/.github/workflows/sync-public.yml" "public sync excludes dev-tools"
+require_grep "--exclude='\\.claude/skills/reflect-dev/'" "$ROOT/.github/workflows/sync-public.yml" "public sync excludes reflect-dev dogfood skill"
+require_grep "--exclude='scripts/_smoke-test-reflect-dev\\.sh'" "$ROOT/.github/workflows/sync-public.yml" "public sync excludes reflect-dev dogfood smoke test"
 require_grep 'Distribution intent by directory' "$ROOT/docs/specs/arboretum-as-plugin.spec.md" "arboretum-as-plugin spec defines directory contract"
 require_grep 'dev-tools/release' "$ROOT/docs/specs/arboretum-as-plugin.spec.md" "arboretum-as-plugin spec names dev-only release tooling"
 

@@ -228,6 +228,28 @@ git -C "$D" add -A; git -C "$D" commit -qm "edit dev skill"
 run_check "$D" base-ref >/dev/null \
   || fail ".claude/skills/dev-* change should pass without a bump"
 
+echo "=== check-version-bump.sh: .claude/skills/reflect-dev is dev-only ==="
+D="$TMP/check-skills-reflect-dev"; git_fixture "$D"
+mkdir -p "$D/.claude/skills/reflect-dev"
+echo "reflect-dev" > "$D/.claude/skills/reflect-dev/SKILL.md"
+git -C "$D" add -A; git -C "$D" commit -qm "add reflect-dev dogfood skill"
+printf '## Release Intent\nrelease-impact: none\nrelease-state: not-needed\n' > "$D/body.md"
+out="$(run_check_with_body "$D" base-ref "$D/body.md" 2>&1)" \
+  || fail ".claude/skills/reflect-dev should be classified dev-only: $out"
+grep -q "no shippable content changed" <<< "$out" \
+  || fail ".claude/skills/reflect-dev should report no shippable content changed: $out"
+
+echo "=== check-version-bump.sh: reflect-dev smoke test is dev-only ==="
+D="$TMP/check-reflect-dev-smoke"; git_fixture "$D"
+mkdir -p "$D/scripts"
+echo "#!/usr/bin/env bash" > "$D/scripts/_smoke-test-reflect-dev.sh"
+git -C "$D" add -A; git -C "$D" commit -qm "add reflect-dev dogfood smoke test"
+printf '## Release Intent\nrelease-impact: none\nrelease-state: not-needed\n' > "$D/body.md"
+out="$(run_check_with_body "$D" base-ref "$D/body.md" 2>&1)" \
+  || fail "scripts/_smoke-test-reflect-dev.sh should be classified dev-only: $out"
+grep -q "no shippable content changed" <<< "$out" \
+  || fail "scripts/_smoke-test-reflect-dev.sh should report no shippable content changed: $out"
+
 echo "=== check-version-bump.sh: non-dev .claude/skills/ paths are shippable ==="
 D="$TMP/check-skills-shipped"; git_fixture "$D"
 echo "more" >> "$D/.claude/skills/shipped/SKILL.md"
