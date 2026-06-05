@@ -70,5 +70,13 @@
     "labels": [{ "name": "type:bug" }, { "name": "horizon:next" }],
     "createdAt": "2026-05-11T00:00:00Z",
     "updatedAt": "2026-05-15T00:00:00Z"
+  },
+  {
+    "number": 10,
+    "title": "Close rendered ADO task list",
+    "body": "<h2>Acceptance</h2><ul><li>[x] First rendered task</li><li>[x] Second rendered task</li></ul>",
+    "labels": [{ "name": "type:docs" }, { "name": "horizon:now" }],
+    "createdAt": "2026-05-06T00:00:00Z",
+    "updatedAt": "2026-05-15T00:00:00Z"
   }
 ]

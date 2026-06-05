@@ -125,8 +125,12 @@ jq -n \
       | ($iss.number) as $n
       | ($iss.body // "") as $body
       | ([$iss.labels[].name]) as $labels
-      | ($body | [match("(?im)^[[:space:]]*[-*][[:space:]]+\\[[xX]\\]"; "g")] | length) as $done_boxes
-      | ($body | [match("(?im)^[[:space:]]*[-*][[:space:]]+\\[ \\]"; "g")] | length) as $open_boxes
+      | ($body | [match("(?im)^[[:space:]]*[-*][[:space:]]+\\[[xX]\\]"; "g")] | length) as $done_markdown_boxes
+      | ($body | [match("(?im)^[[:space:]]*[-*][[:space:]]+\\[ \\]"; "g")] | length) as $open_markdown_boxes
+      | ($body | [match("(?i)<li[^>]*>[[:space:]]*\\[[xX]\\]"; "g")] | length) as $done_html_boxes
+      | ($body | [match("(?i)<li[^>]*>[[:space:]]*\\[[[:space:]]\\]"; "g")] | length) as $open_html_boxes
+      | ($done_markdown_boxes + $done_html_boxes) as $done_boxes
+      | ($open_markdown_boxes + $open_html_boxes) as $open_boxes
       | (($done_boxes >= 1) and ($open_boxes == 0)) as $all_checked
       | ($recent_prs | map(select(
           (((.body // "") + " " + (.title // ""))) | test("(?i)\\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[[:space:]]+#" + ($n|tostring) + "\\b")

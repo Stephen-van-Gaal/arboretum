@@ -504,6 +504,32 @@ if jq -e '
 else
   fail_case "RL-28 (ADO body update renders Markdown)" "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
 fi
+if grep -q 'sys.stdin.read()' "$LIB" \
+   && ! grep -q 'python3 - "$1"' "$LIB"; then
+  pass "RL-28 (ADO renderer reads body from stdin)"
+else
+  fail_case "RL-28 (ADO renderer reads body from stdin)" "renderer still appears to use argv payloads"
+fi
+
+ado_html_existing_body=$'<!-- pipeline-state:current-stage -->\n**Current stage:** /land\n<!-- /pipeline-state:current-stage -->\n\n<h2>Summary</h2><p>Already stored as ADO HTML.</p>'
+: > "$AZ_STUB_PATCH_LOG"
+PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_update 42 --body "$ado_html_existing_body" >/dev/null \
+  || fail_case "RL-28 (ADO body update preserves existing HTML)" "body update helper failed"
+if jq -e '
+  .[]
+  | select(
+      .path == "/fields/System.Description"
+      and (.value | contains("<!-- pipeline-state:current-stage -->"))
+      and (.value | contains("<strong>Current stage:</strong> /land"))
+      and (.value | contains("<!-- /pipeline-state:current-stage -->"))
+      and (.value | contains("<h2>Summary</h2><p>Already stored as ADO HTML.</p>"))
+      and ((.value | contains("&lt;h2&gt;")) | not)
+    )
+' "$AZ_STUB_PATCH_LOG" >/dev/null; then
+  pass "RL-28 (ADO body update preserves existing HTML)"
+else
+  fail_case "RL-28 (ADO body update preserves existing HTML)" "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
+fi
 
 PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_comment 42 --body "hello from roadmap" >/dev/null \
   || fail_case "RL-15 (comment)" "comment helper failed"

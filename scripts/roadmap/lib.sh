@@ -531,18 +531,22 @@ roadmap_ado_work_item_patch() {
 }
 
 roadmap_ado_markdown_to_html() {
-  python3 - "$1" <<'PY'
+  python3 -c '
 import html
 import re
 import sys
 
-text = sys.argv[1]
+text = sys.stdin.read()
 lines = text.splitlines()
 out = []
 paragraph = []
 list_open = False
 code_open = False
 code_lines = []
+html_line = re.compile(
+    r"^</?(?:h[1-6]|p|ul|ol|li|pre|code|strong|em|b|i|div|span|br|a|blockquote|table|thead|tbody|tr|td|th)(?:\s|>|/)",
+    re.IGNORECASE,
+)
 
 
 def render_inline(value):
@@ -561,8 +565,16 @@ def close_list():
 
 def flush_paragraph():
     if paragraph:
-        out.append(f"<p>{render_inline(' '.join(paragraph))}</p>")
+        joined = " ".join(paragraph)
+        out.append(f"<p>{render_inline(joined)}</p>")
         paragraph.clear()
+
+
+def is_existing_html(value):
+    return (
+        (value.startswith("<!--") and value.endswith("-->"))
+        or html_line.match(value) is not None
+    )
 
 
 for line in lines:
@@ -586,6 +598,12 @@ for line in lines:
     if not stripped:
         flush_paragraph()
         close_list()
+        continue
+
+    if is_existing_html(stripped):
+        flush_paragraph()
+        close_list()
+        out.append(stripped)
         continue
 
     heading = re.match(r"^(#{2,3})\s+(.+)$", stripped)
@@ -614,7 +632,7 @@ if code_open:
     out.append(f"<pre><code>{html.escape(chr(10).join(code_lines), quote=False)}</code></pre>")
 
 sys.stdout.write("\n".join(out))
-PY
+'
 }
 
 roadmap_ado_issue_list() {
@@ -770,7 +788,7 @@ roadmap_ado_issue_update() {
     esac
   done
   if $has_body; then
-    body="$(roadmap_ado_markdown_to_html "$body")" || return $?
+    body="$(printf '%s' "$body" | roadmap_ado_markdown_to_html)" || return $?
     patch_ops="$(printf '%s' "$patch_ops" | jq --arg body "$body" \
       '. + [{op:"add", path:"/fields/System.Description", value:$body}]')" || return $?
   fi
@@ -841,7 +859,7 @@ roadmap_ado_issue_create() {
   [ -n "$title" ] || { echo "roadmap_tracker_issue_create: --title is required for azure-devops" >&2; return 2; }
   local args=(boards work-item create --title "$title" --type "$(roadmap_ado_work_item_type)" --output json --only-show-errors)
   if $has_body; then
-    body="$(roadmap_ado_markdown_to_html "$body")" || return $?
+    body="$(printf '%s' "$body" | roadmap_ado_markdown_to_html)" || return $?
     args+=(--description "$body")
   fi
   if [ "${#labels[@]}" -gt 0 ]; then
