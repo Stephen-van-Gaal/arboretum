@@ -41,7 +41,7 @@ The reader must succeed before interpreting results.
 4. If the script exits with code 1 (drift detected), summarize the issues found and suggest specific fixes
 5. For any spec with detected drift, surface that the user should run `/consolidate` to reconcile (which calls health-check with `--reconcile` automatically)
 6. Interpret Check 7 drift using the unified workflow rule:
-   - **Drift on a governed spec → run `/consolidate`.** `/consolidate` is the sole writer of governed specs. A Check 7 drift report means a governed spec's `# owner:`-mapped files have changed; the sanctioned remedy is `/consolidate` (which calls health-check with `--reconcile` automatically).
+   - **Drift on a governed spec → run `/consolidate`.** `/design` may create or edit approved intent/seam prose before `/build`; Check 7 drift means a governed spec's `# owner:`-mapped files have changed and generated/evidence authority needs built-state reconciliation. The sanctioned remedy is `/consolidate` (which calls health-check with `--reconcile` automatically).
    - **Do not suggest hand-authoring governed specs to resolve drift.** Surface drift as a `/consolidate` request.
    - **`active → stale` flips** still come from `/health-check --reconcile` (or `/consolidate` which passes `--reconcile`). The skill itself remains read-only.
 

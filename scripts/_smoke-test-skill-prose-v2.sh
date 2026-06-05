@@ -46,6 +46,22 @@ for f in "$START" "$DESIGN" "$CONSOLIDATE" "$FINISH" "$HEALTH"; do
 done
 ok "named pipeline policy - live skills do not expose retired v1/Path A/B routing"
 
+for f in \
+  AGENTS.md \
+  CLAUDE.md \
+  workflows/build.md \
+  docs/ARCHITECTURE.md \
+  docs/templates/AGENTS.md \
+  docs/templates/CLAUDE.md \
+  docs/templates/PRINCIPLES.md \
+  "$FINISH" \
+  "$HEALTH"; do
+  if grep -Eq 'governed specs are written only|governed specs are written \*\*only\*\*|sole writer of `docs/specs/\*\.spec\.md`|no workflow step hand-authors' "$f"; then
+    fail "pre-build durable-doc policy - $f still claims /consolidate is the only governed-spec writer"
+  fi
+done
+ok "pre-build durable-doc policy - live entrypoints allow approved intent/seam edits"
+
 # /start invariants
 
 # Case 1: Step 0 (flag read) exists in /start
@@ -115,15 +131,15 @@ grep -q "^## Unified design phase$" "$DESIGN" \
   || fail "case 7 — /design Unified design phase missing"
 ok "case 7 — /design Unified design phase present"
 
-# Case 8: /design unified phase has all 5 sub-sections
+# Case 8: /design unified phase has all 6 sub-sections
 UNIFIED_DESIGN=$(awk '
   /^## Unified design phase$/ { flag = 1; next }
   /^## / && flag { flag = 0 }
   flag { print }
 ' "$DESIGN")
-SUBS=$(echo "$UNIFIED_DESIGN" | grep -c "^### [1-5]\. ")
-[ "$SUBS" = "5" ] || fail "case 8 — /design unified phase expected 5 sub-sections, found $SUBS"
-ok "case 8 — /design unified phase has 5 sub-sections"
+SUBS=$(echo "$UNIFIED_DESIGN" | grep -c "^### [1-6]\. ")
+[ "$SUBS" = "6" ] || fail "case 8 — /design unified phase expected 6 sub-sections, found $SUBS"
+ok "case 8 — /design unified phase has 6 sub-sections"
 
 # Case 9: /design unified phase names all 4 Branch 1 modes (D5).
 SECTION_UNIFIED="$UNIFIED_DESIGN"
@@ -150,6 +166,16 @@ for phrase in "normal path" "failure or unknown path" "user decision points"; do
     || fail "case 10a — /design customer/operator guidance missing coverage phrase: $phrase"
 done
 ok "case 10a — /design unified phase covers customer/operator experience guidance"
+
+# Case 10b: /design invokes design-package for the human review packet and
+# durable authority gate before /build.
+echo "$SECTION_UNIFIED" | grep -q "design-package" \
+  || fail "case 10b — /design unified phase does not invoke design-package"
+for phrase in "Durable Document Change Set" "intent authority" "seam authority" "generated/evidence" "commit and push" "durable-doc diff"; do
+  echo "$SECTION_UNIFIED" | grep -q "$phrase" \
+    || fail "case 10b — /design design-package guidance missing phrase: $phrase"
+done
+ok "case 10b — /design invokes design-package and preserves durable-doc review gate"
 
 # Case 11: /design unified phase exits to /build with design spec path
 grep -q "/build docs/superpowers/specs" "$DESIGN" \

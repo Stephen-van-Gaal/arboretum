@@ -135,7 +135,7 @@ For coverage-baseline refactors, the wrap adapts: characterization-tests-first, 
 
 ### 4. Finish — `/finish`
 
-`/finish` verifies the implementation, invokes `/consolidate` to reconcile governed specs from built state, and prepares the PR. In the current general-release pipeline, `/consolidate` is the sole writer of `docs/specs/*.spec.md` (per design D3) — no workflow step hand-authors a governed spec.
+`/finish` verifies the implementation, invokes `/consolidate` to reconcile governed specs from built state, and prepares the PR. In the current general-release pipeline, `/design` may create or edit approved governed-spec intent/seam prose before `/build`; `/consolidate` remains the reconciler for generated/evidence sections and built-state updates.
 
 For docs-only changes, `/consolidate` has nothing to reconcile (no governed source changed); the effective tail is verify → `/pr`.
 

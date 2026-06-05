@@ -15,7 +15,7 @@ test-tiers:
 
 # {{Topic}} Design
 
-<!-- Compatibility/fallback template.
+<!-- Compatibility/fallback template for an AI-facing session document.
 
      Arboretum delegates design-spec generation to the configured build-support
      provider (currently Superpowers). Future providers may produce a different
@@ -24,9 +24,11 @@ test-tiers:
      is passed to /build; the body sections below are helpful guidance, not a
      full schema Arboretum owns.
 
-     Design specs are retained as historical records and may be harvested by
-     /consolidate, but the governed spec becomes the durable current-state
-     authority after build. -->
+     The human-facing review packet is produced by design-package from this
+     session artifact. Design specs are retained as historical records and may
+     be harvested by /consolidate. Durable intent/seam authority may be edited
+     during /design when implementation must obey it; generated/evidence
+     authority is reconciled after build. -->
 
 ## Context
 
@@ -44,6 +46,14 @@ test-tiers:
      may use this or equivalent behaviour-shaped provider output when it prompts
      for governed Behaviour updates. -->
 
+## Customer Experience
+
+<!-- HUMAN - Required when the change affects workflow steps, ship-tail
+     behaviour, error or warning states, user decisions or confirmations, or
+     trust boundaries where Arboretum might otherwise overclaim. Cover the
+     normal path, failure or unknown path, user decision points, confidence
+     claims, and what happens when Arboretum cannot know. -->
+
 ## Out Of Scope
 
 <!-- HUMAN - What this change explicitly will not do. Include boundaries that
@@ -59,12 +69,14 @@ test-tiers:
 
 ## Proposed Document Changes
 
-<!-- HUMAN - Which durable documents are expected to be created or changed by
-     /consolidate after build? Include proposed specs, definitions, contracts,
-     group docs, or architecture updates. -->
+<!-- HUMAN - Source section for design-package's Durable Document Change Set.
+     List specific durable documents, operation, high-level change, why it
+     matters, and phase. Phase should distinguish pre-build intent authority,
+     pre-build seam authority, and finish-reconciled generated/evidence
+     authority. -->
 
-| Document | Expected change |
-|---|---|
+| Document | Operation | High-Level Change | Why It Matters | Phase |
+|---|---|---|---|---|
 
 ## Implementation Shape
 

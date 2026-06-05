@@ -357,8 +357,8 @@ governed specs").
 
 ### 1. New-spec status — always `active`
 
-Every governed spec is born from built state at `/consolidate` time. Step 5b's
-status determination uses a single rule:
+When `/consolidate` creates a governed spec for a built surface, the spec is
+created from built state. Step 5b's status determination uses a single rule:
 
 - **New spec:** status is always `active` when owned files exist.
 
@@ -366,6 +366,10 @@ A spec that *should* still be at `draft` (no code yet) is being created
 prematurely — flag the case and defer the create until the build lands. If the
 user declines to defer, stop the consolidation pass; do not write a governed
 spec for an unbuilt surface.
+
+If `/design` already created approved durable intent/seam prose for the topic,
+preserve that human authority and reconcile generated/evidence sections into
+the existing spec instead of treating the pre-build prose as drift to overwrite.
 
 ### 2. D3 hybrid behaviour-supersession detection
 

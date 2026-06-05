@@ -10,7 +10,9 @@ layer: 0
 
 # Design
 
-Orchestrates the transition from idea to implementable governed spec. This is a wrapper that coordinates external design skills with arboretum's governance.
+Orchestrates the transition from idea to an implementable design package. This
+is a wrapper that coordinates external design skills with arboretum's
+governance.
 
 ## When to use
 
@@ -30,8 +32,9 @@ PIPELINE=$(bash scripts/read-pipeline-flag.sh)
 
 The reader must succeed before writing design artifacts. Arboretum currently
 supports one general-release pipeline: every everything-else change produces an
-in-flight design spec, the governed spec is born from built state at `/finish`,
-and planning folds into this skill.
+in-flight design spec, planning folds into this skill, approved durable
+intent/seam edits may be made before `/build`, and `/finish`/`/consolidate`
+reconciles generated/evidence sections from built state.
 
 ## Unified design phase
 
@@ -128,7 +131,48 @@ spec is written, invoke `superpowers:writing-plans` with a brief that includes:
 
 After writing-plans returns, verify the plan landed at `docs/plans/`, not `docs/superpowers/plans/`. If it landed in the wrong place, move it with `git mv` (preserves history) and update the `plan:` field in the design spec frontmatter to match the new path — `/build` reads that field, and a stale `plan:` pointer causes a "plan path not found" error.
 
-### 5. Exit to `/build`
+### 5. Design package: human overview and durable-document change set
+
+After the AI-facing session document and plan exist, invoke or follow
+`design-package` against the session document. The package is the human review
+packet for the session. It must include the overview and Durable Document
+Change Set with exact file paths, operations, high-level changes, reasons, and
+phase classification.
+
+The `design-package` skill must validate buildability after the `plan:` field is final,
+discover the document shape, retrieve available sections with both
+cataloged shape keys and discovered heading keys, classify the source as
+`strict-design-session`, `partial-design-session`,
+`custom-s2-design-session`, `plan`, or `unknown`, and fail closed on `unknown`.
+
+Pre-build durable edits are allowed only for intent authority and seam
+authority. Intent authority includes purpose, problem, scope, requirements,
+customer/operator experience, architecture boundaries, naming, splitting/lumping,
+trade-offs, and Behaviour/Boundaries-style human prose. Seam authority includes
+definitions and contracts implementation must obey.
+
+Generated/evidence authority is not finalized before build unless the evidence
+already exists. Ownership, Tests, Design record, decision harvest, register,
+and contract coverage remain `/finish`/`/consolidate` work.
+
+The package review must preserve the intent authority, seam authority, and
+generated/evidence boundaries in the Durable Document Change Set.
+
+Present the overview, plan, and durable-doc diff to the human. If approved,
+commit and push the approved durable intent/seam edits before `/build`. Do not
+log `/design exited` or hand off to `/build` until the human has approved the
+overview, plan, and durable-doc diff.
+
+Sequence summary:
+
+- `/start` -> `/design` is the issue/request intake seam.
+- `design` writes the session document, folds in the plan, then invokes
+  `design-package` to produce the human review packet and durable-doc diff.
+- `/design` -> `/build` remains the strict S2 contract seam.
+- `/build` refuses to self-heal invalid S2 input and returns to `/design` on
+  design contradictions.
+
+### 6. Exit to `/build`
 
 Both the design spec and the plan now exist. **Before exiting**, run the S2 producer self-check:
 

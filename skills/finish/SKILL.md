@@ -243,13 +243,14 @@ The ship tail sequence is: verify → identify affected specs → health-check �
 `/consolidate` → `/security-review` → local CI gate → backend-aware `/pr` →
 backend-aware `/land`.
 
-The model-level differences that matter to `/finish` are upstream: governed
-specs are written only by `/consolidate`, and everything-else pre-build work
-produces an in-flight design spec. Those choices change what `/consolidate`
-does in Step 4, not what `/finish` orchestrates:
+The model-level differences that matter to `/finish` are upstream:
+everything-else pre-build work produces an in-flight design spec, and `/design`
+may have already committed approved durable intent/seam edits. Those choices
+change what `/consolidate` reconciles in Step 4, not what `/finish`
+orchestrates:
 
 - Step 2's "specs affected by this branch" list will, for everything-else changes, always include the design spec at `docs/superpowers/specs/`; that spec drives `/consolidate`'s behaviour but is not itself a governed spec.
-- Step 4's `/consolidate` invocation is the **sole writer** of `docs/specs/*.spec.md`. The "If any affected spec is at `draft` or `stale`" check still applies — `/consolidate` flips `draft → active` when reconciliation succeeds.
+- Step 4's `/consolidate` invocation is the reconciler for generated/evidence sections and built-state updates. The "If any affected spec is at `draft` or `stale`" check still applies — `/consolidate` flips `draft → active` when reconciliation succeeds.
 - Step 5's security review is mandatory — invoke `/security-review` rather than offering it optionally. The skill self-gates and exits fast when no injection surface is present.
 
 These notes explain the current release pipeline; the procedure steps above

@@ -53,6 +53,10 @@ document_shapes:
         heading: Intended Behaviour
         content: What should be true after the change.
         required: yes
+      - key: customer-experience
+        heading: Customer Experience
+        content: Human-visible workflow path, unknown/failure path, decision points, and confidence claims.
+        required: no
       - key: out-of-scope
         heading: Out Of Scope
         content: Boundaries agents must not cross without escalation.
@@ -61,6 +65,10 @@ document_shapes:
         heading: Existing Authority
         content: Governed specs, definitions, contracts, architecture sections, and files found during survey.
         required: yes
+      - key: proposed-document-changes
+        heading: Proposed Document Changes
+        content: Source section for the Durable Document Change Set: durable files, operation, high-level change, reason, and phase.
+        required: no
       - key: implementation-shape
         heading: Implementation Shape
         content: High-level implementation approach, not task steps.
