@@ -43,6 +43,9 @@ venv/
 .arboretum/workspace-cache.json
 .arboretum/workspace-cache.json.*
 
+# Per-PR /land run-state (comments ledger, fix ledger) — regenerable, gitignored
+.arboretum/land/
+
 # Runtime lock files and worktree storage. Lock files are session-scoped;
 # worktrees are git-managed alternate working trees that should never be
 # tracked as ordinary files. Both the legacy `.claude/worktrees/` location

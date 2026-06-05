@@ -303,6 +303,24 @@ printf '%s\n' "$PR_WEB_URL"
 
 Present the PR URL to the user.
 
+### 9. Request reviewers
+
+After the PR is open (and not left as `--draft`), request the configured
+reviewers through the review seam — this replaces the older "is Copilot PR
+review enabled?" convention with the declared `.arboretum.yml` `review:` block:
+
+```bash
+PR_NUMBER="${PR_ID:-$(gh pr view --json number --jq .number 2>/dev/null)}"
+bash scripts/request-review.sh "$PR_NUMBER"
+```
+
+(or invoke `Skill arboretum:request-review` for the same effect with surfaced
+per-reviewer results). `request-review.sh` reads the `review:` block and fires
+each enabled reviewer via its own mechanism: on `github`, Copilot on draft→ready
+and Codex on its `@codex` comment; on `azure-devops`, the AI request is a stub
+(no native bot) and human reviewers are added directly. If the PR was created
+`--draft`, skip this step and request review when you mark it ready.
+
 ## Graceful Degradation
 
 - **No `REGISTER.md`:** Skip the Specs section in the PR body

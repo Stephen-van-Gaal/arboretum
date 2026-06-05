@@ -10,6 +10,7 @@
 | scripts/classify-pr-change.sh | docs/contracts/classify-pr-change.contract.md | full |
 | scripts/cleanup-merged-session.sh | docs/contracts/cleanup-merged-session.cli-contract.md | cli |
 | scripts/cleanup-tracker-closure.sh | docs/contracts/cleanup-tracker-closure.cli-contract.md | cli |
+| scripts/collect-review.sh | docs/contracts/collect-review.cli-contract.md | cli |
 | scripts/generate-coverage.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/generate-register.sh | docs/contracts/register-pipeline.contract.md | full |
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
@@ -25,12 +26,14 @@
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
 | scripts/read-patch-lane-config.sh | docs/contracts/read-patch-lane-config.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
+| scripts/read-review-config.sh | docs/contracts/read-review-config.cli-contract.md | cli |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
 | scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
 | scripts/refresh-stage-cache.sh | docs/contracts/refresh-stage-cache.contract.md | full |
 | scripts/refresh-update-cache.sh | docs/contracts/refresh-update-cache.contract.md | full |
 | scripts/refresh-workspace-cache.sh | docs/contracts/refresh-workspace-cache.contract.md | full |
+| scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
 | scripts/roadmap/audit-board.sh | docs/contracts/roadmap-audit-board.cli-contract.md | cli |
 | scripts/roadmap/build-orientation.sh | docs/contracts/roadmap-build-orientation.cli-contract.md | cli |
 | scripts/roadmap/install-labels.sh | docs/contracts/roadmap-install-labels.cli-contract.md | cli |

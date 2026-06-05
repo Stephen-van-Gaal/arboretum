@@ -143,7 +143,7 @@ Tests are tiered: unit (always) → contract (when shared definitions exist) →
 - **Commit messages:** Explain *why*, not *what*. Reference issues (e.g., "Closes #12").
 - **One logical change per commit.**
 - **Pull requests:** Use `/finish` for the full flow, or `/pr` directly.
-- **Copilot PR review: enabled.** After pushing, expect a review within ~15 minutes. Triage and respond to comments per the routine in the user's global `AGENTS.md`.
+- **Reviewer config lives in `.arboretum.yml` `review:` block** (Copilot + Codex enabled), read by `scripts/request-review.sh` / `scripts/collect-review.sh` — not by grepping this file. After pushing, expect reviews per each reviewer's configured cadence; triage and respond per the routine in the user's global `AGENTS.md`.
 
 ## Key Documents
 

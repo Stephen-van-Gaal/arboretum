@@ -130,7 +130,7 @@ GitHub path only.
 Poll two sources, then schedule a wake-up rather than blocking:
 
 1. CI checks — `gh pr checks <N>`.
-2. AI-reviewer feedback — line comments (`gh api repos/{owner}/{repo}/pulls/{N}/comments`) and review summaries (`gh api repos/{owner}/{repo}/pulls/{N}/reviews`), filtered to reviewers the repo has enabled (Copilot today; reviewer set is a Level-1 config fact — see the design spec).
+2. Reviewer feedback — run `bash scripts/collect-review.sh <N>`. It aggregates **every** comment surface (review summaries, inline threads, conversation comments; ADO PR threads on the `azure-devops` backend) into one backend-neutral normalized record written to the ledger `.arboretum/land/<N>/comments.json`, with a separate `approvals.json` channel. Read triage input from that **ledger file**, not from raw `gh api` calls or the captured stdout — the script is the single place that knows which surfaces to query and how to normalize them into one backend-neutral record set. (It collects every author's comments; it does not filter to the `.arboretum.yml` reviewer list — that config drives *requesting* review, in `request-review.sh`.) (M-C adds the `--unanswered` exit gate and cadence-aware re-request.)
 
 (Terminal PR state is checked in Phase 1, not here.)
 
