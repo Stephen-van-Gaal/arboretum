@@ -1414,6 +1414,51 @@ roadmap_set_prefix_exclusive_label() {
   roadmap_tracker_issue_update "$issue" "${args[@]}"
 }
 
+# roadmap_set_globally_exclusive_label <target-issue> <label> — make <label>
+# globally exclusive across open issues: remove it from every open holder that
+# is not <target-issue>, ensure the label exists, then apply it to the target.
+# This is the cross-issue counterpart to within-issue prefix exclusivity (e.g.
+# stage:*); /handoff uses it for the single-open-holder `next-up` invariant.
+# Ensure-exists is bare (no description/color) — callers own rich label metadata.
+# Honors DRY_RUN=1: prints the planned operations and performs no mutation.
+roadmap_set_globally_exclusive_label() {
+  local target="${1:-}" label="${2:-}"
+  if [ -z "$target" ] || [ -z "$label" ]; then
+    echo "roadmap_set_globally_exclusive_label: target-issue and label are required" >&2
+    return 2
+  fi
+  local dry="${DRY_RUN:-}" holder holders rc=0
+  # Enumerate current holders first. If the list command itself fails we cannot
+  # know who holds the label, so exclusivity is unverifiable — record it (rc=1)
+  # rather than proceeding as if there were no other holders. Capturing (vs a
+  # process-substitution pipe) is what makes this failure observable.
+  holders="$(roadmap_tracker_issue_list --label "$label" --state open --json number --jq '.[].number')" || rc=1
+  # Clear the label from every open holder except the target. A failed clear
+  # does not abort the sweep (best-effort across all holders), but it is NOT
+  # ignored: rc records it so the function returns nonzero rather than claiming
+  # exclusivity it did not achieve.
+  while IFS= read -r holder; do
+    [ -n "$holder" ] || continue
+    [ "$holder" = "$target" ] && continue
+    if [ "$dry" = 1 ]; then
+      echo "would remove '$label' from #$holder"
+    else
+      roadmap_tracker_issue_update "$holder" --remove-label "$label" || rc=1
+    fi
+  done <<< "$holders"
+
+  if [ "$dry" = 1 ]; then
+    echo "would add '$label' to #$target"
+    return 0
+  fi
+
+  # Bare ensure-exists; tolerate an already-exists race. Silence stdout+stderr so
+  # the contract's "no stdout on success" guarantee holds (cf. the prefix helper).
+  roadmap_label_exists "$label" || roadmap_tracker_label_create "$label" >/dev/null 2>&1 || true
+  roadmap_tracker_issue_update "$target" --add-label "$label" || rc=1
+  return "$rc"
+}
+
 # ── Epic-aware orientation (issue #562) ──────────────────────────────
 
 # roadmap_github_epic_graph <next_up_number> — emit graph JSON on stdout.

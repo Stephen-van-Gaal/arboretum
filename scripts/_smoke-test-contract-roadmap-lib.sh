@@ -753,4 +753,87 @@ else
   fail_case "RL-34 (ADO stage swap)" "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
 fi
 
+# RL-35 — roadmap_set_globally_exclusive_label clears the label from every other
+# open holder (never the target), ensures the label exists, and applies it to the
+# target. The tracker primitives are overridden at the function boundary so the
+# real composite is the unit under test.
+EXCL_LOG="$FIX/excl.log"; : > "$EXCL_LOG"
+# shellcheck source=scripts/roadmap/lib.sh
+( cd "$FIX" && source "$LIB"
+  roadmap_tracker_issue_list() { printf '%s\n' 11 22 574; }
+  roadmap_label_exists() { return 1; }   # label absent → exercise the create path
+  roadmap_tracker_label_create() { echo "label_create $*" >> "$EXCL_LOG"; }
+  roadmap_tracker_issue_update() { echo "issue_update $*" >> "$EXCL_LOG"; }
+  roadmap_set_globally_exclusive_label 574 next-up
+)
+if grep -qx 'issue_update 11 --remove-label next-up' "$EXCL_LOG" \
+   && grep -qx 'issue_update 22 --remove-label next-up' "$EXCL_LOG" \
+   && ! grep -qx 'issue_update 574 --remove-label next-up' "$EXCL_LOG" \
+   && grep -qx 'label_create next-up' "$EXCL_LOG" \
+   && grep -qx 'issue_update 574 --add-label next-up' "$EXCL_LOG"; then
+  pass RL-35
+else
+  fail_case RL-35 "log=$(cat "$EXCL_LOG" 2>/dev/null)"
+fi
+
+# RL-35b — with DRY_RUN=1 the helper performs no mutation (no issue_update,
+# no label_create) and prints a plan naming the cleared holder and the target.
+EXCL_DRY_LOG="$FIX/excl-dry.log"; : > "$EXCL_DRY_LOG"
+# shellcheck source=scripts/roadmap/lib.sh
+dry_out=$( cd "$FIX" && source "$LIB"
+  roadmap_tracker_issue_list() { printf '%s\n' 11 574; }
+  roadmap_label_exists() { return 1; }
+  roadmap_tracker_label_create() { echo "label_create $*" >> "$EXCL_DRY_LOG"; }
+  roadmap_tracker_issue_update() { echo "issue_update $*" >> "$EXCL_DRY_LOG"; }
+  DRY_RUN=1 roadmap_set_globally_exclusive_label 574 next-up
+)
+if [ ! -s "$EXCL_DRY_LOG" ] \
+   && printf '%s\n' "$dry_out" | grep -qxF "would remove 'next-up' from #11" \
+   && printf '%s\n' "$dry_out" | grep -qxF "would add 'next-up' to #574"; then
+  pass RL-35b
+else
+  fail_case RL-35b "mutations=$(cat "$EXCL_DRY_LOG" 2>/dev/null) out=[$dry_out]"
+fi
+
+# RL-35c — a failed holder clear is not silently ignored: the sweep still applies
+# the label to the target (best-effort), but the function returns nonzero so the
+# caller never reads success while exclusivity was not actually achieved.
+EXCL_FAIL_LOG="$FIX/excl-fail.log"; : > "$EXCL_FAIL_LOG"
+# shellcheck source=scripts/roadmap/lib.sh
+( cd "$FIX" && source "$LIB"
+  roadmap_tracker_issue_list() { printf '%s\n' 11 574; }
+  roadmap_label_exists() { return 0; }   # label exists → skip create
+  roadmap_tracker_issue_update() {
+    echo "issue_update $*" >> "$EXCL_FAIL_LOG"
+    case "$*" in *"11 --remove-label"*) return 1 ;; esac   # holder 11 clear fails
+  }
+  roadmap_set_globally_exclusive_label 574 next-up
+); excl_rc=$?
+if [ "$excl_rc" != 0 ] \
+   && grep -qx 'issue_update 11 --remove-label next-up' "$EXCL_FAIL_LOG" \
+   && grep -qx 'issue_update 574 --add-label next-up' "$EXCL_FAIL_LOG"; then
+  pass RL-35c
+else
+  fail_case RL-35c "rc=$excl_rc log=$(cat "$EXCL_FAIL_LOG" 2>/dev/null)"
+fi
+
+# RL-35d — when the holder *list* itself fails, exclusivity is unverifiable: no
+# clear is attempted (nothing enumerated), the target is still applied, and the
+# helper returns nonzero rather than claiming a success it cannot back.
+EXCL_LIST_LOG="$FIX/excl-list.log"; : > "$EXCL_LIST_LOG"
+# shellcheck source=scripts/roadmap/lib.sh
+( cd "$FIX" && source "$LIB"
+  roadmap_tracker_issue_list() { return 1; }   # cannot enumerate holders
+  roadmap_label_exists() { return 0; }
+  roadmap_tracker_issue_update() { echo "issue_update $*" >> "$EXCL_LIST_LOG"; }
+  roadmap_set_globally_exclusive_label 574 next-up
+); excl_list_rc=$?
+if [ "$excl_list_rc" != 0 ] \
+   && grep -qx 'issue_update 574 --add-label next-up' "$EXCL_LIST_LOG" \
+   && ! grep -q 'remove-label' "$EXCL_LIST_LOG"; then
+  pass RL-35d
+else
+  fail_case RL-35d "rc=$excl_list_rc log=$(cat "$EXCL_LIST_LOG" 2>/dev/null)"
+fi
+
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

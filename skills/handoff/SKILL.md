@@ -186,33 +186,40 @@ When `DRY_RUN=1`: print the list of files, the commit message that would be used
 
 ### Step 4: Enforce label exclusivity
 
-List all open items currently carrying `next-up`:
-
-```bash
-roadmap_tracker_issue_list --label next-up --state open --json number --jq '.[].number'
-```
-
-For each number that is **not** the target, remove the label:
-
-```bash
-roadmap_tracker_issue_update "$other" --remove-label next-up
-```
-
-This keeps the label genuinely exclusive without relying on tracker-side enforcement.
+`next-up` is **globally exclusive**: at most one open item carries it at a time.
+The cross-issue logic — list every open holder and remove the label from each
+one that is not the target — lives in `roadmap_set_globally_exclusive_label`
+(`scripts/roadmap/lib.sh`) and runs as part of Step 5's apply call, so there is
+no separate clearing loop to run by hand here. The helper keeps the label
+genuinely exclusive without relying on tracker-side enforcement.
 
 ### Step 5: Ensure the label exists, then apply
 
-```bash
-# Create the label if missing. The exit code from `label create` is
-# non-zero when it already exists; ignore that case.
-roadmap_tracker_label_create next-up \
-  --description "Queued for the next session — see /handoff (issue #155)" \
-  --color "b083d7" 2>/dev/null || true
+`roadmap_set_globally_exclusive_label "$N" next-up` clears every other open
+holder, ensures the label exists (bare), and applies it to the target in a
+single call. It honors `DRY_RUN=1` — printing the planned operations and
+mutating nothing.
 
-roadmap_tracker_issue_update "$N" --add-label next-up
+`/handoff` keeps its own rich, idempotent label creation as a pre-step so the
+first-ever `next-up` in a fresh repo carries a friendly description and color;
+the helper's ensure-exists is only a bare floor.
+
+```bash
+# Rich label metadata — idempotent; the helper's bare ensure-exists is the floor.
+if [ "${DRY_RUN:-}" = 1 ]; then
+  echo "would ensure label 'next-up' exists (description/color)"
+else
+  roadmap_tracker_label_create next-up \
+    --description "Queued for the next session — see /handoff (issue #155)" \
+    --color "b083d7" 2>/dev/null || true
+fi
+
+# Clear other holders + ensure-exists + apply to the target (honors DRY_RUN).
+roadmap_set_globally_exclusive_label "$N" next-up
 ```
 
-If `DRY_RUN=1`, print these commands instead of running them.
+When `DRY_RUN=1`, the guard above and the helper print what they would do; no
+tracker mutation runs.
 
 ### Step 5b: Post the handoff comment (pause mode)
 

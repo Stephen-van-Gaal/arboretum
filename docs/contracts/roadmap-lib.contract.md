@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.13
+version: 1.14
 producer-type: script
 consumer-type: script
 consumes:
@@ -9,6 +9,7 @@ produces: []
 related-designs:
   - docs/superpowers/specs/2026-05-26-pipeline-overhaul-ws5-governance-script-contracts-design.md
   - docs/superpowers/specs/2026-06-03-ado-closure-verification-design.md
+  - docs/superpowers/specs/2026-06-06-handoff-exclusive-label-helper-design.md
 owns:
   - scripts/roadmap/lib.sh
 ---
@@ -37,6 +38,7 @@ A side-effect-free-by-default sourceable library (the pulse-*write* helpers muta
 - **`roadmap_pulse_bootstrap`** — idempotently seeds the pulse file (no-op if present); bootstrap-as-today so no nag fires on install day.
 - **`roadmap_pulse_get_field KEY`** / **`roadmap_pulse_get_nag NAME`** — echo a scalar pulse field / `nag_last_fired[NAME]`; empty string when absent/null/file-missing.
 - **`roadmap_pulse_set_nag_fired NAME`** / **`roadmap_pulse_update_field KEY VALUE`** — atomically (`.tmp` + `mv`) update the pulse JSON; fail-silent on any error.
+- **`roadmap_set_globally_exclusive_label TARGET-ISSUE LABEL`** — makes LABEL globally exclusive across open issues: removes it from every open holder that is not TARGET-ISSUE, bare-ensures the label exists, then applies it to TARGET-ISSUE. The cross-issue counterpart to within-issue prefix exclusivity (e.g. `stage:*`); `/handoff` uses it for the single-open-holder `next-up` invariant. Honors `DRY_RUN=1` (prints the plan, mutates nothing). Composes the neutral `roadmap_tracker_*` helpers + `roadmap_label_exists`; rich label metadata (description/color) stays the caller's responsibility.
 
 The config/pulse helpers degrade gracefully: missing tooling (`yq`/`python3`/`jq`) prints a diagnostic and returns nonzero for the config getters, while the pulse helpers are uniformly fail-silent (missing file → empty return, never an error).
 
@@ -69,6 +71,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - `roadmap_tracker_issue_list ARGS...`, `roadmap_tracker_issue_show ISSUE ARGS...`, `roadmap_tracker_issue_comment ISSUE ARGS...`, `roadmap_tracker_issue_update ISSUE ARGS...`, `roadmap_tracker_issue_close ISSUE ARGS...`, `roadmap_tracker_issue_create ARGS...`, `roadmap_tracker_issue_comments ISSUE ARGS...`, `roadmap_tracker_label_list ARGS...`, `roadmap_tracker_label_create ARGS...`, `roadmap_tracker_pr_list ARGS...`, `roadmap_tracker_pr_show PR ARGS...`, `roadmap_tracker_pr_closure_status PR ISSUE` — pass-through args shaped for the neutral operation. The GitHub adapter preserves existing `gh`-compatible flags. The Azure DevOps adapter supports the subset used by roadmap scripts/skills: `--state`, `--limit`, `--label`, `--search`, `--json`, `--jq`, body/title edits, add/remove label, close/comment/create, label list/create, comment list, PR list, and normalized PR show.
 - `roadmap_pulse_get_field KEY`, `roadmap_pulse_get_nag NAME`, `roadmap_pulse_set_nag_fired NAME` — one arg.
 - `roadmap_pulse_update_field KEY VALUE` — two args.
+- `roadmap_set_globally_exclusive_label TARGET-ISSUE LABEL` — two required args (the sole-holder issue number and the label name); reads `DRY_RUN` from the environment.
 - All resolve their target file relative to `roadmap_project_root`; no stdin.
 
 ### Outputs
@@ -91,6 +94,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **`roadmap_pulse_path`** — one line: the pulse JSON path; empty when root unknown.
 - **`roadmap_pulse_get_field KEY`** / **`roadmap_pulse_get_nag NAME`** — one line: the field/nag value; empty string when absent, null, or file missing. Always returns 0.
 - **`roadmap_pulse_set_nag_fired` / `roadmap_pulse_update_field`** — no stdout; side effect is an atomic rewrite of the pulse JSON. Always returns 0 (fail-silent).
+- **`roadmap_set_globally_exclusive_label`** — no stdout on success; returns 0. Returns 2 with a stderr diagnostic when either argument is missing. Side effect: the label is removed from every open non-target holder, ensured to exist, and applied to the target. With `DRY_RUN=1`, prints one `would remove '<label>' from #<n>` line per cleared holder plus a final `would add '<label>' to #<target>` line, and performs no tracker mutation. A failed clear does not abort the sweep (every holder is still attempted, then the target applied), but it is not ignored: the helper returns nonzero if holder enumeration (`roadmap_tracker_issue_list`) fails, any holder `--remove-label` fails, or the target `--add-label` fails — so a caller never reads success while exclusivity was not actually achieved. On a list failure no clear is attempted (no holders are known), but the target is still applied.
 - The config getters print a tooling diagnostic to stderr and return nonzero when neither `yq` nor `python3` is available.
 
 ### Invariants
@@ -113,6 +117,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **ADO closed-state config reuse.** Azure DevOps closure verification MUST compare trimmed `System.State` values against trimmed `azure_devops.closed_states` / `azure_devops_closed_states` entries with the existing default `Closed,Done,Removed`. If the configured value is effectively empty after CSV splitting and trimming, the helper falls back to that default set.
 - **Cheap setup vs live reachability are distinct.** `roadmap_require_backend` is the cheap local prerequisite guard and may run frequently. `roadmap_probe_backend_access` performs a provider API read and should be used at workflow edges where a clear "this process can reach the backend" diagnostic is worth the extra call; neutral `roadmap_tracker_*` helpers do not call the probe internally.
 - **Pulse fail-silence.** All pulse readers return 0 with empty stdout when the file/field is missing; writers are atomic (`.tmp` + `mv`) and never error out the caller.
+- **Global label exclusivity.** `roadmap_set_globally_exclusive_label` MUST remove the label from every open holder except the target, MUST ensure the label exists before applying, and MUST apply it to the target. The target is never cleared. `DRY_RUN=1` MUST perform no tracker mutation (no remove, no create, no add) and instead print the planned operations. Rich label metadata (description/color) is the caller's responsibility; the helper's ensure-exists is bare.
 - **Tooling parity.** The `yq`/`jq` paths and the `python3` fallbacks are intended to produce equivalent output regardless of which tool is installed. `roadmap_config_list` captures `yq` output first and falls through to the python3 parser if the installed `yq` rejects the expression dialect, so runners with mikefarah `yq` and machines without `yq` keep the same list protocol.
 
 ## Test surface
@@ -148,9 +153,14 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-27:** ADO closure verification trims work item states and falls back to default closed states when `azure_devops.closed_states` / `azure_devops_closed_states` is effectively empty.
 - **RL-28:** `roadmap_tracker_issue_update --body` on Azure DevOps renders the supported Markdown subset from stdin-fed converter input, preserves existing ADO HTML block/comment lines, and patches `System.Description`.
 - **RL-29:** `roadmap_tracker_issue_create --body` on Azure DevOps sends the same rendered HTML description to Azure Boards while preserving the normalized created-item response shape.
+- **RL-35:** `roadmap_set_globally_exclusive_label 574 next-up`, with the tracker primitives overridden to report open holders `{11, 22, 574}` and the label absent, removes the label from `11` and `22` (never `574`), creates the label, and adds it to `574`.
+- **RL-35b:** the same helper with `DRY_RUN=1` performs no tracker mutation and prints the exact plan lines (`would remove 'next-up' from #11`, `would add 'next-up' to #574`).
+- **RL-35c:** when a holder's `--remove-label` fails, the helper still applies the label to the target (best-effort) but returns nonzero — a failed clear is surfaced, never silently swallowed.
+- **RL-35d:** when the holder enumeration (`roadmap_tracker_issue_list`) fails, the helper attempts no clear, still applies the label to the target, and returns nonzero — an unverifiable sweep is not reported as success.
 
 ## Versioning
 
+- **1.14** (2026-06-06) — adds `roadmap_set_globally_exclusive_label`, the cross-issue exclusive-label helper extracted from `/handoff` Step 4–5, with RL-35/35b/35c/35d pinning the clear-others / bare ensure-exists / apply-to-target sequence, the `DRY_RUN` plan output, and nonzero-return on failed clear or failed holder-enumeration (no silent exclusivity breach). Issue #574.
 - **1.13** (2026-06-04) — renders Arboretum-authored Markdown bodies to HTML for Azure DevOps `System.Description` create/update writes, preserves existing ADO HTML during read-modify-write updates, and keeps GitHub raw Markdown unchanged. Issue #540.
 - **1.12** (2026-06-03) — pins raw Azure DevOps `System.Tags` merge output so ADO labels created through `/idea` and roadmap helper paths do not store JSON quote characters. Issue #506.
 - **1.11** (2026-06-03) — implements read-only Azure DevOps closure-status verification for the target linked work item and pins open/closed/missing/failure/defaulted-state cases. Issue #489.
