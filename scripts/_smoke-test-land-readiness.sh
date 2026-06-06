@@ -97,6 +97,15 @@ check(
 check("workflow includes ready_for_review", "ready_for_review" in ci)
 check("workflow skips draft PR CI job", "github.event.pull_request.draft == false" in ci)
 check("workflow keeps stale-run cancellation", "cancel-in-progress: true" in ci)
+check("workflow has preflight job", "preflight:" in ci)
+check("workflow gates expensive CI on preflight", "needs: preflight" in ci)
+check("workflow skips duplicate preflight in expensive CI", 'ARBORETUM_CI_PREFLIGHT_DONE: "1"' in ci)
+check(
+    "workflow runs PR preflight with read-only token",
+    "permissions:\n      contents: read\n      pull-requests: read" in ci
+    and "--repair-commit-mode same-branch" not in ci
+    and "--push-safe-repairs" not in ci,
+)
 
 sys.exit(1 if fail else 0)
 PY

@@ -165,6 +165,15 @@ run_contract_coverage_check_if_available() {
   bash "$script" || fail=1
 }
 
+run_ci_preflight() {
+  if [ "${ARBORETUM_CI_PREFLIGHT_DONE:-0}" = "1" ]; then
+    echo "SKIP: CI preflight already completed by caller"
+    return 0
+  fi
+
+  bash scripts/ci-preflight.sh --apply-safe-repairs
+}
+
 ci_mode_triggered_by_path() {
   local path="$1"
 
@@ -368,6 +377,9 @@ run_smoke_tests_selected() {
 EFFECTIVE_CI_MODE="$(resolve_ci_mode "$CI_MODE")"
 echo "CI mode: $EFFECTIVE_CI_MODE"
 
+echo "=== CI preflight ==="
+run_ci_preflight || exit 1
+
 echo "=== ShellCheck ==="
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck_roots=()
@@ -415,9 +427,6 @@ bash scripts/validate-cross-refs.sh || fail=1
 
 echo "=== Contract coverage validation ==="
 run_contract_coverage_check_if_available
-
-echo "=== Health check (non-blocking) ==="
-bash scripts/health-check.sh "$ROOT" || echo "(health-check reported issues — non-blocking)"
 
 echo "=== Release gate ==="
 run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"

@@ -7,7 +7,9 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CI="$SCRIPT_DIR/ci-checks.sh"
+PREFLIGHT="$SCRIPT_DIR/ci-preflight.sh"
 [ -x "$CI" ] || { echo "FAIL: ci-checks.sh missing or not executable" >&2; exit 1; }
+[ -x "$PREFLIGHT" ] || { echo "FAIL: ci-preflight.sh missing or not executable" >&2; exit 1; }
 
 fail() {
   echo "FAIL: $1" >&2
@@ -41,9 +43,10 @@ make_ci_fixture() {
 
   mkdir -p "$bin" "$repo/scripts" "$repo/dev-tools/release" "$repo/.claude/hooks" "$repo/skills"
   cp "$CI" "$repo/scripts/ci-checks.sh"
-  chmod +x "$repo/scripts/ci-checks.sh"
+  cp "$PREFLIGHT" "$repo/scripts/ci-preflight.sh"
+  chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/ci-preflight.sh"
 
-  for tool in bash dirname find; do
+  for tool in bash dirname find grep; do
     ln -s "$(command -v "$tool")" "$bin/$tool"
   done
 
@@ -78,7 +81,8 @@ make_plugin_root_fixture() {
   : > "$repo/.github/ISSUE_TEMPLATE/agent-ready.md"
 
   cp "$CI" "$repo/scripts/ci-checks.sh"
-  chmod +x "$repo/scripts/ci-checks.sh"
+  cp "$PREFLIGHT" "$repo/scripts/ci-preflight.sh"
+  chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/ci-preflight.sh"
 
   for tool in bash cat chmod dirname find git grep head mkdir mktemp rm sed touch xargs; do
     ln -s "$(command -v "$tool")" "$bin/$tool"
@@ -103,7 +107,8 @@ make_consumer_ci_fixture() {
 
   mkdir -p "$bin" "$repo/scripts" "$repo/.claude/hooks" "$repo/docs/specs"
   cp "$CI" "$repo/scripts/ci-checks.sh"
-  chmod +x "$repo/scripts/ci-checks.sh"
+  cp "$PREFLIGHT" "$repo/scripts/ci-preflight.sh"
+  chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/ci-preflight.sh"
 
   for tool in bash cat chmod dirname find grep head mkdir mktemp rm sed touch xargs; do
     ln -s "$(command -v "$tool")" "$bin/$tool"
@@ -161,9 +166,10 @@ make_declared_command_consumer_fixture() {
 
   mkdir -p "$bin" "$repo/scripts/lib" "$repo/docs/specs"
   cp "$CI" "$repo/scripts/ci-checks.sh"
+  cp "$PREFLIGHT" "$repo/scripts/ci-preflight.sh"
   cp "$SCRIPT_DIR/read-test-config.sh" "$repo/scripts/read-test-config.sh"
   cp "$SCRIPT_DIR/lib/yaml-lite.sh" "$repo/scripts/lib/yaml-lite.sh"
-  chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/read-test-config.sh" "$repo/scripts/lib/yaml-lite.sh"
+  chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/ci-preflight.sh" "$repo/scripts/read-test-config.sh" "$repo/scripts/lib/yaml-lite.sh"
 
   python_exe=$(python3 -c 'import sys; print(sys.executable)')
 
@@ -213,10 +219,12 @@ make_consumer_installed_coverage_fixture() {
 
   mkdir -p "$bin" "$repo/scripts" "$repo/skills"
   cp "$CI" "$repo/scripts/ci-checks.sh"
+  cp "$PREFLIGHT" "$repo/scripts/ci-preflight.sh"
   cp "$SCRIPT_DIR/validate-coverage-manifest.sh" "$repo/scripts/validate-coverage-manifest.sh"
   cp "$SCRIPT_DIR/generate-coverage.sh" "$repo/scripts/generate-coverage.sh"
   chmod +x \
     "$repo/scripts/ci-checks.sh" \
+    "$repo/scripts/ci-preflight.sh" \
     "$repo/scripts/validate-coverage-manifest.sh" \
     "$repo/scripts/generate-coverage.sh"
 
@@ -248,11 +256,28 @@ run_ci_fixture() {
 tmp="$(new_tmp_dir)"
 make_ci_fixture "$tmp"
 out="$(REQUIRE_SHELLCHECK='' run_ci_fixture "$tmp" 2>&1)"
-for section in "ShellCheck" "Smoke tests" "Declared test command" "Cross-reference" "Contract coverage" "Health check" "Release gate"; do
+for section in "CI preflight" "ShellCheck" "Smoke tests" "Declared test command" "Cross-reference" "Contract coverage" "Release gate"; do
   grep -qF "$section" <<< "$out" || {
     echo "FAIL: ci-checks.sh output missing section '$section'" >&2; exit 1; }
 done
-echo "PASS: ci-checks.sh runs and reports all 7 sections"
+first_section="$(grep '^===' <<< "$out" | head -1)"
+[ "$first_section" = "=== CI preflight ===" ] || fail "preflight should be the first section" "$out"
+grep -nF 'bash scripts/ci-preflight.sh --apply-safe-repairs' "$CI" >/dev/null \
+  || fail "ci-checks.sh does not call ci-preflight with safe repairs"
+if grep -qF "Health check (non-blocking)" <<< "$out"; then
+  fail "health-check drift should no longer appear only as a late non-blocking tail" "$out"
+fi
+echo "PASS: ci-checks.sh runs preflight before expensive sections"
+
+tmp="$(new_tmp_dir)"
+make_ci_fixture "$tmp"
+skip_preflight_out="$(ARBORETUM_CI_PREFLIGHT_DONE=1 REQUIRE_SHELLCHECK='' run_ci_fixture "$tmp" 2>&1)"
+grep -qF "SKIP: CI preflight already completed by caller" <<< "$skip_preflight_out" || {
+  echo "FAIL: ARBORETUM_CI_PREFLIGHT_DONE did not skip local preflight" >&2
+  echo "$skip_preflight_out" >&2
+  exit 1
+}
+echo "PASS: ARBORETUM_CI_PREFLIGHT_DONE skips local preflight"
 
 tmp="$(new_tmp_dir)"
 make_ci_fixture "$tmp"

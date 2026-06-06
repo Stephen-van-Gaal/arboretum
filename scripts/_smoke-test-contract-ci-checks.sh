@@ -16,22 +16,25 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$SCRIPT_DIR/ci-checks.sh"
+CONTRACT="$SCRIPT_DIR/../docs/contracts/ci-checks.cli-contract.md"
 
 [ -f "$TARGET" ] || { echo "FAIL: ci-checks.sh not found at $TARGET" >&2; exit 1; }
+[ -f "$CONTRACT" ] || { echo "FAIL: ci-checks contract not found at $CONTRACT" >&2; exit 1; }
 
 fail=0
 
 # ---------------------------------------------------------------------------
 # CLI-1: Stage-banner sequence
-# All seven banners must be present and appear in the documented order.
+# Preflight plus the six expensive-stage banners must be present and appear in
+# the documented order.
 # ---------------------------------------------------------------------------
 BANNERS=(
+  "=== CI preflight ==="
   "=== ShellCheck ==="
   "=== Smoke tests ==="
   "=== Declared test command ==="
   "=== Cross-reference validation ==="
   "=== Contract coverage validation ==="
-  "=== Health check (non-blocking) ==="
   "=== Release gate ==="
 )
 
@@ -48,12 +51,12 @@ for banner in "${BANNERS[@]}"; do
     prev_line="$line_no"
   fi
 done
-[ "$fail" -eq 0 ] && echo "PASS: CLI-1 — all seven stage banners present and in order"
+[ "$fail" -eq 0 ] && echo "PASS: CLI-1 — preflight plus expensive-stage banners present and in order"
 
 # ---------------------------------------------------------------------------
-# CLI-2: fail-flag accumulation
-# The script must initialise fail=0 and accumulate blocking failures.
-# The health-check line must NOT have || fail=1 (non-blocking).
+# CLI-2: preflight stop gate and fail-flag accumulation
+# The script must initialise fail=0 and accumulate expensive-stage blocking
+# failures. Preflight is different: it exits immediately before expensive work.
 # ---------------------------------------------------------------------------
 if ! grep -q '^fail=0' "$TARGET"; then
   echo "FAIL: CLI-2 — 'fail=0' initialisation not found" >&2
@@ -72,13 +75,21 @@ else
   echo "PASS: CLI-2b — found $fail1_count '|| fail=1' accumulations (≥4)"
 fi
 
-# Health-check line must absorb its exit code, not set fail=1
-health_line=$(grep "health-check.sh" "$TARGET" | grep -v "^#" | head -1)
-if echo "$health_line" | grep -q '|| fail=1'; then
-  echo "FAIL: CLI-2 — health-check line sets fail=1; it must be non-blocking" >&2
+if grep -q '^run_ci_preflight()' "$TARGET" \
+  && grep -q 'ARBORETUM_CI_PREFLIGHT_DONE' "$TARGET" \
+  && grep -q 'bash scripts/ci-preflight.sh --apply-safe-repairs' "$TARGET" \
+  && grep -q 'run_ci_preflight || exit 1' "$TARGET"; then
+  echo "PASS: CLI-2c — preflight is a first stop gate with hosted skip guard"
+else
+  echo "FAIL: CLI-2c — preflight stop gate shape is missing" >&2
+  fail=1
+fi
+
+if grep -q 'Health check (non-blocking)' "$TARGET"; then
+  echo "FAIL: CLI-2d — late non-blocking health-check tail is still present" >&2
   fail=1
 else
-  echo "PASS: CLI-2c — health-check is non-blocking (no '|| fail=1' on health-check line)"
+  echo "PASS: CLI-2d — late non-blocking health-check tail is absent"
 fi
 
 # ---------------------------------------------------------------------------
@@ -88,6 +99,13 @@ if grep -q '^exit \$fail' "$TARGET"; then
   echo "PASS: CLI-3 — script ends with 'exit \$fail'"
 else
   echo "FAIL: CLI-3 — 'exit \$fail' not found as a standalone line" >&2
+  fail=1
+fi
+
+if grep -q 'Preflight failures stop before the expensive-stage accumulator' "$CONTRACT"; then
+  echo "PASS: CLI-3 — contract documents preflight early exit boundary"
+else
+  echo "FAIL: CLI-3 — contract still overstates final fail-flag exit discipline" >&2
   fail=1
 fi
 
