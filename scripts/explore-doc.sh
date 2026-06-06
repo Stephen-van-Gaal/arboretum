@@ -29,6 +29,7 @@ if ! bash "$YAML_LITE" frontmatter "$1" >"$FRONTMATTER_PARSED" 2>"$FRONTMATTER_E
 fi
 
 python3 - "$ROOT" "$1" "$CATALOG_PARSED" "$FRONTMATTER_PARSED" <<'PY'
+import fnmatch
 import os
 import re
 import sys
@@ -102,6 +103,27 @@ def infer_shape(doc, shapes):
     for shape_name, shape in shapes.items():
         template = shape.get("template")
         if template and os.path.normpath(template) == rel:
+            return shape_name
+    # Convention-based instance-path inference (applied only when frontmatter
+    # and template-path resolution both fail). The glob `*` is single-segment:
+    # the document must live directly in the named directory, so nested or
+    # archived paths (e.g. docs/specs/_deprecated/*.spec.md) stay `unknown`
+    # rather than being misclassified as live instances.
+    # Future enhancement: drive these conventions from a catalog-level
+    # `instances:` glob field rather than hardcoding them here.
+    conventions = [
+        ("docs/specs", "*.spec.md", "governed-spec"),
+        ("docs/superpowers/specs", "*-design.md", "design-spec"),
+        ("docs/plans", "*.md", "plan"),
+    ]
+    rel_dir = os.path.dirname(rel)
+    rel_base = os.path.basename(rel)
+    for pattern_dir, pattern_base, shape_name in conventions:
+        if (
+            shape_name in shapes
+            and rel_dir == os.path.normpath(pattern_dir)
+            and fnmatch.fnmatch(rel_base, pattern_base)
+        ):
             return shape_name
     return None
 

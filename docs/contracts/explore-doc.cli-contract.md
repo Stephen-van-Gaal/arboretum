@@ -38,7 +38,8 @@ Shape identity resolves in this order:
 
 1. leading frontmatter `document-shape: <shape>`;
 2. catalog `template:` path matching the document path relative to the repository root;
-3. `unknown`.
+3. convention-based instance-path inference for documents living directly in a known instance directory (`docs/specs/*.spec.md` → `governed-spec`, `docs/superpowers/specs/*-design.md` → `design-spec`, `docs/plans/*.md` → `plan`), mapping only to shapes present in the catalog. The `*` is single-segment, so nested or archived paths (e.g. `docs/specs/_deprecated/*.spec.md`) are not classified;
+4. `unknown`.
 
 Output is newline-delimited `key=value` records:
 
@@ -68,6 +69,7 @@ Read-only. The command writes only to stdout/stderr and temporary files under th
 - **CLI-3: Shape inference from path.** A document without frontmatter still resolves a shape when its repository-relative path matches a catalog `template:` value.
 - **CLI-4: Duplicate semantic match failure.** A cataloged key whose heading or alias matches more than one document heading exits non-zero and names the ambiguity.
 - **CLI-5: Alias protocol.** Cataloged aliases are emitted as `section[N].alias=<semantic-key>` records for downstream retrieval.
+- **CLI-6: Instance-path inference.** A real instance under `docs/specs/*.spec.md`, `docs/superpowers/specs/*-design.md`, or `docs/plans/*.md` resolves to its catalog shape even without frontmatter or a `template:` match, while nested or archived paths (e.g. `docs/specs/_deprecated/*.spec.md`) stay `document-shape=unknown`.
 
 ## Versioning
 
