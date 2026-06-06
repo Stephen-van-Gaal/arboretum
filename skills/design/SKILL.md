@@ -62,7 +62,7 @@ fi
 Before any design work, read existing governed code that may be relevant to the topic:
 
 1. List `docs/specs/` and read any spec whose name plausibly overlaps the request topic — don't infer from filenames alone.
-2. Read `docs/ARCHITECTURE.md` — scan the section relevant to the request area.
+2. Read `docs/ARCHITECTURE.md` via bounded discovery — `bash scripts/explore-doc.sh docs/ARCHITECTURE.md` to list headings, then `bash scripts/read-doc-section.sh docs/ARCHITECTURE.md "<relevant heading>"` for the section(s) relevant to the request area. Fall back to a whole-file read only when discovery is insufficient, recording the reason in the survey summary.
 3. Read `docs/REGISTER.md` — identify the owning spec for any files the request mentions explicitly.
 
 Survey is owned exclusively by this skill for everything-else work. `/start`

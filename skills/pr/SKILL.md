@@ -109,9 +109,12 @@ Capture the output. If it reports issues, present them and ask:
 
 If `docs/REGISTER.md` exists:
 
-1. Read the register
-2. For each changed file, find which spec owns it (match against the Spec Index table's "owns" column)
-3. For each owning spec, extract its status
+1. Read the register's Spec Index with a bounded section read (it carries both ownership and status, so no per-spec read is needed):
+   ```bash
+   bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"
+   ```
+2. For each changed file, find which spec owns it (match against the Spec Index table's `Owns` column)
+3. Read each owning spec's status from the same Spec Index `Status` column
 4. Note any changed files not listed in any spec's ownership
 
 Build a specs table:

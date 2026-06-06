@@ -200,7 +200,7 @@ uses `roadmap_tracker_issue_close`.
 
 If `docs/REGISTER.md` exists:
 
-1. Read the register.
+1. Read the register's Spec Index — `bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"` (the `Status` column gives each spec's state without a whole-file read; fall back to a whole-file read if the heading is missing).
 2. Confirm that specs touched by the merged PR are at status `active` (the new state machine: `draft / active / stale`).
 3. If any spec is still at `draft`, suggest running `/consolidate` to flip it to `active`. If any spec is at `stale`, suggest running `/consolidate` to reconcile drift.
 4. No manual promotion needed — `/consolidate` handles status flips automatically.

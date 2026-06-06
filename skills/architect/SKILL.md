@@ -139,9 +139,9 @@ After user approval, generate:
 
 ### Step 1: Assess current state
 
-Read existing project artifacts to build understanding:
-- `ARCHITECTURE.md` or `docs/ARCHITECTURE.md`
-- `docs/REGISTER.md`
+Read existing project artifacts to build understanding. Prefer bounded reads over whole-file reads — use `bash scripts/explore-doc.sh <doc>` to discover headings, then `bash scripts/read-doc-section.sh <doc> "<heading>"` for the relevant section(s); fall back to a whole-file read only when discovery is insufficient:
+- `ARCHITECTURE.md` or `docs/ARCHITECTURE.md` — scan the sections relevant to the assessment (e.g. `§1 — Product JTBD`, `§5 — Component Jobs`)
+- `docs/REGISTER.md` — the `Spec Index` section (`bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"`)
 - Specs in `docs/specs/`
 - Source files (scan directory structure and key files)
 

@@ -95,8 +95,11 @@ If `docs/REGISTER.md` exists:
    git diff $BASE...HEAD --name-only
    ```
 
-2. Read the register and map changed files to owning specs
-3. Read each owning spec and check its status
+2. Read the register's Spec Index with a bounded section read — it carries both the file→spec mapping and each spec's status, so no per-spec read is needed:
+   ```bash
+   bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"
+   ```
+   The Spec Index table (`| Spec | Status | Owner | Owns (files/directories) |`) maps changed files to owning specs via the `Owns` column and gives each spec's state via the `Status` column. If the `Spec Index` heading is missing (malformed register), fall back to a whole-file read of `docs/REGISTER.md`.
 
 Present:
 ```
