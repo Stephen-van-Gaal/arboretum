@@ -1,6 +1,6 @@
 ---
 seam: trust-config
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes:
@@ -22,11 +22,11 @@ The seam around the `.arboretum.yml` `trust.journey_log_authors` allowlist (#249
 
 Two scripts own this seam.
 
-`scripts/read-trust-config.sh` — producer-type: `script`. Takes an optional config path (default `.arboretum.yml`). Resolves presence textually (a line-anchored `journey_log_authors:` grep) because `scripts/lib/yaml-lite.sh` cannot distinguish an explicit empty list `[]` from an absent key — both yield no value lines. Emits `present=yes|no` on the first line, then zero or more `author=<login>` lines (one per allowlisted handle, parsed from yaml-lite's `trust.journey_log_authors[]=` rows). Exits `0` on success; `1` on missing config file or invalid YAML.
+`scripts/read-trust-config.sh` — producer-type: `script`. Takes an optional config path (default `.arboretum.yml`). Resolves presence from a `journey_log_authors:` key on any non-comment line (block form or flow form `trust: {journey_log_authors: ...}`) OR from any parsed allowlist rows, because `scripts/lib/yaml-lite.sh` cannot distinguish an explicit empty list `[]` from an absent key — both yield no value lines, and a flow-form key is not on its own line. Emits `present=yes|no` on the first line, then zero or more `author=<login>` lines (one per allowlisted handle, parsed from yaml-lite's `trust.journey_log_authors[]=` rows). Exits `0` on success; `1` on missing config file or invalid YAML.
 
 `scripts/manage-trust.sh` — producer-type: `script`. Lifecycle writer with two subcommands:
-- `instantiate <config> [<login>...]` — **additive-only**. Writes the trust block ONLY when the key is absent; a no-op (exit 0) when a block already exists, so it NEVER overwrites an existing allowlist. With no explicit logins it defaults to `gh api user --jq .login` + `github-actions[bot]` (best-effort; on `gh` failure it writes a hinted placeholder + bot and warns).
-- `set <config> <login>...` — authoritative replace: write exactly the given logins (create the block if absent, replace the list in place if present). Human-driven (the `/upgrade` curation path).
+- `instantiate <config> [<login>...]` — **additive-only**. Writes the trust block ONLY when the key is absent; a no-op (exit 0) when a block already exists, so it NEVER overwrites an existing allowlist. With no explicit logins it defaults to `gh api user --jq .login` + `github-actions[bot]`; on `gh` failure it leaves the key ABSENT (the permissive migration mode applies) and exits non-zero — it does NOT write a bot-only block, which under strict mode would silently drop the human runner's own entries (#598).
+- `set <config> <login>...` — authoritative replace: write exactly the given logins (create the block if absent; if present, replace only the `journey_log_authors` sub-list in place, preserving the block position and any sibling `trust:` keys). Refuses (exit 1) when a present trust block is not in block form (`trust:` on its own line) rather than duplicating it. Human-driven (the `/upgrade` curation path).
 
 Both write paths validate each login against the GitHub handle charset (`^[A-Za-z0-9][A-Za-z0-9-]*(\[bot\])?$`) and refuse (exit 1, no write) on any non-conforming handle, so a crafted login cannot inject YAML structure.
 

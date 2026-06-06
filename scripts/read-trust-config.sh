@@ -19,20 +19,34 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YAML_LITE="$SCRIPT_DIR/lib/yaml-lite.sh"
 [ -f "$YAML_LITE" ] || { echo "read-trust-config.sh: yaml-lite helper not found at $YAML_LITE" >&2; exit 1; }
 
-# Presence: textual check (yaml-lite drops empty lists, so it cannot tell
-# present-but-empty from absent). The key name is unique in the constrained
-# YAML subset, so a line-anchored grep is sufficient.
-if grep -Eq '^[[:space:]]*journey_log_authors[[:space:]]*:' "$CONFIG"; then
-  echo "present=yes"
-else
-  echo "present=no"
-fi
-
+# Parse first so presence can also be derived from parsed rows.
 if ! PARSED=$(bash "$YAML_LITE" file "$CONFIG" 2>&1); then
   echo "read-trust-config.sh: invalid YAML-lite in $CONFIG" >&2
   printf '%s\n' "$PARSED" >&2
   exit 1
 fi
 
-printf '%s\n' "$PARSED" \
-  | awk -F= '$1 == "trust.journey_log_authors[]" { print "author=" substr($0, index($0, "=") + 1) }'
+AUTHORS=$(printf '%s\n' "$PARSED" \
+  | awk -F= '$1 == "trust.journey_log_authors[]" { print "author=" substr($0, index($0, "=") + 1) }')
+
+# Presence: the key is "present" if it appears as a `journey_log_authors:` key
+# on any non-comment line (block form `  journey_log_authors:` OR flow form
+# `trust: {journey_log_authors: ...}`) OR if yaml-lite parsed any entries. The
+# key-line check (skipping whole-line comments) catches the empty-list cases in
+# both forms (`[]` parses to zero rows but is an explicit "trust nobody"); the
+# parsed-rows check catches populated configs. Without recognizing the flow form
+# a configured allowlist would read as present=no and silently disable strict
+# mode (#249 / #598 review, Copilot+Codex).
+present_key=$(awk '
+  { t=$0; sub(/^[[:space:]]+/,"",t) }
+  t ~ /^#/ { next }
+  /journey_log_authors[[:space:]]*:/ { found=1 }
+  END { print (found ? "yes" : "no") }
+' "$CONFIG")
+if [ "$present_key" = "yes" ] || [ -n "$AUTHORS" ]; then
+  echo "present=yes"
+else
+  echo "present=no"
+fi
+
+printf '%s\n' "$AUTHORS" | sed '/^$/d'

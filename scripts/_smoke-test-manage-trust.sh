@@ -12,6 +12,19 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $1" >&2; [ -n "${2:-}" ] && printf '%s\n' "$2" >&2; exit 1; }
 ok()   { echo "PASS: $1"; }
 
+# Deterministic gh stub: default-instantiate (no logins) resolves a login via
+# `gh api user`. Stub it so the test does not depend on CI gh authentication.
+BINDIR="$TMP/.bin"; mkdir -p "$BINDIR"
+cat > "$BINDIR/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$* " in
+  "api user "*|"api user") echo "stubbed-runner"; exit 0 ;;
+  *) echo "gh stub: unhandled: $*" >&2; exit 1 ;;
+esac
+STUB
+chmod +x "$BINDIR/gh"
+PATH="$BINDIR:$PATH"; export PATH
+
 # Case 1: instantiate on an absent key appends the block with given logins.
 cat > "$TMP/a.yml" <<'YML'
 layer: 2
@@ -98,5 +111,59 @@ printf 'trust:\n  journey_log_authors:\n   - a\n  - b\nbad: : :\n' > "$TMP/h.yml
 bash "$MGR" instantiate "$TMP/h.yml" x 2>/dev/null \
   && fail "case 8 — instantiate must fail on malformed config, not append"
 ok "case 8 — malformed config fails loudly (no blind append)"
+
+# Case 9: `set` preserves SIBLING keys under an existing trust: block
+# (#249 review, Codex [B]) — replaces only journey_log_authors.
+cat > "$TMP/i.yml" <<'YML'
+layer: 0
+trust:
+  journey_log_authors:
+    - old
+  some_other_setting: keep-me
+YML
+bash "$MGR" set "$TMP/i.yml" fresh || fail "case 9 — set should succeed"
+grep -Fq 'some_other_setting: keep-me' "$TMP/i.yml" \
+  || fail "case 9 — sibling trust key must be preserved" "$(cat "$TMP/i.yml")"
+out=$(bash "$READER" "$TMP/i.yml")
+echo "$out" | grep -qx 'author=fresh' || fail "case 9 — fresh login should be written" "$out"
+echo "$out" | grep -q 'author=old' && fail "case 9 — old login should be replaced" "$out"
+ok "case 9 — set preserves sibling trust keys"
+
+# Case 10: when `gh api user` fails, default instantiate leaves the key ABSENT
+# (permissive migration) instead of writing a bot-only strict block, and exits
+# non-zero so callers surface "not seeded" (#249 review, Codex [E]).
+FAILBIN="$TMP/.failbin"; mkdir -p "$FAILBIN"
+cat > "$FAILBIN/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh: unavailable" >&2; exit 1
+STUB
+chmod +x "$FAILBIN/gh"
+cat > "$TMP/j.yml" <<'YML'
+layer: 0
+YML
+if PATH="$FAILBIN:$PATH" bash "$MGR" instantiate "$TMP/j.yml" 2>/dev/null; then
+  fail "case 10 — instantiate must exit non-zero when gh login unresolvable"
+fi
+grep -q 'journey_log_authors' "$TMP/j.yml" \
+  && fail "case 10 — must NOT write a bot-only block; leave key absent" "$(cat "$TMP/j.yml")"
+ok "case 10 — gh-unavailable leaves trust unconfigured (permissive), exits non-zero"
+
+# Case 11: set fully removes old entries even when a blank line splits the list
+# (#598 review, Copilot+Codex P2), and preserves a sibling key.
+printf 'trust:\n  journey_log_authors:\n    - a\n\n    - b\n  sib: keep\n' > "$TMP/bl.yml"
+bash "$MGR" set "$TMP/bl.yml" only || fail "case 11 — set should succeed"
+grep -Eq '^[[:space:]]*- a$' "$TMP/bl.yml" && fail "case 11 — old entry a not removed" "$(cat "$TMP/bl.yml")"
+grep -Eq '^[[:space:]]*- b$' "$TMP/bl.yml" && fail "case 11 — old entry b (after blank) not removed" "$(cat "$TMP/bl.yml")"
+grep -Fq 'sib: keep' "$TMP/bl.yml" || fail "case 11 — sibling key lost" "$(cat "$TMP/bl.yml")"
+out=$(bash "$READER" "$TMP/bl.yml"); echo "$out" | grep -qx 'author=only' || fail "case 11 — only-login missing" "$out"
+ok "case 11 — set removes blank-split old entries, preserves sibling"
+
+# Case 12: set recognizes a block-form trust: line with an inline comment.
+printf 'trust: # project trust settings\n  journey_log_authors:\n    - a\n' > "$TMP/ic.yml"
+bash "$MGR" set "$TMP/ic.yml" b || fail "case 12 — set should succeed with inline-comment trust line"
+out=$(bash "$READER" "$TMP/ic.yml")
+echo "$out" | grep -qx 'author=b' || fail "case 12 — b missing" "$out"
+echo "$out" | grep -q 'author=a' && fail "case 12 — a should be replaced" "$out"
+ok "case 12 — set handles inline-comment trust: line"
 
 echo "ALL manage-trust smoke tests passed."

@@ -86,16 +86,15 @@ case "$CMD" in
       if [ -n "$seed_login" ]; then
         _append_block "$CONFIG" "$seed_login" "github-actions[bot]"
       else
-        # gh unavailable: write a hinted block + bot and warn.
-        {
-          echo ""
-          echo "# Journey-log author allowlist (#249). Add the GitHub login that runs the pipeline."
-          echo "trust:"
-          echo "  journey_log_authors:"
-          echo "    # - <your-github-login>"
-          echo "    - github-actions[bot]"
-        } >> "$CONFIG"
-        echo "manage-trust.sh: could not resolve gh login — add your login to trust.journey_log_authors in $CONFIG" >&2
+        # gh login could not be resolved. Do NOT write a present-but-bot-only
+        # block: a present key flips read-journey-log into strict mode, which
+        # would silently drop the human pipeline-runner's own log-stage entries
+        # (they are not the bot). Leave the key ABSENT so the documented
+        # permissive migration mode (+ stderr warning) applies until the human
+        # authenticates and configures it (#249 review, Codex). Exit non-zero so
+        # callers (init/bootstrap) surface "not seeded".
+        echo "manage-trust.sh: could not resolve gh login — leaving trust.journey_log_authors UNCONFIGURED (permissive migration mode). Run 'manage-trust.sh set $CONFIG <your-login> github-actions[bot]' once authenticated, or re-run /upgrade." >&2
+        exit 1
       fi
     fi
     ;;
@@ -104,48 +103,66 @@ case "$CMD" in
     _validate_logins "$@"
     present_val="$(_present)" || exit 1
     if [ "$present_val" = "yes" ]; then
-      # Replace the existing block in place: drop the old trust block, append fresh.
+      # Replace ONLY the journey_log_authors sub-list in place, preserving the
+      # trust: block's position and any SIBLING keys under it (#249 review,
+      # Codex [B]). Editing in place also leaves any user comments above/around
+      # the block untouched (Copilot [3]).
       python3 - "$CONFIG" "$@" <<'PY'
 import re, sys
 config, logins = sys.argv[1], sys.argv[2:]
 lines = open(config, encoding="utf-8").read().split("\n")
 
-# Only strip comment lines this script itself authored — NOT arbitrary
-# user-authored comments adjacent to the trust block (#249 review, Copilot [3]).
-OWN_COMMENT = re.compile(
-    r"Journey-log author allowlist \(#249\)"
-    r"|authors of pipeline-state journey-log comments"
-    r"|Add the GitHub login that runs the pipeline"
-)
-def is_own_comment(s):
-    t = s.lstrip()
-    return t.startswith("#") and OWN_COMMENT.search(t) is not None
+def indent_of(s):
+    return len(s) - len(s.lstrip(" "))
 
 out, i, n = [], 0, len(lines)
+found_trust = False
 while i < n:
-    if re.match(r'^trust:\s*$', lines[i]):
-        # Drop only our own header comment lines immediately above trust:, plus
-        # one optional blank separator. Leave unrelated user comments intact.
-        while out and is_own_comment(out[-1]):
-            out.pop()
-        if out and out[-1].strip() == "":
-            out.pop()
-        i += 1
-        # Drop the old block body: subsequent indented/list/blank lines until
-        # the next top-level key.
+    if re.match(r'^trust:\s*(#.*)?$', lines[i]):
+        found_trust = True
+        out.append(lines[i]); i += 1            # keep `trust:` in place
+        emitted = False
+        # Walk the block's children (blank or indented lines).
         while i < n:
             ln = lines[i]
-            if ln.strip() == "" or ln.startswith((" ", "\t")) or ln.lstrip().startswith("-"):
+            if ln.strip() == "":
+                out.append(ln); i += 1; continue
+            if indent_of(ln) == 0:
+                break                            # next top-level key ends the block
+            m = re.match(r'^(\s+)journey_log_authors\s*:', ln)
+            if m:
+                ci = m.group(1)
+                out.append(f"{ci}journey_log_authors:")
+                for lg in logins:
+                    out.append(f"{ci}  - {lg}")
+                emitted = True
                 i += 1
+                # Skip the old list items / inline value: blank lines AND any
+                # more-indented lines (so entries separated by a blank line are
+                # fully removed). Stops at the next sibling key (indent <= key)
+                # or the next top-level key.
+                key_indent = len(ci)
+                while i < n and (lines[i].strip() == "" or indent_of(lines[i]) > key_indent):
+                    i += 1
                 continue
-            break
+            out.append(ln); i += 1               # preserve sibling trust key
+        if not emitted:
+            out.append("  journey_log_authors:")
+            for lg in logins:
+                out.append(f"    - {lg}")
         continue
     out.append(lines[i]); i += 1
-new = "\n".join(out).rstrip("\n") + "\n"
-new += "\n# Journey-log author allowlist (#249).\ntrust:\n  journey_log_authors:\n"
-for lg in logins:
-    new += f"    - {lg}\n"
-open(config, "w", encoding="utf-8").write(new)
+
+if not found_trust:
+    # present=yes but no block-form `trust:` line (e.g. flow-style
+    # `trust: {journey_log_authors: [...]}`). Refuse rather than append a
+    # duplicate block — ask the human to edit manually.
+    sys.stderr.write(
+        "manage-trust.sh: trust block is not in block form (`trust:` on its own line); "
+        "edit .arboretum.yml manually to avoid clobbering it.\n")
+    sys.exit(1)
+
+open(config, "w", encoding="utf-8").write("\n".join(out).rstrip("\n") + "\n")
 PY
     else
       _append_block "$CONFIG" "$@"

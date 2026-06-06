@@ -83,6 +83,10 @@ _SYNC="${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-sync.sh"
        — push-access collaborators (the right trust boundary; anyone who can push could merge
        code anyway, so trusting their entries adds no marginal risk).
      - `github-actions[bot]` — offer for CI-posted entries.
+     - These `gh api` calls are read-only (GET) and run during the interactive
+       walk-through, so the operator approves them at the prompt; they are deliberately
+       NOT in the seeded permission allow list (a broad `gh api` grant would also permit
+       mutations — #598 review, Codex P1).
    - Walk the human through selection with `AskUserQuestion` (multiSelect), pre-selecting the
      current user + bot. If the collaborator call fails (org restriction / perms), fall back
      to current user + bot and say so.
