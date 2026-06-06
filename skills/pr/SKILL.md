@@ -176,6 +176,12 @@ If it already tracks a remote:
 git push
 ```
 
+When invoked from `/finish` on the GitHub backend, `--draft` is the default
+ship-tail mode unless the user explicitly requested a ready PR. Direct `/pr`
+arguments remain authoritative: if the user runs `/pr` without `--draft`, create
+the PR as requested, then run the non-draft remote readiness gate below before
+requesting reviewers.
+
 ### 8. Create PR
 
 Draft the PR title and body:
@@ -303,14 +309,53 @@ printf '%s\n' "$PR_WEB_URL"
 
 Present the PR URL to the user.
 
+### 8.5 Capture first remote readiness
+
+After PR creation, capture the first remote readiness snapshot. For draft PRs,
+allow the draft-clean state:
+
+```bash
+PR_NUMBER="${PR_ID:-$(gh pr view --json number --jq .number 2>/dev/null)}"
+if printf '%s\n' "${EXTRA_ARGS:-}" | grep -q -- '--draft'; then
+  FIRST_READINESS="$(bash scripts/pr-readiness.sh remote "$PR_NUMBER" --allow-draft)"
+else
+  FIRST_READINESS="$(bash scripts/pr-readiness.sh remote "$PR_NUMBER")"
+fi
+printf '%s\n' "$FIRST_READINESS"
+```
+
+Preserve the first-readiness snapshot in a hidden PR body marker so
+conflict-at-instantiation can be measured later:
+
+```text
+<!-- arboretum:ship-tail initial_remote_readiness=<value> initial_remote_reason=<value> initial_head_sha=<sha> initial_base_sha=<sha> -->
+```
+
 ### 9. Request reviewers
 
 After the PR is open (and not left as `--draft`), request the configured
 reviewers through the review seam — this replaces the older "is Copilot PR
-review enabled?" convention with the declared `.arboretum.yml` `review:` block:
+review enabled?" convention with the declared `.arboretum.yml` `review:` block.
+
+On `github`, run the remote readiness gate before requesting reviewers:
 
 ```bash
 PR_NUMBER="${PR_ID:-$(gh pr view --json number --jq .number 2>/dev/null)}"
+REMOTE_READINESS="$(bash scripts/pr-readiness.sh remote "$PR_NUMBER")"
+printf '%s\n' "$REMOTE_READINESS"
+case "$REMOTE_READINESS" in
+  readiness=ready\ *) bash scripts/request-review.sh "$PR_NUMBER" ;;
+  *) echo "Remote readiness is not ready; do not request reviewers yet." >&2; exit 1 ;;
+esac
+```
+
+On `azure-devops`, do not run `scripts/pr-readiness.sh remote`; the helper
+reports unsupported remote readiness for ADO in this slice. Instead, invoke the
+review seam directly so `request-review.sh` can add configured human reviewers
+and emit its AI-review stub:
+
+```bash
+PR_NUMBER="${PR_ID}"
 bash scripts/request-review.sh "$PR_NUMBER"
 ```
 
@@ -319,7 +364,9 @@ per-reviewer results). `request-review.sh` reads the `review:` block and fires
 each enabled reviewer via its own mechanism: on `github`, Copilot on draft→ready
 and Codex on its `@codex` comment; on `azure-devops`, the AI request is a stub
 (no native bot) and human reviewers are added directly. If the PR was created
-`--draft`, skip this step and request review when you mark it ready.
+`--draft`, skip this step and request review when `/land` marks it ready.
+
+If `--draft` is present, skip `request-review.sh` entirely in `/pr`.
 
 ## Graceful Degradation
 

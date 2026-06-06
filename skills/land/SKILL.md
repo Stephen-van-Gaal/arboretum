@@ -104,6 +104,36 @@ The helper emits `terminal=true|false` and (when terminal) `reason=merged|closed
 - **`terminal=false`** — proceed to Phase 2.
 - **`terminal=unknown` with `reason=fetch-failed`** — surface *"Couldn't read PR state for #N after retry — stopping. Re-invoke /land when GitHub is reachable."*, exit. Do **not** call `ScheduleWakeup`. (Termination wins over availability — see design spec § Error handling.)
 
+### Phase 1.5: Remote readiness gate
+
+GitHub path only.
+
+Before the stall check, review collection, thread resolution, or local full CI,
+run the remote readiness gate:
+
+```bash
+REMOTE_READINESS="$(bash scripts/pr-readiness.sh remote "$PR" --allow-draft)"
+printf '%s\n' "$REMOTE_READINESS"
+```
+
+Handle the normalized result:
+
+- **`readiness=draft-clean`** — mark the PR ready (`gh pr ready "$PR"`),
+  request configured reviewers (`bash scripts/request-review.sh "$PR"`), then
+  re-run remote readiness without `--allow-draft` and wait for GitHub to
+  recompute.
+- **`readiness=ready`** — proceed to Phase 2 and active review/CI work.
+- **`reason=ci-failing`** — foreground failing checks as the first triage item;
+  route into the fix loop before reviewer triage.
+- **`readiness=waiting`** — surface pending CI and wait or schedule per the
+  existing loop mode.
+- **`readiness=blocked`** — stop before `collect-review.sh`, review-thread
+  resolution, or local full CI.
+- **`readiness=unknown`** — stop after bounded polling with retry guidance.
+
+After any fix or rebase push, re-run `scripts/pr-readiness.sh remote "$PR"` and
+wait for mergeability recomputation before resolving addressed review threads.
+
 ### Phase 2: Stall check
 
 GitHub path only.
@@ -182,8 +212,12 @@ Wait briefly for interruption, then proceed. This is a notification, not a gate 
 ### 4. Fix sub-loop (cap: 2 rounds)
 
 Fix all clear-cut comments **together in one commit**, push, and re-request
-review. CI failures are fixed the same way. Re-enter the poll loop. After **2**
-fix rounds, stop fixing — surface whatever remains as judgment-calls.
+review. CI failures are fixed the same way. Once a PR is ready, commits trigger
+hosted CI through the `pull_request` `synchronize` activity, so do not create
+per-comment commits. Batch one review/CI round, push once, re-run remote
+readiness, then re-request review only when the new head is appropriate for
+reviewers. Re-enter the poll loop. After **2** fix rounds, stop fixing —
+surface whatever remains as judgment-calls.
 
 ### 5. Per-thread responses
 
@@ -197,12 +231,36 @@ Reply via `gh api repos/{owner}/{repo}/pulls/{N}/comments -f body=... -F in_repl
 
 To resolve addressed threads after the fix push, invoke `Skill arboretum:receive-review`. That skill owns the GraphQL recipe (REST → thread node ID mapping + `resolveReviewThread` mutation) as the single source of truth — `/land` does not carry its own copy.
 
+Do not resolve addressed threads until the pushed fix has been followed by a
+successful remote readiness recompute for the new head.
+
 Leave a thread open deliberately when its item is genuinely outstanding. Write
 replies to *explain* — they are a learning record, not bare acknowledgements.
 
 ### 6. Exit condition
 
 Exit the loop when CI is green **and** no substantive comments remain.
+
+At the final merge-ready or deliberate pause point, report ship-tail metrics
+when the data is available:
+
+```text
+initial_remote_readiness=<value> initial_remote_reason=<value> ci_turns=<count|unknown> post_ready_pushes=<count|unknown> mergeability_blocks=<count> readiness_unknown_polls=<count> final_remote_readiness=<value>
+```
+
+If `$ISSUE` is available, write the same metrics through the existing tracker
+journey log, not a local `.arboretum` log file:
+
+```bash
+bash scripts/log-stage.sh "$ISSUE" /land summary \
+  initial_remote_readiness=<value> \
+  initial_remote_reason=<value> \
+  ci_turns=<count|unknown> \
+  post_ready_pushes=<count|unknown> \
+  mergeability_blocks=<count> \
+  readiness_unknown_polls=<count> \
+  final_remote_readiness=<value>
+```
 
 ### 7. Tiered merge handoff
 

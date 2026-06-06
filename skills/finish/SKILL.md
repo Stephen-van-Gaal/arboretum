@@ -171,6 +171,24 @@ exits `2`, stop because the validation result is unknown.
 
 ### Step 5.5: Pre-PR local CI gate
 
+Before local CI, check the local-candidate against the current base. This is the
+cheap mergeability gate that prevents running expensive tests on a branch that
+already cannot proceed:
+
+```bash
+BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)
+git fetch origin "$BASE"
+LOCAL_READINESS="$(bash scripts/pr-readiness.sh local "origin/$BASE")"
+printf '%s\n' "$LOCAL_READINESS"
+case "$LOCAL_READINESS" in
+  readiness=ready\ *) ;;
+  readiness=blocked\ *|readiness=unknown\ *)
+    echo "Local readiness failed before local CI. Repair or escalate before continuing." >&2
+    exit 1
+    ;;
+esac
+```
+
 Determine the local check command from the project's declared testing shape. If
 the testing-shape spec is present but invalid, stop; do not fall back to
 `scripts/ci-checks.sh`. If the spec is absent, `/finish` keeps its narrow
@@ -204,6 +222,22 @@ Run **only** `default-command` — never the `opt-in-commands` tiers. If it exit
 non-zero, present the failures and fix them before proceeding — the PR should be
 green from its first push.
 
+After local CI passes, run the same readiness check again. If the branch moved
+or the test run generated unexpected files, stop before invoking `/pr`:
+
+```bash
+git fetch origin "$BASE"
+LOCAL_READINESS="$(bash scripts/pr-readiness.sh local "origin/$BASE")"
+printf '%s\n' "$LOCAL_READINESS"
+case "$LOCAL_READINESS" in
+  readiness=ready\ *) ;;
+  readiness=blocked\ *|readiness=unknown\ *)
+    echo "Local readiness failed after local CI. Repair or escalate before creating the PR." >&2
+    exit 1
+    ;;
+esac
+```
+
 ### Step 5.8: Tracker closure-intent audit
 
 Before invoking `/pr`, resolve the active tracker issue using the same priority
@@ -234,6 +268,11 @@ Invoke the `/pr` skill to create the pull request through `$SHIP_BACKEND`. It ha
 - Pushing the branch
 - Creating the PR via `gh pr create` for `github`
 - Creating the PR via `az repos pr create` for `azure-devops`
+
+For the chained GitHub ship tail, invoke `/pr --draft` by default unless the
+user explicitly requested a ready PR. The draft PR is the draft-candidate:
+GitHub can compute mergeability, but reviewers are not requested until `/land`
+confirms remote readiness.
 
 Present the PR URL when done.
 
