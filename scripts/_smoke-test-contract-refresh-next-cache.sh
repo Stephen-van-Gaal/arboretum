@@ -62,11 +62,21 @@ cat > "$GH_STUB_DIR/gh" <<'GH'
 # Each subcommand has an injectable exit code + stderr so the smoke test
 # can exercise the producer's three exit-code paths (0/1/2) per RNC-2.
 #
+# Also handles: gh api graphql (returns GH_STUB_GRAPHQL or empty graph),
+# gh repo view (returns synthetic owner/name for roadmap_github_epic_graph),
+# gh issue edit (records sentinel file for RNC-9 auto-advance assertion).
+#
+# F1 (closed next-up probe): `gh issue list --state closed ...` returns
+# GH_STUB_CLOSED_ISSUES (defaults to []). When GH_STUB_ISSUES is [] (open
+# list returns empty), refresh-next-cache.sh probes for a closed next-up.
+# The stub differentiates --state open vs --state closed to model reality.
+#
 # NOTE: do NOT inline `{"comments":[]}` into a `${VAR:-default}` expansion
 # — bash's nested-brace handling in parameter-expansion default values is
 # asymmetric and emits a spurious trailing `}` when VAR is set. Use a
 # plain variable for the default instead.
 default_comments='{"comments":[]}'
+default_graphql='{"data":{"repository":{"issue":null}}}'
 case "$1" in
   auth)
     case "$2" in
@@ -79,10 +89,32 @@ case "$1" in
         ;;
     esac
     ;;
+  repo)
+    case "$2" in
+      view)
+        # roadmap_github_epic_graph calls:
+        #   gh repo view --json owner -q .owner.login
+        #   gh repo view --json name -q .name
+        for arg in "$@"; do
+          case "$arg" in
+            .owner.login) printf 'stub-owner\n'; exit 0 ;;
+            .name) printf 'stub-repo\n'; exit 0 ;;
+          esac
+        done
+        printf 'stub-owner/stub-repo\n'
+        exit 0
+        ;;
+    esac
+    ;;
   api)
     case "$2" in
       repos/{owner}/{repo})
         printf 'owner/repo\n'
+        exit 0
+        ;;
+      graphql)
+        # roadmap_github_epic_graph — return injected graphql response or empty graph.
+        printf '%s\n' "${GH_STUB_GRAPHQL:-$default_graphql}"
         exit 0
         ;;
     esac
@@ -95,7 +127,25 @@ case "$1" in
           printf '%s\n' "${GH_STUB_LIST_STDERR:-API rate limit exceeded for installation}" >&2
           exit "$exit_code"
         fi
-        printf '%s' "${GH_STUB_ISSUES:-[]}"
+        # F1: differentiate --state open vs --state closed so the closed-next-up
+        # probe (refresh-next-cache.sh F1 fix) returns a different result than the
+        # open fetch. Scan positional args for --state <value>.
+        _state_val=""
+        _i=1
+        while [ "$_i" -le "$#" ]; do
+          eval "_arg=\${$_i}"
+          if [ "$_arg" = "--state" ]; then
+            _j=$(( _i + 1 ))
+            eval "_state_val=\${$_j}"
+            break
+          fi
+          _i=$(( _i + 1 ))
+        done
+        if [ "$_state_val" = "closed" ]; then
+          printf '%s' "${GH_STUB_CLOSED_ISSUES:-[]}"
+        else
+          printf '%s' "${GH_STUB_ISSUES:-[]}"
+        fi
         exit 0
         ;;
       view)
@@ -106,6 +156,15 @@ case "$1" in
         fi
         printf '%s' "${GH_STUB_COMMENTS:-$default_comments}"
         exit 0
+        ;;
+      edit)
+        # roadmap_tracker_issue_update → gh issue edit <N> --add-label/--remove-label
+        # Write a sentinel file so the auto-advance assertion can detect the call.
+        # Sentinel path is injected via GH_STUB_EDIT_SENTINEL env var.
+        if [ -n "${GH_STUB_EDIT_SENTINEL:-}" ]; then
+          printf '%s\n' "$*" >> "$GH_STUB_EDIT_SENTINEL"
+        fi
+        exit "${GH_STUB_EDIT_EXIT:-0}"
         ;;
     esac
     ;;
@@ -174,7 +233,7 @@ import json
 c = json.load(open('$FIXTURE/.arboretum/next-cache.json'))
 print(sorted(c.keys()))
 " 2>&1)
-if [ "$caseA_keys" = "['error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
+if [ "$caseA_keys" = "['auto_advanced', 'epics_in_flight', 'error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
   pass "RNC-1 (case A): cache has exactly the expected top-level keys"
 else
   fail_case "RNC-1 (case A): unexpected top-level keys" "$caseA_keys"
@@ -236,7 +295,7 @@ caseB_keys=$(python3 -c "
 import json
 print(sorted(json.load(open('$FIXTURE/.arboretum/next-cache.json')).keys()))
 ")
-if [ "$caseB_keys" = "['error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
+if [ "$caseB_keys" = "['auto_advanced', 'epics_in_flight', 'error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
   pass "RNC-1 (case B): cache has exactly the expected top-level keys"
 else
   fail_case "RNC-1 (case B): unexpected top-level keys" "$caseB_keys"
@@ -298,7 +357,7 @@ caseC_keys=$(python3 -c "
 import json
 print(sorted(json.load(open('$FIXTURE/.arboretum/next-cache.json')).keys()))
 ")
-if [ "$caseC_keys" = "['error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
+if [ "$caseC_keys" = "['auto_advanced', 'epics_in_flight', 'error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
   pass "RNC-1 (case C): cache has exactly the expected top-level keys"
 else
   fail_case "RNC-1 (case C): unexpected top-level keys" "$caseC_keys"
@@ -435,7 +494,7 @@ caseE_keys=$(python3 -c "
 import json
 print(sorted(json.load(open('$FIXTURE/.arboretum/next-cache.json')).keys()))
 ")
-if [ "$caseE_keys" = "['error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
+if [ "$caseE_keys" = "['auto_advanced', 'epics_in_flight', 'error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
   pass "RNC-1 (case E): early-return cache (gh-unavailable) has exactly the expected top-level keys (pins X1 fix against regression)"
 else
   fail_case "RNC-1 (case E): early-return cache missing expected keys — X1 fix may have regressed in the gh-unavailable printf block" "$caseE_keys"
@@ -484,7 +543,7 @@ caseF_keys=$(python3 -c "
 import json
 print(sorted(json.load(open('$FIXTURE/.arboretum/next-cache.json')).keys()))
 ")
-if [ "$caseF_keys" = "['error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
+if [ "$caseF_keys" = "['auto_advanced', 'epics_in_flight', 'error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
   pass "RNC-1 (case F): early-return cache (gh-call-failed) has exactly the expected top-level keys (pins X1 fix against regression)"
 else
   fail_case "RNC-1 (case F): early-return cache missing expected keys — X1 fix may have regressed in the gh-call-failed printf block" "$caseF_keys"
@@ -493,6 +552,388 @@ fi
 # Reset.
 export GH_STUB_LIST_EXIT=0
 unset GH_STUB_LIST_STDERR
+
+# ── Case G: RNC-8 — epics_in_flight present in cache ────────────────
+#
+# The gh stub returns a minimal GraphQL response: next-up #305 is open,
+# its parent is epic #295 (with children #305 open + #306 open).
+# epic-walk.sh's live mode calls gh api graphql; the stub returns the raw
+# GraphQL shape that roadmap_github_epic_graph's python flattener consumes.
+# Since roadmap_github_epic_graph's python core reads raw GraphQL JSON (not
+# graph JSON), the easiest seam here is to inject via GH_STUB_GRAPHQL a
+# response whose issue.parent chain produces the expected graph, OR to use
+# the epic-walk --graph-file seam instead of the live call.
+#
+# Strategy: inject a GRAPH_FILE path via an env var override by writing a
+# custom epic-walk wrapper in the stub bin that passes --graph-file. This is
+# simpler than constructing a valid raw GraphQL fixture and avoids coupling
+# the test to roadmap_github_epic_graph's internal parsing logic.
+# The wrapper replaces epic-walk.sh invocation in the stub environment.
+
+G_GRAPH_FILE=$(mktemp)
+# Graph: next-up #305 open under epic #295; #306 also open.
+printf '%s\n' '{
+  "next_up": 305,
+  "nodes": {
+    "295": {"number":295,"is_epic":true,"state":"open","title":"pipeline overhaul","labels":[],"parent":null,"children":[305,306],"stage":null},
+    "305": {"number":305,"is_epic":false,"state":"open","title":"WS7 intake","labels":[],"parent":295,"children":[],"stage":"/build"},
+    "306": {"number":306,"is_epic":false,"state":"open","title":"WS8 orphan","labels":[],"parent":295,"children":[],"stage":null}
+  }
+}' > "$G_GRAPH_FILE"
+
+# Override: write a temporary epic-walk.sh in a shadowed roadmap/ bin that
+# overrides the live call, passing --graph-file with the pre-baked fixture.
+REAL_WALK="$SCRIPT_DIR/roadmap/epic-walk.sh"
+G_ROADMAP_STUB_DIR=$(mktemp -d)
+cat > "$G_ROADMAP_STUB_DIR/epic-walk.sh" <<EWSTUB
+#!/usr/bin/env bash
+# RNC-8 stub: always return the pre-baked graph result.
+exec bash "$REAL_WALK" --graph-file "$G_GRAPH_FILE"
+EWSTUB
+chmod +x "$G_ROADMAP_STUB_DIR/epic-walk.sh"
+
+# Create a fixture project for case G with the stub roadmap dir symlinked.
+G_FIXTURE=$(mktemp -d)
+( cd "$G_FIXTURE" && git init -q && git remote add origin "https://example.test/stub.git" )
+touch "$G_FIXTURE/CLAUDE.md"
+mkdir -p "$G_FIXTURE/scripts"
+touch "$G_FIXTURE/scripts/refresh-next-cache.sh"
+echo "layer: 2" > "$G_FIXTURE/.arboretum.yml"
+
+# Run refresh with PATH-shadowed gh and the stub epic-walk.sh in scripts/roadmap/.
+# We need scripts/roadmap/epic-walk.sh to be our stub. Create a scripts/roadmap/
+# dir in the fixture with the stub, then set SCRIPT_DIR override.
+# The real refresh-next-cache.sh uses SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"".
+# We can't easily redirect SCRIPT_DIR. Instead, create a sibling roadmap/ dir
+# next to a copy of refresh-next-cache.sh:
+G_BIN=$(mktemp -d)
+cp "$SCRIPT_DIR/refresh-next-cache.sh" "$G_BIN/"
+mkdir -p "$G_BIN/roadmap"
+cp "$SCRIPT_DIR/roadmap/lib.sh" "$G_BIN/roadmap/"
+cp "$G_ROADMAP_STUB_DIR/epic-walk.sh" "$G_BIN/roadmap/"
+
+export GH_STUB_ISSUES='[{"number":305,"title":"WS7 intake","url":"https://example.test/305","body":"","labels":[{"name":"next-up"}],"updatedAt":"2026-06-05T00:00:00Z"}]'
+export GH_STUB_COMMENTS='{"comments":[]}'
+export GH_STUB_COMMENTS_EXIT=0
+unset GH_STUB_EDIT_SENTINEL
+
+PATH="$GH_STUB_DIR:$PATH" bash "$G_BIN/refresh-next-cache.sh" "$G_FIXTURE"
+caseG_exit=$?
+
+if [ "$caseG_exit" -eq 0 ]; then
+  pass "RNC-2 (case G): epics_in_flight path exits 0"
+else
+  fail_case "RNC-2 (case G): expected exit 0, got $caseG_exit"
+fi
+
+# RNC-8: epics_in_flight is present and #295 appears
+caseG_result=$(python3 -c "
+import json
+c = json.load(open('$G_FIXTURE/.arboretum/next-cache.json'))
+assert 'epics_in_flight' in c, 'epics_in_flight key missing'
+assert isinstance(c['epics_in_flight'], list), 'epics_in_flight is not a list'
+nums = [e['number'] for e in c['epics_in_flight']]
+assert 295 in nums, f'295 not in epics_in_flight: {nums}'
+assert 'auto_advanced' in c, 'auto_advanced key missing'
+print('OK')
+" 2>&1)
+if [ "$caseG_result" = "OK" ]; then
+  pass "RNC-8 (case G): epics_in_flight present and contains #295; auto_advanced key present"
+else
+  fail_case "RNC-8 (case G): epics_in_flight assertion failed" "$caseG_result"
+fi
+
+# RNC-8: auto_advanced is null (next-up #305 is OPEN — no advance should fire)
+caseG_auto=$(python3 -c "
+import json
+c = json.load(open('$G_FIXTURE/.arboretum/next-cache.json'))
+print(repr(c.get('auto_advanced')))
+")
+if [ "$caseG_auto" = "None" ]; then
+  pass "RNC-8 (case G): auto_advanced is null when next-up is open (no advance)"
+else
+  fail_case "RNC-8 (case G): expected auto_advanced=None when next-up is open, got $caseG_auto"
+fi
+
+# Cleanup case G temps
+rm -rf "$G_ROADMAP_STUB_DIR" "$G_BIN" "$G_FIXTURE"
+rm -f "$G_GRAPH_FILE"
+
+# ── Case H: RNC-9 — auto-advance one-shot when next-up is CLOSED ─────
+#
+# Graph: next-up #305 is CLOSED; sibling #306 is open and ready.
+# The resolver should return auto_advance={from:305,to:306,epic:295}.
+# The stub's `gh issue edit` handler appends to a sentinel file.
+# Assertions: auto_advanced.to==306 in cache AND sentinel exists.
+
+H_GRAPH_FILE=$(mktemp)
+printf '%s\n' '{
+  "next_up": 305,
+  "nodes": {
+    "295": {"number":295,"is_epic":true,"state":"open","title":"pipeline overhaul","labels":[],"parent":null,"children":[305,306],"stage":null},
+    "305": {"number":305,"is_epic":false,"state":"closed","title":"WS7 intake","labels":[],"parent":295,"children":[],"stage":null},
+    "306": {"number":306,"is_epic":false,"state":"open","title":"WS8 orphan","labels":[],"parent":295,"children":[],"stage":null}
+  }
+}' > "$H_GRAPH_FILE"
+
+H_BIN=$(mktemp -d)
+H_FIXTURE=$(mktemp -d)
+H_SENTINEL=$(mktemp)
+# Start with empty sentinel (just needs to exist for the assertion check to work)
+: > "$H_SENTINEL"
+
+cp "$SCRIPT_DIR/refresh-next-cache.sh" "$H_BIN/"
+mkdir -p "$H_BIN/roadmap"
+cp "$SCRIPT_DIR/roadmap/lib.sh" "$H_BIN/roadmap/"
+
+# epic-walk stub: returns closed-#305 graph so auto_advance fires
+cat > "$H_BIN/roadmap/epic-walk.sh" <<HWSTUB
+#!/usr/bin/env bash
+exec bash "$SCRIPT_DIR/roadmap/epic-walk.sh" --graph-file "$H_GRAPH_FILE"
+HWSTUB
+chmod +x "$H_BIN/roadmap/epic-walk.sh"
+
+( cd "$H_FIXTURE" && git init -q && git remote add origin "https://example.test/stub.git" )
+touch "$H_FIXTURE/CLAUDE.md"
+mkdir -p "$H_FIXTURE/scripts"
+touch "$H_FIXTURE/scripts/refresh-next-cache.sh"
+echo "layer: 2" > "$H_FIXTURE/.arboretum.yml"
+
+# F1 (reality model): the open list returns [] because #305 is now CLOSED.
+# The closed probe returns #305. This is the correct model — the old test had
+# GH_STUB_ISSUES returning an open issue which cannot trigger the closed-probe path.
+export GH_STUB_ISSUES='[]'
+export GH_STUB_CLOSED_ISSUES='[{"number":305,"title":"WS7 intake","url":"https://example.test/305","body":"","labels":[{"name":"next-up"}],"updatedAt":"2026-06-05T00:00:00Z"}]'
+export GH_STUB_COMMENTS='{"comments":[]}'
+export GH_STUB_COMMENTS_EXIT=0
+export GH_STUB_EDIT_SENTINEL="$H_SENTINEL"
+export GH_STUB_EDIT_EXIT=0
+
+PATH="$GH_STUB_DIR:$PATH" bash "$H_BIN/refresh-next-cache.sh" "$H_FIXTURE"
+caseH_exit=$?
+
+if [ "$caseH_exit" -eq 0 ]; then
+  pass "RNC-9 (case H): auto-advance path exits 0 (fail-soft)"
+else
+  fail_case "RNC-9 (case H): expected exit 0, got $caseH_exit"
+fi
+
+# RNC-9: auto_advanced.to == 306 in the cache
+caseH_auto=$(python3 -c "
+import json
+c = json.load(open('$H_FIXTURE/.arboretum/next-cache.json'))
+a = c.get('auto_advanced')
+if a is None:
+    print('FAIL: auto_advanced is null')
+elif a.get('to') != 306:
+    print(f'FAIL: auto_advanced.to={a.get(\"to\")} want 306')
+else:
+    print('OK')
+" 2>&1)
+if [ "$caseH_auto" = "OK" ]; then
+  pass "RNC-9 (case H): auto_advanced.to==306 in cache (advance was written)"
+else
+  fail_case "RNC-9 (case H): auto_advanced.to unexpected" "$caseH_auto"
+fi
+
+# RNC-9: the stub received `gh issue edit ... --add-label next-up` THEN
+# `gh issue edit ... --remove-label next-up` (F2: add-first ordering).
+if grep -q "\-\-add-label next-up" "$H_SENTINEL" 2>/dev/null; then
+  pass "RNC-9 (case H): gh issue edit --add-label next-up was called (label move confirmed)"
+else
+  fail_case "RNC-9 (case H): sentinel file did not record --add-label next-up call" "$(cat "$H_SENTINEL" 2>/dev/null || echo '(empty)')"
+fi
+if grep -q "\-\-remove-label next-up" "$H_SENTINEL" 2>/dev/null; then
+  pass "RNC-9 (case H): gh issue edit --remove-label next-up was called (label removed from closed issue)"
+else
+  fail_case "RNC-9 (case H): sentinel file did not record --remove-label next-up call" "$(cat "$H_SENTINEL" 2>/dev/null || echo '(empty)')"
+fi
+# F2 ordering: assert add line appears before remove line in the sentinel.
+_add_line=$(grep -n "\-\-add-label next-up" "$H_SENTINEL" 2>/dev/null | head -1 | cut -d: -f1 || true)
+_rm_line=$(grep -n "\-\-remove-label next-up" "$H_SENTINEL" 2>/dev/null | head -1 | cut -d: -f1 || true)
+if [ -n "$_add_line" ] && [ -n "$_rm_line" ] && [ "$_add_line" -lt "$_rm_line" ]; then
+  pass "RNC-9 (case H, F2): --add-label called before --remove-label (add-first ordering)"
+elif [ -n "$_add_line" ] && [ -n "$_rm_line" ]; then
+  fail_case "RNC-9 (case H, F2): --remove-label appeared before --add-label in sentinel — F2 add-first ordering violated" "$(cat "$H_SENTINEL" 2>/dev/null || echo '(empty)')"
+fi
+
+# RNC-9: auto-advance is fail-soft — when gh issue edit fails, exit code stays 0
+# and auto_advanced is null in cache.
+H2_SENTINEL=$(mktemp)
+: > "$H2_SENTINEL"
+H2_FIXTURE=$(mktemp -d)
+H2_BIN=$(mktemp -d)
+
+cp "$SCRIPT_DIR/refresh-next-cache.sh" "$H2_BIN/"
+mkdir -p "$H2_BIN/roadmap"
+cp "$SCRIPT_DIR/roadmap/lib.sh" "$H2_BIN/roadmap/"
+cat > "$H2_BIN/roadmap/epic-walk.sh" <<H2WSTUB
+#!/usr/bin/env bash
+exec bash "$SCRIPT_DIR/roadmap/epic-walk.sh" --graph-file "$H_GRAPH_FILE"
+H2WSTUB
+chmod +x "$H2_BIN/roadmap/epic-walk.sh"
+
+( cd "$H2_FIXTURE" && git init -q && git remote add origin "https://example.test/stub.git" )
+touch "$H2_FIXTURE/CLAUDE.md"
+mkdir -p "$H2_FIXTURE/scripts"
+touch "$H2_FIXTURE/scripts/refresh-next-cache.sh"
+echo "layer: 2" > "$H2_FIXTURE/.arboretum.yml"
+
+export GH_STUB_EDIT_SENTINEL="$H2_SENTINEL"
+export GH_STUB_EDIT_EXIT=1   # label write FAILS
+
+PATH="$GH_STUB_DIR:$PATH" bash "$H2_BIN/refresh-next-cache.sh" "$H2_FIXTURE"
+caseH2_exit=$?
+
+if [ "$caseH2_exit" -eq 0 ]; then
+  pass "RNC-9 (case H2, fail-soft): auto-advance label write failure still exits 0"
+else
+  fail_case "RNC-9 (case H2, fail-soft): expected exit 0 on label write failure, got $caseH2_exit"
+fi
+
+caseH2_auto=$(python3 -c "
+import json
+c = json.load(open('$H2_FIXTURE/.arboretum/next-cache.json'))
+a = c.get('auto_advanced')
+print('None' if a is None else repr(a))
+" 2>&1)
+if [ "$caseH2_auto" = "None" ]; then
+  pass "RNC-9 (case H2, fail-soft): auto_advanced is null when label write fails (no false ⤴)"
+else
+  fail_case "RNC-9 (case H2, fail-soft): auto_advanced should be null on write failure, got $caseH2_auto"
+fi
+
+# H2: F2 fix — add-first order means if --add-label fails, --remove-label is
+# NOT attempted (source keeps next-up — safe). Assert that --add-label was
+# attempted (proves gh was called) but --remove-label was NOT (proves F2 ordering).
+if grep -q -- '--add-label next-up' "$H2_SENTINEL" 2>/dev/null; then
+  pass "RNC-9 (case H2, fail-soft): --add-label next-up was attempted (add-first ordering confirmed)"
+else
+  fail_case "RNC-9 (case H2, fail-soft): --add-label next-up not found in H2 sentinel — gh may have been short-circuited" "$(cat "$H2_SENTINEL" 2>/dev/null || echo '(empty)')"
+fi
+if grep -q -- '--remove-label' "$H2_SENTINEL" 2>/dev/null; then
+  fail_case "RNC-9 (case H2, fail-soft, F2): --remove-label found in sentinel but add-first ordering means it should NOT be attempted when add fails" "$(cat "$H2_SENTINEL" 2>/dev/null || echo '(empty)')"
+else
+  pass "RNC-9 (case H2, fail-soft, F2): --remove-label not attempted when --add-label failed (add-first safety: source keeps next-up)"
+fi
+
+# Cleanup
+rm -rf "$H_BIN" "$H_FIXTURE" "$H2_BIN" "$H2_FIXTURE"
+rm -f "$H_GRAPH_FILE" "$H_SENTINEL" "$H2_SENTINEL"
+unset GH_STUB_EDIT_SENTINEL GH_STUB_EDIT_EXIT
+
+# ── Case I: RNC-10 — blocked-epic context preserved when no advance ───
+#
+# Fix B (issue #562): when the closed next-up's epic has only blocked
+# children (no ready sibling → auto_advance is null), the resolver still
+# returns a non-empty epics_in_flight. Previously run_epic_walk_and_cache_if_advance
+# returned 0 without writing the cache, and the caller wrote the standard
+# empty cache — dropping the blocked-epic context entirely.
+#
+# The fix: when _auto_to/_auto_from are empty but epics_in_flight is non-empty,
+# write a cache with that epics_in_flight (issue:null, auto_advanced:null) so
+# the boot banner can surface the blocked-epic state.
+#
+# Graph: closed next-up #451, parent epic #446, only child is #451 (blocked).
+# No ready sibling → auto_advance:null. epic-walk returns epics_in_flight=[#446]
+# with blocked=[#451]. The resulting cache must have:
+#   epics_in_flight non-empty (contains #446)
+#   auto_advanced null
+#   issue null
+
+I_GRAPH_FILE=$(mktemp)
+printf '%s\n' '{
+  "next_up": 451,
+  "nodes": {
+    "446": {"number":446,"is_epic":true,"state":"open","title":"token-efficient docs","labels":[],"parent":null,"children":[451,452],"stage":null},
+    "451": {"number":451,"is_epic":false,"state":"closed","title":"WS5: explicit read contracts","labels":[],"parent":446,"children":[],"stage":null},
+    "452": {"number":452,"is_epic":false,"state":"open","title":"WS6: blocked work","labels":["blocked"],"parent":446,"children":[],"stage":null}
+  }
+}' > "$I_GRAPH_FILE"
+
+I_BIN=$(mktemp -d)
+I_FIXTURE=$(mktemp -d)
+
+cp "$SCRIPT_DIR/refresh-next-cache.sh" "$I_BIN/"
+mkdir -p "$I_BIN/roadmap"
+cp "$SCRIPT_DIR/roadmap/lib.sh" "$I_BIN/roadmap/"
+
+# epic-walk stub: returns the all-blocked graph (closed #451, only blocked child)
+cat > "$I_BIN/roadmap/epic-walk.sh" <<IWSTUB
+#!/usr/bin/env bash
+exec bash "$SCRIPT_DIR/roadmap/epic-walk.sh" --graph-file "$I_GRAPH_FILE"
+IWSTUB
+chmod +x "$I_BIN/roadmap/epic-walk.sh"
+
+( cd "$I_FIXTURE" && git init -q && git remote add origin "https://example.test/stub.git" )
+touch "$I_FIXTURE/CLAUDE.md"
+mkdir -p "$I_FIXTURE/scripts"
+touch "$I_FIXTURE/scripts/refresh-next-cache.sh"
+echo "layer: 2" > "$I_FIXTURE/.arboretum.yml"
+
+# F1: open list is empty (next-up #451 is CLOSED); closed probe returns #451.
+export GH_STUB_ISSUES='[]'
+export GH_STUB_CLOSED_ISSUES='[{"number":451,"title":"WS5: explicit read contracts","url":"https://example.test/451","body":"","labels":[{"name":"next-up"}],"updatedAt":"2026-06-05T00:00:00Z"}]'
+export GH_STUB_COMMENTS='{"comments":[]}'
+export GH_STUB_COMMENTS_EXIT=0
+unset GH_STUB_EDIT_SENTINEL
+
+PATH="$GH_STUB_DIR:$PATH" bash "$I_BIN/refresh-next-cache.sh" "$I_FIXTURE"
+caseI_exit=$?
+
+if [ "$caseI_exit" -eq 0 ]; then
+  pass "RNC-10 (case I): blocked-epic-no-advance path exits 0"
+else
+  fail_case "RNC-10 (case I): expected exit 0, got $caseI_exit"
+fi
+
+# RNC-10: epics_in_flight must be non-empty and contain #446 (the parent epic),
+# with #452 (the blocked open sibling) in the blocked list. auto_advanced and
+# issue must both be null (no advance fired; next-up #451 is closed/done).
+caseI_result=$(python3 -c "
+import json
+c = json.load(open('$I_FIXTURE/.arboretum/next-cache.json'))
+ef = c.get('epics_in_flight', [])
+nums = [e['number'] for e in ef]
+aa = c.get('auto_advanced')
+iss = c.get('issue')
+if not ef:
+    print('FAIL: epics_in_flight is empty — blocked-epic context was dropped (Fix B regression)')
+elif 446 not in nums:
+    print(f'FAIL: #446 not in epics_in_flight: {nums}')
+elif aa is not None:
+    print(f'FAIL: auto_advanced should be null when no advance, got {aa!r}')
+elif iss is not None:
+    print(f'FAIL: issue should be null (closed next-up), got {iss!r}')
+else:
+    # Verify #452 (blocked open sibling) appears as blocked under #446
+    e446 = next(e for e in ef if e['number'] == 446)
+    blocked_nums = [b['number'] for b in (e446.get('blocked') or [])]
+    if 452 not in blocked_nums:
+        print(f'FAIL: #452 not in blocked list of #446: {blocked_nums}')
+    else:
+        print('OK')
+" 2>&1)
+if [ "$caseI_result" = "OK" ]; then
+  pass "RNC-10 (case I): blocked-epic context preserved in cache (epics_in_flight has #446 with blocked #452, auto_advanced null, issue null)"
+else
+  fail_case "RNC-10 (case I): blocked-epic-context assertion failed" "$caseI_result"
+fi
+
+# RNC-1 (case I): exact top-level key set
+caseI_keys=$(python3 -c "
+import json
+print(sorted(json.load(open('$I_FIXTURE/.arboretum/next-cache.json')).keys()))
+")
+if [ "$caseI_keys" = "['auto_advanced', 'epics_in_flight', 'error', 'fetched_at', 'handoff', 'issue', 'no_gh_remote']" ]; then
+  pass "RNC-1 (case I): blocked-epic cache has exactly the expected top-level keys"
+else
+  fail_case "RNC-1 (case I): unexpected top-level keys" "$caseI_keys"
+fi
+
+# Cleanup
+rm -rf "$I_BIN" "$I_FIXTURE"
+rm -f "$I_GRAPH_FILE"
 
 # ── Summary ──────────────────────────────────────────────────────────
 

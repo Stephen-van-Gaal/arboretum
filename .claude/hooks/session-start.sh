@@ -89,6 +89,12 @@ except Exception:
 fi
 
 if [ -f "$NEXT_REFRESH" ]; then
+  # Track whether a background refresh was started this boot so the
+  # one-shot rewrite below can skip when the cache is stale. In the
+  # stale case, the background refresh itself will clear auto_advanced
+  # when it writes the fresh cache — rewriting the old cache here would
+  # clobber that fresh write for another full TTL (race condition).
+  _next_cache_fresh=true
   # First-session synchronous refresh if no cache exists.
   if [ ! -f "$NEXT_CACHE" ]; then
     bash "$NEXT_REFRESH" "$PROJECT_DIR" >/dev/null 2>&1 || true
@@ -100,6 +106,7 @@ if [ -f "$NEXT_REFRESH" ]; then
     if [ "$cache_age" -gt "$NEXT_TTL_SECONDS" ]; then
       ( bash "$NEXT_REFRESH" "$PROJECT_DIR" >/dev/null 2>&1 || true ) &
       disown 2>/dev/null || true
+      _next_cache_fresh=false  # background refresh started; cache is stale this boot
     fi
   fi
 
@@ -181,9 +188,74 @@ else:
     url = issue.get("url", "")
     if url:
         lines.append(f"  → {scrub(url)}")
+
+epics = cache.get("epics_in_flight") or []
+auto = cache.get("auto_advanced")
+_emitted_auto = False
+if auto and isinstance(auto, dict) and all(k in auto for k in ("from", "to", "epic")):
+    lines.append(f"⤴ auto-advanced next-up: #{auto['from']} ✓ → #{auto['to']} (epic #{auto['epic']})")
+    _emitted_auto = True
+if epics:
+    lines.append("[Epics in flight]")
+    for e in epics:
+        enum = e.get("number")
+        if enum is None:
+            continue
+        lines.append(f"  [#{enum}] {scrub(e.get('title', ''))} · {e.get('done', 0)}/{e.get('total', 0)}")
+        if e.get("active"):
+            for c in e["active"]:
+                cnum = c.get("number")
+                if cnum is None:
+                    continue
+                stg = f"   {scrub(c.get('stage') or '')}" if c.get("stage") else ""
+                lines.append(f"    ▸ #{cnum}  {scrub(c.get('title', ''))}{stg}")
+        else:
+            nx = e.get("next")
+            if nx and nx.get("number") is not None:
+                lines.append(f"    • next     #{nx.get('number')}  {scrub(nx.get('title', ''))}")
+            for b in (e.get("blocked") or []):
+                bnum = b.get("number")
+                if bnum is None:
+                    continue
+                lines.append(f"    ⊘ blocked  #{bnum}  {scrub(b.get('title', ''))}")
+    lines.append("  ▸ active · • next · ⊘ blocked · ⤴ auto-advanced")
 print("\n".join(lines))
 PY
 )
+    # F7: one-shot auto_advanced: after rendering ⤴, rewrite cache with null
+    # so re-boots within the TTL don't re-emit the ⤴ line.
+    # We detect the render by searching next_block for the ⤴ prefix.
+    # Guard 1: only rewrite when NEXT_CACHE is a writable file (never error the hook).
+    # Guard 2 (freshness): only rewrite when the cache was FRESH this boot (_next_cache_fresh=true).
+    # When stale, the background refresh already running will write a fresh cache that
+    # naturally clears auto_advanced — rewriting the old cache here would clobber that
+    # fresh write with stale data for another full TTL (clobber-race prevention).
+    if printf '%s' "${next_block:-}" | grep -qF '⤴ auto-advanced next-up:' \
+       && [ -f "$NEXT_CACHE" ] && [ -w "$NEXT_CACHE" ] \
+       && command -v python3 >/dev/null 2>&1 \
+       && [ "${_next_cache_fresh:-true}" = "true" ]; then
+      _one_shot_rewrite=$(python3 - "$NEXT_CACHE" 2>/dev/null <<'PYREWRITE'
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        c = json.load(f)
+    if c.get("auto_advanced") is not None:
+        c["auto_advanced"] = None
+        print(json.dumps(c, indent=2))
+    # else nothing to do — already null; don't rewrite unnecessarily
+except Exception:
+    pass
+PYREWRITE
+      )
+      if [ -n "$_one_shot_rewrite" ]; then
+        _one_shot_tmp=$(mktemp "$(dirname "$NEXT_CACHE")/next-cache.json.XXXXXX" 2>/dev/null || true)
+        if [ -n "$_one_shot_tmp" ]; then
+          printf '%s\n' "$_one_shot_rewrite" > "$_one_shot_tmp" \
+            && mv "$_one_shot_tmp" "$NEXT_CACHE" \
+            || rm -f "$_one_shot_tmp" 2>/dev/null || true
+        fi
+      fi
+    fi
     else
       # Minimal sed fallback. Handles the three states bare-bones.
       next_block=""

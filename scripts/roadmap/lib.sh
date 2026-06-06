@@ -1386,6 +1386,160 @@ roadmap_label_exists() {
   roadmap_tracker_label_list --limit 1000 --json name --jq '.[].name' | grep -Fxq "$name"
 }
 
+# ── Epic-aware orientation (issue #562) ──────────────────────────────
+
+# roadmap_github_epic_graph <next_up_number> — emit graph JSON on stdout.
+# Fetches the next-up issue, its parent chain (up to 2 levels), and each
+# epic's subIssues via a single GraphQL call. Returns empty graph on any
+# gh/GraphQL failure (caller must treat non-zero exit as degrade).
+# Native sub-issues only. Exits non-zero on gh/GraphQL failure.
+roadmap_github_epic_graph() {
+  local next_up="$1"
+  [ -n "$next_up" ] || { printf '%s\n' '{"next_up":null,"nodes":{}}'; return 0; }
+  local query='
+    query($owner:String!,$repo:String!,$n:Int!){
+      repository(owner:$owner,name:$repo){
+        issue(number:$n){
+          number state title body
+          labels(first:20){nodes{name}}
+          parent{ number state title body
+            labels(first:20){nodes{name}}
+            subIssues(first:50){nodes{number state title body labels(first:20){nodes{name}}}}
+            parent{ number state title body
+              labels(first:20){nodes{name}}
+              subIssues(first:50){nodes{number state title body labels(first:20){nodes{name}}}} } }
+          subIssues(first:50){nodes{number state title body labels(first:20){nodes{name}}}}
+        } } }'
+  local owner repo raw raw_file
+  owner=$(gh repo view --json owner -q .owner.login 2>/dev/null) || return 1
+  repo=$(gh repo view --json name -q .name 2>/dev/null) || return 1
+  raw=$(gh api graphql -f query="$query" -F owner="$owner" -F repo="$repo" -F n="$next_up" 2>/dev/null) || return 1
+  # Write raw to a temp file; pass as argv to python3 (mirror refresh-next-cache.sh temp-file pattern)
+  raw_file=$(mktemp)
+  printf '%s' "$raw" > "$raw_file"
+  NEXT_UP="$next_up" python3 - "$raw_file" <<'PY'
+import json, os, re, sys
+
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+def scrub(s):
+    return _CTRL.sub("", s) if isinstance(s, str) else s
+
+STAGE_RE = re.compile(
+    r"<!--\s*pipeline-state:current-stage\s*-->\s*\*\*Current\s+stage:\*\*\s*(\S+)"
+)
+
+def parse_stage(body):
+    if not body:
+        return None
+    body = body.replace("\\n", "\n")
+    m = STAGE_RE.search(body)
+    return scrub(m.group(1)) if m else None
+
+def node_from(issue, parent_num=None):
+    if issue is None:
+        return None
+    num = issue.get("number")
+    if num is None:
+        return None
+    labels = [scrub(ln["name"]) for ln in (issue.get("labels") or {}).get("nodes") or []]
+    state = "open" if (issue.get("state") or "OPEN").upper() == "OPEN" else "closed"
+    return {
+        "number": num,
+        "is_epic": "type:epic" in labels,
+        "state": state,
+        "title": scrub(issue.get("title") or ""),
+        "labels": labels,
+        "parent": parent_num,
+        "children": [],
+        "stage": parse_stage(issue.get("body") or ""),
+    }
+
+raw_path = sys.argv[1]
+with open(raw_path, encoding="utf-8") as fh:
+    data = json.load(fh)
+
+next_up = int(os.environ["NEXT_UP"])
+nodes = {}
+
+def add_node(issue, parent_num=None):
+    if issue is None:
+        return
+    n = node_from(issue, parent_num)
+    if n is None:
+        return
+    num = n["number"]
+    if num not in nodes:
+        nodes[num] = n
+    elif parent_num is not None and nodes[num]["parent"] is None:
+        nodes[num]["parent"] = parent_num
+
+repo_data = (data.get("data") or {}).get("repository") or {}
+issue = repo_data.get("issue")
+if issue is None:
+    print(json.dumps({"next_up": next_up, "nodes": {}}))
+    sys.exit(0)
+
+# Flatten the next-up issue itself
+add_node(issue, parent_num=None)
+
+# Flatten its subIssues (direct children)
+for sub in (issue.get("subIssues") or {}).get("nodes") or []:
+    add_node(sub, parent_num=issue["number"])
+
+# Flatten parent chain (up to 2 levels) and their subIssues
+parent1 = issue.get("parent")
+if parent1 is not None:
+    add_node(parent1, parent_num=None)
+    for sub in (parent1.get("subIssues") or {}).get("nodes") or []:
+        add_node(sub, parent_num=parent1["number"])
+    parent2 = parent1.get("parent")
+    if parent2 is not None:
+        add_node(parent2, parent_num=None)
+        for sub in (parent2.get("subIssues") or {}).get("nodes") or []:
+            add_node(sub, parent_num=parent2["number"])
+        # Explicitly link parent1 → parent2 (don't rely on parent2.subIssues containing parent1)
+        p1_num = parent1.get("number")
+        p2_num = parent2.get("number")
+        if p1_num is not None and p2_num is not None and p1_num in nodes and p2_num in nodes:
+            nodes[p1_num]["parent"] = p2_num
+
+# Set parent of the next-up issue using the actual parent link
+if parent1 is not None and issue["number"] in nodes:
+    nodes[issue["number"]]["parent"] = parent1["number"]
+
+# Build children lists from parent back-refs
+for num, n in nodes.items():
+    p = n.get("parent")
+    if p is not None and p in nodes:
+        if num not in nodes[p]["children"]:
+            nodes[p]["children"].append(num)
+
+print(json.dumps({"next_up": next_up, "nodes": {str(k): v for k, v in nodes.items()}}, indent=2))
+PY
+  local rc=$?
+  rm -f "$raw_file"
+  return "$rc"
+}
+
+# roadmap_epic_graph <next_up> — backend-dispatched graph builder.
+# Emits graph JSON on stdout. Always exits 0 (fail-soft): a github fetch
+# failure (or empty output) degrades to an empty graph here, so direct
+# callers need no extra guard.
+roadmap_epic_graph() {
+  local out
+  case "${ROADMAP_BACKEND:-$(roadmap_backend)}" in
+    github)
+      if out=$(roadmap_github_epic_graph "$1" 2>/dev/null) && [ -n "$out" ]; then
+        printf '%s\n' "$out"
+      else
+        printf '%s\n' '{"next_up":null,"nodes":{}}'
+      fi
+      ;;
+    azure-devops) printf '%s\n' '{"next_up":null,"nodes":{}}' ;;   # v1: ADO native links deferred → degrade
+    *)            printf '%s\n' '{"next_up":null,"nodes":{}}' ;;
+  esac
+}
+
 # ── Phase 1.5: Pulse file helpers ─────────────────────────────────────
 # Read/write .arboretum/roadmap-pulse.json.
 # All helpers are fail-silent: missing file → empty return, not error.

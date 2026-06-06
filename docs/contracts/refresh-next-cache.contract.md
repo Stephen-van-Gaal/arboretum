@@ -1,6 +1,6 @@
 ---
 seam: refresh-next-cache
-version: 1.3
+version: 1.4
 producer-type: script
 consumer-type: hook
 consumes:
@@ -90,7 +90,19 @@ Writes to `.arboretum/next-cache.json` (atomic via mktemp + mv). Cache shape:
   "error": null | "gh-unavailable" | "gh-call-failed"
                 | "azure-devops-unavailable" | "azure-devops-call-failed"
                 | "backend-unavailable" | "tracker-call-failed"
-                | "python3 unavailable; issue details omitted in fallback cache"
+                | "python3 unavailable; issue details omitted in fallback cache",
+  "epics_in_flight": [
+    {
+      "number": <int>,
+      "title": "<string, control-char-stripped>",
+      "done": <int>,
+      "total": <int>,
+      "active": [{"number": <int>, "title": "<string>", "stage": "<string>|null"}, ...],
+      "next": null | {"number": <int>, "title": "<string>"},
+      "blocked": [{"number": <int>, "title": "<string>"}, ...]
+    }
+  ],
+  "auto_advanced": null | {"from": <int>, "to": <int>, "epic": <int>}
 }
 ```
 
@@ -106,7 +118,7 @@ Exit codes:
 
 ### Invariants
 
-- **Output JSON shape.** The cache file is valid JSON with top-level keys `{fetched_at, issue, handoff, no_gh_remote, error}`. No other top-level keys. Adding or removing a key is a contract change requiring a coordinated consumer update.
+- **Output JSON shape.** The cache file is valid JSON with top-level keys `{fetched_at, issue, handoff, no_gh_remote, error, epics_in_flight, auto_advanced}`. Adding or removing a key is a contract change requiring a coordinated consumer update. `epics_in_flight` and `auto_advanced` are present in every cache variant (issue-present, issue-null, early-exit paths, python3-absent fallback) — consumers may rely on these keys always being present.
 - **Exit-code contract.** Comment-fetch failure is exit `0` (cache successfully written; failure is recorded *in* the cache, not *about* the cache). Whole-cache tracker failures are exit `1`/`2` per the table above.
 - **Handoff-key discriminated union.** The `handoff` value is one of: `null`, a normal-dict with `{posted_at, branch, next_action, body}` keys, or an error-dict with `{error: "fetch-failed", detail: <string>}` keys. The discriminator between the two object shapes is the presence of an `error` key.
 - **Comment-fetch failure discipline.** When tracker comment fetch exits non-zero, the cache records `handoff: {"error": "fetch-failed", "detail": ...}` — NEVER `handoff: null` (which would be indistinguishable from "no handoff comment exists").
@@ -116,16 +128,19 @@ Exit codes:
 
 ## Test surface
 
-- **RNC-1: Output-JSON-shape.** The cache file is valid JSON with top-level keys exactly `{fetched_at, issue, handoff, no_gh_remote, error}`. The smoke test asserts JSON parsability and the exact top-level key set in each producer case (A success, B no-handoff, C comment-fetch-fail, E gh-unavailable early-return, F gh-call-failed early-return). Cases E + F are especially important because they exercise the shell-level early-return printf blocks where the `"handoff": null` line was added in the X1 fix — without those assertions, a regression that drops the line in those blocks would pass CI.
+- **RNC-1: Output-JSON-shape.** The cache file is valid JSON with top-level keys exactly `{auto_advanced, epics_in_flight, error, fetched_at, handoff, issue, no_gh_remote}`. The smoke test asserts JSON parsability and the exact top-level key set in each producer case (A success, B no-handoff, C comment-fetch-fail, E gh-unavailable early-return, F gh-call-failed early-return, G epics-present, H auto-advance). Cases E + F are especially important because they exercise the shell-level early-return printf blocks where the `"handoff": null` line was added in the X1 fix — without those assertions, a regression that drops the line in those blocks would pass CI.
 - **RNC-2: Exit-code contract.** `bash scripts/refresh-next-cache.sh [dir]` exits 0 when the cache was successfully written (any of: issue found and handoff fetched OK; issue found and no handoff comment exists; issue found and comment fetch failed with the error-union recorded; no issue carries `next-up`; no repo remote), 1 when the configured backend is missing/unauthenticated, 2 when the primary tracker issue-list call fails. Comment-fetch failure is exit 0. The smoke test asserts the exit-code transition between the success-and-no-handoff case (0), the comment-fetch-failure case (0 — same), and any whole-cache failure (1 or 2) via GitHub-adapter stub manipulation.
 - **RNC-3: Handoff-key-discriminated-union.** The `handoff` value matches one of three shapes: `null`, `{posted_at, branch, next_action, body}` object, or `{error: "fetch-failed", detail: <string>}` object. The smoke test exercises all three shapes via the three test cases and asserts each one's exact shape (presence/absence of `error` key, key set of the object).
 - **RNC-4: Comment-fetch-failure discipline (closes #264).** A fixture where tracker issue-list succeeds but tracker issue-show comments exits non-zero produces a cache with `handoff: {"error": "fetch-failed", "detail": <stderr-first-line>}` — NOT `handoff: null`. The smoke test asserts both the error-dict shape and the `detail` value matches the stub's stderr first line.
 - **RNC-5: Error-field-scope.** In the comment-fetch-failure case, the whole-cache `error` field MUST be `null` — the failure is scoped to `handoff`, not whole-cache. The smoke test asserts `cache["error"] is None` in the failure case alongside the handoff-scoped error.
 - **RNC-6: ANSI-scrub-invariant.** All author-controlled string fields in the cache are control-char-stripped. The smoke test injects a synthetic ANSI escape (e.g. `\x1b[31m`) into the GitHub-adapter stub's comment-fetch stderr and asserts the cache's `handoff.detail` does not contain the raw escape sequence.
 - **RNC-7: Atomic-write invariant.** The cache file is always valid JSON across rapid back-to-back refreshes. The smoke test asserts in two layers: (1) **behavioural** — runs the script twice in quick succession (sequential, not parallel — parallel would be flaky on shared CI runners) and asserts the final cache file is parseable. (2) **implementation-pattern** — extracts the `write_cache()` function body from the producer source and asserts it still contains both `mktemp "$CACHE_DIR/..."` and `mv "$tmp" "$CACHE_FILE"`. The behavioural layer catches truncation regressions visible under sequential load; the pattern layer catches regressions to a naive `printf > "$CACHE_FILE"` that would silently corrupt the cache when the session-start background refresh races `/handoff` (the actual concurrency hazard the atomic write defends against).
+- **RNC-8: epics_in_flight shape.** The `epics_in_flight` key is present in ALL cache variants (issue-present, issue-null, early-exit backend failure paths, python3-absent fallback). When the epic resolver succeeds and finds epics, each element has shape `{number, title, done, total, active[], next|null, blocked[]}` per the `epic-walk` contract. Author-controlled string fields (`title`, `active[].title`, `next.title`, `blocked[].title`) are scrubbed of control characters before serialization (belt-and-suspenders even though epic-walk.sh already scrubs at production time). When the resolver fails or returns no epics, `epics_in_flight` is `[]`. The smoke test asserts the key is present in all test cases and that a live-mode-equivalent run with a fixture graph containing epic #295 produces a non-empty `epics_in_flight` with `295` in the list.
+- **RNC-9: auto_advanced one-shot and fail-soft.** The `auto_advanced` key is present in ALL cache variants. Its value is non-null (`{from, to, epic}`) **only** in the run that successfully performed the `next-up` label move. **Trigger condition (F1 closed-next-up detection):** the auto-advance path is reached when the open `--state open` fetch returns `[]` (the next-up issue is now closed) AND a subsequent `--state closed --limit 1` probe finds the closed issue. The epic resolver is then called for that closed issue number; if it yields an `auto_advance` candidate, the label move proceeds. **Label-write ordering (F2 add-before-remove):** the move performs `--add-label next-up` on the target issue FIRST, then `--remove-label next-up` on the closed source. If the add fails, the remove is NOT attempted (source keeps next-up — safe). If the add succeeds but remove fails, that is a tolerable transient (two issues carry the label; the next open-fetch `--limit 1` picks one) — the advance is treated as succeeded. If the add fails, the cache is rewritten with `auto_advanced: null` so the `⤴` banner never fires for a move that didn't happen. The next boot naturally finds a different (open) next-up after a successful move, making the advance genuinely one-shot without external state — `epic-walk` returns `auto_advance: null` once the label is on an open issue. The label write never changes the script's exit code; all failures are logged via `write_err` and the script exits 0. The smoke test exercises the corrected reality model: case H has `GH_STUB_ISSUES=[]` (open list empty — #305 is closed) and `GH_STUB_CLOSED_ISSUES=[{#305}]` (closed probe returns it); asserts `auto_advanced.to==306` in cache, sentinel contains `--add-label` BEFORE `--remove-label`; case H2 has `GH_STUB_EDIT_EXIT=1` (add fails) → exit 0, `auto_advanced: null`, and sentinel contains `--add-label` but NOT `--remove-label`.
 
 ## Versioning
 
+- **1.4** (2026-06-05) — adds `epics_in_flight` and `auto_advanced` keys to the cache shape. Both keys are present in all cache variants. `auto_advanced` is non-null only in the run that performed a successful one-shot `next-up` label move. Issue #562.
 - **1.3** (2026-06-03) — adds provider-specific Azure DevOps whole-cache errors so SessionStart can render ADO diagnostics instead of GitHub install/auth guidance. Issue #485.
 - **1.2** (2026-05-31) — contract wording is backend-neutral while retaining the legacy `gh-*` cache error values for schema compatibility.
 - **1.1** (2026-05-31) — producer now calls the backend-neutral roadmap tracker helpers; cache schema and consumer protocol remain unchanged.

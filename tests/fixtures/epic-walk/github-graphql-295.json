@@ -1,0 +1,71 @@
+{
+  "data": {
+    "repository": {
+      "issue": {
+        "number": 305,
+        "state": "OPEN",
+        "title": "WS7: Intake pipeline",
+        "body": "<!-- pipeline-state:current-stage --> **Current stage:** /build\n\nIntake pipeline implementation.",
+        "labels": {
+          "nodes": [
+            {"name": "next-up"}
+          ]
+        },
+        "parent": {
+          "number": 295,
+          "state": "OPEN",
+          "title": "pipeline overhaul",
+          "body": "",
+          "labels": {
+            "nodes": [
+              {"name": "type:epic"}
+            ]
+          },
+          "subIssues": {
+            "nodes": [
+              {
+                "number": 297,
+                "state": "CLOSED",
+                "title": "WS0: foundation",
+                "body": "",
+                "labels": {"nodes": []}
+              },
+              {
+                "number": 298,
+                "state": "CLOSED",
+                "title": "WS1-WS5: core pipeline",
+                "body": "",
+                "labels": {"nodes": []}
+              },
+              {
+                "number": 304,
+                "state": "CLOSED",
+                "title": "WS6: Register pipeline",
+                "body": "",
+                "labels": {"nodes": []}
+              },
+              {
+                "number": 305,
+                "state": "OPEN",
+                "title": "WS7: Intake pipeline",
+                "body": "<!-- pipeline-state:current-stage --> **Current stage:** /build\n\nIntake pipeline implementation.",
+                "labels": {"nodes": [{"name": "next-up"}]}
+              },
+              {
+                "number": 306,
+                "state": "OPEN",
+                "title": "WS8: Orphan bug sweep",
+                "body": "",
+                "labels": {"nodes": []}
+              }
+            ]
+          },
+          "parent": null
+        },
+        "subIssues": {
+          "nodes": []
+        }
+      }
+    }
+  }
+}
