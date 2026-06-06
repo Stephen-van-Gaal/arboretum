@@ -132,6 +132,17 @@ GH
   chmod +x "$dir/gh"
 }
 
+make_gh_poison() {
+  local dir="$1"
+  mkdir -p "$dir"
+  cat >"$dir/gh" <<'GH'
+#!/usr/bin/env bash
+echo "poison gh should not be used" >&2
+exit 42
+GH
+  chmod +x "$dir/gh"
+}
+
 run_helper() {
   local repo="$1" pr_json="$2" prepare_mode="$3" log="$4" extra_env="${5:-}"
   local gh_dir
@@ -139,7 +150,7 @@ run_helper() {
   make_gh_stub "$gh_dir"
   write_prepare_stub "$repo"
   printf '%s\n' "$pr_json" >"$TMP/pr.json"
-  GH_LOG="$log" GH_PR_LIST="$TMP/pr.json" PATH="$gh_dir:$PATH" PREPARE_MODE="$prepare_mode" REPO_ROOT="$repo" RELEASE_CANDIDATE_PREPARE="$repo/dev-tools/release/prepare-stub.sh" env $extra_env bash "$SCRIPT"
+  GH_LOG="$log" GH_PR_LIST="$TMP/pr.json" PREPARE_MODE="$prepare_mode" REPO_ROOT="$repo" RELEASE_CANDIDATE_PREPARE="$repo/dev-tools/release/prepare-stub.sh" RELEASE_CANDIDATE_GH="$gh_dir/gh" env $extra_env bash "$SCRIPT"
 }
 
 INVALID="$(make_fixture invalid)"
@@ -155,7 +166,7 @@ mkdir -p "$NON_GIT"
 make_gh_stub "$TMP/gh-non-git"
 printf '[]\n' >"$TMP/pr-non-git.json"
 rc=0
-GH_LOG="$TMP/gh-non-git.log" GH_PR_LIST="$TMP/pr-non-git.json" PATH="$TMP/gh-non-git:$PATH" REPO_ROOT="$NON_GIT" bash "$SCRIPT" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+GH_LOG="$TMP/gh-non-git.log" GH_PR_LIST="$TMP/pr-non-git.json" RELEASE_CANDIDATE_GH="$TMP/gh-non-git/gh" REPO_ROOT="$NON_GIT" bash "$SCRIPT" >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
 check "non-git repo root exits 2" "2" "$rc"
 contains "non-git repo root diagnostic" 'not a git worktree' /tmp/update-rc.err
 
@@ -166,9 +177,22 @@ printf '[]\n' >"$TMP/pr-default-root.json"
 rc=0
 (
   cd "$DEFAULT_ROOT" || exit 99
-  GH_LOG="$TMP/gh-default-root.log" GH_PR_LIST="$TMP/pr-default-root.json" PATH="$TMP/gh-default-root:$PATH" PREPARE_MODE=none RELEASE_CANDIDATE_PREPARE="$DEFAULT_ROOT/dev-tools/release/prepare-stub.sh" bash "$SCRIPT"
+  GH_LOG="$TMP/gh-default-root.log" GH_PR_LIST="$TMP/pr-default-root.json" PREPARE_MODE=none RELEASE_CANDIDATE_PREPARE="$DEFAULT_ROOT/dev-tools/release/prepare-stub.sh" RELEASE_CANDIDATE_GH="$TMP/gh-default-root/gh" bash "$SCRIPT"
 ) >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
 check "default repo root exits 0" "0" "$rc"
+
+PINNED_PROVIDER="$(make_fixture pinned-provider)"
+write_prepare_stub "$PINNED_PROVIDER"
+make_gh_stub "$TMP/gh-pinned-provider"
+make_gh_poison "$TMP/gh-poison"
+printf '[]\n' >"$TMP/pr-pinned-provider.json"
+rc=0
+(
+  cd "$PINNED_PROVIDER" || exit 99
+  GH_LOG="$TMP/gh-pinned-provider.log" GH_PR_LIST="$TMP/pr-pinned-provider.json" PATH="$TMP/gh-poison:$PATH" PREPARE_MODE=none RELEASE_CANDIDATE_PREPARE="$PINNED_PROVIDER/dev-tools/release/prepare-stub.sh" RELEASE_CANDIDATE_GH="$TMP/gh-pinned-provider/gh" bash "$SCRIPT"
+) >/tmp/update-rc.out 2>/tmp/update-rc.err || rc=$?
+check "provider stub is pinned outside PATH" "0" "$rc"
+contains "pinned provider used gh stub" 'pr list' "$TMP/gh-pinned-provider.log"
 
 HUMAN_PR="$(make_fixture human-pr)"
 rc=0
