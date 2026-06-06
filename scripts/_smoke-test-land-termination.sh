@@ -190,6 +190,17 @@ STUB
 chmod +x "$BINDIR/gh"
 PATH="$BINDIR:$PATH"; export PATH
 
+# Journey-log author trust (#249). The fixture log comments below are authored
+# by the allowlisted `trusted-bot`; point read-journey-log (invoked transitively
+# by land-handler) at a present-key config that allowlists it, so strict-mode
+# filtering surfaces the legitimate entries this test relies on.
+cat > "$ROOT_TMP/trust.yml" <<'YML'
+trust:
+  journey_log_authors:
+    - trusted-bot
+YML
+export TRUST_CONFIG_OVERRIDE="$ROOT_TMP/trust.yml"
+
 # Default empty-reviews fixture used by most cases.
 cat > "$ROOT_TMP/reviews-empty.json" <<'JSON'
 []
@@ -243,7 +254,7 @@ ok "case 3 — active state returns terminal=false"
 # ── Case 4: Warm + terminal — prior journey-log entry exists ──────────
 cat > "$ROOT_TMP/comments-with-phase3.json" <<'JSON'
 [
-  {"id": 1, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 3, head_sha: abc1234, head_sha_unchanged_count: 0"}
+  {"id": 1, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 3, head_sha: abc1234, head_sha_unchanged_count: 0"}
 ]
 JSON
 out=$(GH_STUB_PR_VIEW="$ROOT_TMP/pr-merged.json" \
@@ -295,7 +306,7 @@ cat > "$ROOT_TMP/pr-open-sha.json" <<'JSON'
 JSON
 cat > "$ROOT_TMP/comments-prior-count1.json" <<'JSON'
 [
-  {"id": 1, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 3, head_sha: deadbeef1234, head_sha_unchanged_count: 1"}
+  {"id": 1, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 3, head_sha: deadbeef1234, head_sha_unchanged_count: 1"}
 ]
 JSON
 out=$(GH_STUB_PR_VIEW="$ROOT_TMP/pr-open-sha.json" \
@@ -315,7 +326,7 @@ ok "case 7 — head-SHA stall counter trips at 2"
 # ── Case 8: Same fixture, but prior count=0 — should NOT stall ────────
 cat > "$ROOT_TMP/comments-prior-count0.json" <<'JSON'
 [
-  {"id": 1, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 3, head_sha: deadbeef1234, head_sha_unchanged_count: 0"}
+  {"id": 1, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 3, head_sha: deadbeef1234, head_sha_unchanged_count: 0"}
 ]
 JSON
 out=$(GH_STUB_PR_VIEW="$ROOT_TMP/pr-open-sha.json" \
@@ -692,7 +703,7 @@ chmod +x "$BINDIR/gh"
 # filter should pick the older Phase 3 row.
 cat > "$ROOT_TMP/comments-phase2-then-phase3.json" <<'JSON'
 [
-  {"id": 1, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T10:00:00Z — /land summary, phase: 3, head_sha: cafebabe1234, head_sha_unchanged_count: 0"},
+  {"id": 1, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T10:00:00Z — /land summary, phase: 3, head_sha: cafebabe1234, head_sha_unchanged_count: 0"},
   {"id": 2, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 2, stall: true, reason: draft"}
 ]
 JSON
@@ -713,7 +724,7 @@ ok "case 21 — Phase 2 stall summaries are skipped when reading head-SHA state"
 # ── Case 22: ONLY Phase 2 summaries exist → reset counter ─────────────
 cat > "$ROOT_TMP/comments-phase2-only.json" <<'JSON'
 [
-  {"id": 1, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 2, stall: true, reason: draft"}
+  {"id": 1, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T11:00:00Z — /land summary, phase: 2, stall: true, reason: draft"}
 ]
 JSON
 out=$(GH_STUB_PR_VIEW="$ROOT_TMP/pr-open-sha.json" \

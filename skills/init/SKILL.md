@@ -215,6 +215,16 @@ backend: github
 YAML
   echo "  created: .arboretum.yml"
 fi
+
+# Seed the journey-log author allowlist (#249) via the lifecycle helper.
+# Additive-only: no-op if a trust block already exists. Best-effort on gh —
+# writes a hinted placeholder + bot and warns if the login can't be resolved.
+# This is the new-project path; legacy bootstrap-project.sh seeds the same way.
+if bash "$PLUGIN_ROOT/scripts/manage-trust.sh" instantiate ".arboretum.yml"; then
+  echo "  seeded: trust.journey_log_authors"
+else
+  echo "  warning: trust allowlist not seeded — run /upgrade or edit .arboretum.yml"
+fi
 ```
 
 ### Step 6b: Seed the install manifest

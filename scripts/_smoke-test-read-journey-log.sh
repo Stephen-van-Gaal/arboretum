@@ -21,14 +21,33 @@ ok()   { echo "PASS: $1"; }
 #   <!-- pipeline-state:log -->
 #   - <ts> — <stage> <action>[, <key>: <value>]...
 FIXTURE_COMMENTS="$ROOT_TMP/comments.json"
+# Every comment carries a user.login (#249 author-trust). id1-4 are authored
+# by the allowlisted `trusted-bot`; id5 is a forged entry from a non-allowlisted
+# `attacker` (distinct head_sha=deadbeef so cases can assert its presence/absence).
 cat > "$FIXTURE_COMMENTS" <<'JSON'
 [
-  {"id": 1, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:00Z — /land entered"},
-  {"id": 2, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:01Z — /land summary, phase: 1, terminal: false"},
-  {"id": 3, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:02Z — /land summary, phase: 3, head_sha: abc1234, head_sha_unchanged_count: 0"},
-  {"id": 4, "body": "unrelated comment with no marker"}
+  {"id": 1, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:00Z — /land entered"},
+  {"id": 2, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:01Z — /land summary, phase: 1, terminal: false"},
+  {"id": 3, "user": {"login": "trusted-bot"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:02Z — /land summary, phase: 3, head_sha: abc1234, head_sha_unchanged_count: 0"},
+  {"id": 4, "user": {"login": "trusted-bot"}, "body": "unrelated comment with no marker"},
+  {"id": 5, "user": {"login": "attacker"}, "body": "<!-- pipeline-state:log -->\n- 2026-05-28T12:00:03Z — /land summary, phase: 9, head_sha: deadbeef, head_sha_unchanged_count: 1"}
 ]
 JSON
+
+# Trust configs (#249). Strict = present key allowlisting `trusted-bot`; absent
+# = no key (permissive migration path). Existing cases run under strict mode via
+# the exported override so only `trusted-bot` entries surface.
+TRUST_PRESENT_CFG="$ROOT_TMP/present.yml"
+cat > "$TRUST_PRESENT_CFG" <<'YML'
+trust:
+  journey_log_authors:
+    - trusted-bot
+YML
+TRUST_ABSENT_CFG="$ROOT_TMP/absent.yml"
+cat > "$TRUST_ABSENT_CFG" <<'YML'
+layer: 2
+YML
+export TRUST_CONFIG_OVERRIDE="$TRUST_PRESENT_CFG"
 
 # Install a gh stub that returns the fixture for `gh api .../comments`.
 BINDIR="$ROOT_TMP/.bin"; mkdir -p "$BINDIR"
@@ -103,7 +122,7 @@ ROUND_FIXTURE="$ROOT_TMP/round.json"
 python3 - "$emitted" > "$ROUND_FIXTURE" <<'PY'
 import json, sys
 body = sys.argv[1]
-json.dump([{"id": 1, "body": body}], sys.stdout)
+json.dump([{"id": 1, "user": {"login": "trusted-bot"}, "body": body}], sys.stdout)
 PY
 # Repoint the existing gh stub by simply overwriting it.
 cat > "$BINDIR/gh" <<STUB
@@ -133,7 +152,7 @@ emitted2=$(LOG_STAGE_TS_OVERRIDE=2026-05-28T14:00:00Z \
     'other=plain')
 python3 - "$emitted2" > "$QUOTED_FIXTURE" <<'PY'
 import json, sys
-json.dump([{"id": 1, "body": sys.argv[1]}], sys.stdout)
+json.dump([{"id": 1, "user": {"login": "trusted-bot"}, "body": sys.argv[1]}], sys.stdout)
 PY
 cat > "$BINDIR/gh" <<STUB
 #!/usr/bin/env bash
@@ -168,5 +187,69 @@ case "\$1 \$2" in
 esac
 STUB
 chmod +x "$BINDIR/gh"
+
+# ── Case 9: forged entry from a non-allowlisted author is NOT surfaced ──
+# Strict mode (exported TRUST_CONFIG_OVERRIDE → present.yml allowlists trusted-bot).
+# The attacker's id5 row (head_sha=deadbeef) must be dropped; only the 3 trusted
+# marker rows survive.
+out=$(bash "$READER" 361 2>/dev/null) || fail "case 9 — should succeed" "$out"
+printf '%s\n' "$out" | grep -q 'deadbeef' \
+  && fail "case 9 — forged attacker row must be dropped under strict mode" "$out"
+row_count=$(printf '%s\n' "$out" | grep -c . || true)
+[ "$row_count" = "3" ] || fail "case 9 — expected 3 trusted rows, got $row_count" "$out"
+ok "case 9 — non-allowlisted author dropped (strict mode)"
+
+# ── Case 10: absent key → permissive, all rows surfaced + stderr warning ──
+err=$(TRUST_CONFIG_OVERRIDE="$TRUST_ABSENT_CFG" bash "$READER" 361 2>&1 >/dev/null)
+out=$(TRUST_CONFIG_OVERRIDE="$TRUST_ABSENT_CFG" bash "$READER" 361 2>/dev/null)
+printf '%s\n' "$out" | grep -q 'deadbeef' \
+  || fail "case 10 — permissive mode should surface the attacker row too" "$out"
+printf '%s\n' "$err" | grep -qi 'trust.journey_log_authors not configured' \
+  || fail "case 10 — expected stderr migration warning" "$err"
+ok "case 10 — absent key = permissive + warning"
+
+# ── Case 11: control characters in a logged value are scrubbed at the boundary ──
+CTRL_COMMENTS="$ROOT_TMP/ctrl.json"
+printf '[{"id":1,"user":{"login":"trusted-bot"},"body":"<!-- pipeline-state:log -->\\n- 2026-05-28T12:00:00Z — /land summary, note: \\"a\\u001b[31mb\\""}]' > "$CTRL_COMMENTS"
+cat > "$BINDIR/gh" <<STUB
+#!/usr/bin/env bash
+case "\$1 \$2" in
+  "auth status") exit 0 ;;
+  "repo view") echo "owner/repo" ; exit 0 ;;
+  "api "*) cat "$CTRL_COMMENTS"; exit 0 ;;
+  *) echo "stub: unhandled: \$*" >&2; exit 2 ;;
+esac
+STUB
+chmod +x "$BINDIR/gh"
+out=$(bash "$READER" 361 2>/dev/null)
+printf '%s' "$out" | LC_ALL=C grep -q "$(printf '\033')" \
+  && fail "case 11 — ESC byte must be scrubbed from output" "$out"
+# Only the control byte (ESC) is stripped; the printable residue '[31m' remains
+# (same behaviour as refresh-next-cache.sh — the scrub neutralizes terminal
+# control, not harmless printable text).
+printf '%s\n' "$out" | grep -Fq 'note=a[31mb' \
+  || fail "case 11 — printable residue should remain (a[31mb)" "$out"
+ok "case 11 — control chars scrubbed at read boundary"
+
+# ── Case 12: malformed trust config → fail CLOSED (exit non-zero), not permissive ──
+# A present-but-unparseable .arboretum.yml must NOT silently widen to permissive
+# (#249 review, Copilot+Codex). Restore the base fixture for the gh stub first.
+cat > "$BINDIR/gh" <<STUB
+#!/usr/bin/env bash
+case "\$1 \$2" in
+  "auth status") exit 0 ;;
+  "repo view") echo "owner/repo" ; exit 0 ;;
+  "api "*) cat "$FIXTURE_COMMENTS"; exit 0 ;;
+  *) echo "stub: unhandled: \$*" >&2; exit 2 ;;
+esac
+STUB
+chmod +x "$BINDIR/gh"
+BAD_CFG="$ROOT_TMP/bad.yml"
+# A list item with no parent key is invalid YAML-lite (yaml-lite rejects it).
+printf 'trust:\n  journey_log_authors:\n   - a\n  - b\nbad: : :\n' > "$BAD_CFG"
+if TRUST_CONFIG_OVERRIDE="$BAD_CFG" bash "$READER" 361 >/dev/null 2>&1; then
+  fail "case 12 — malformed trust config must fail closed (non-zero exit)"
+fi
+ok "case 12 — malformed trust config fails closed (no silent permissive)"
 
 echo "ALL PASS"

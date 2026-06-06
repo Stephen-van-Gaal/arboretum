@@ -6,6 +6,8 @@
       "Bash(bash scripts/validate-cross-refs.sh *)",
       "Bash(bash scripts/log-stage.sh *)",
       "Bash(bash scripts/read-journey-log.sh *)",
+      "Bash(bash scripts/read-trust-config.sh *)",
+      "Bash(bash scripts/manage-trust.sh *)",
       "Bash(bash scripts/land-handler.sh *)",
       "Bash(bash scripts/cleanup-merged-session.sh *)",
       "Bash(bash scripts/resolve-workflow-slot.sh *)",

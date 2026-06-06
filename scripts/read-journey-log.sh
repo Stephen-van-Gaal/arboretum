@@ -47,6 +47,41 @@ done
 
 command -v gh >/dev/null 2>&1 || { echo "read-journey-log.sh requires the gh CLI" >&2; exit 1; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve the journey-log author allowlist (#249). TRUST_CONFIG_OVERRIDE lets
+# tests point at a fixture config; production resolves .arboretum.yml at the
+# git toplevel. Key present → strict (only allowlisted authors surface); key
+# absent → permissive migration bridge (all authors surface + one warning).
+# Resolve the config path safely: prefer the override, then the git toplevel.
+# Outside a git worktree with no override, there is no config to resolve.
+TRUST_CONFIG=""
+if [ -n "${TRUST_CONFIG_OVERRIDE:-}" ]; then
+  TRUST_CONFIG="$TRUST_CONFIG_OVERRIDE"
+else
+  _toplevel="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$_toplevel" ] && TRUST_CONFIG="$_toplevel/.arboretum.yml"
+fi
+TRUST_PRESENT="no"
+ALLOWLIST=""
+if [ -n "$TRUST_CONFIG" ] && [ -f "$TRUST_CONFIG" ]; then
+  # Fail CLOSED on a parse error: when the config exists but the reader fails
+  # (e.g. invalid YAML-lite from a manual edit), do NOT silently widen the trust
+  # boundary to permissive — propagate the failure (#249 review, Copilot+Codex).
+  if ! trust_out="$(bash "$SCRIPT_DIR/read-trust-config.sh" "$TRUST_CONFIG" 2>&1)"; then
+    echo "read-journey-log.sh: trust config $TRUST_CONFIG exists but could not be parsed — refusing to fall back to permissive mode (#249):" >&2
+    printf '%s\n' "$trust_out" >&2
+    exit 1
+  fi
+  if printf '%s\n' "$trust_out" | grep -qx 'present=yes'; then
+    TRUST_PRESENT="yes"
+  fi
+  ALLOWLIST="$(printf '%s\n' "$trust_out" | sed -n 's/^author=//p')"
+fi
+if [ "$TRUST_PRESENT" = "no" ]; then
+  echo "read-journey-log.sh: trust.journey_log_authors not configured — surfacing journey-log entries from ALL comment authors; see #249" >&2
+fi
+
 # Determine owner/repo from the current directory's git remote.
 REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null) || {
   echo "read-journey-log.sh: could not determine repo (run inside a gh-authenticated repo)" >&2
@@ -66,9 +101,22 @@ trap 'rm -f "$_TMPJSON"' EXIT
 gh api "repos/$REPO/issues/$ISSUE/comments" --paginate 2>/dev/null \
   > "$_TMPJSON" || { echo "read-journey-log.sh: gh api fetch failed" >&2; exit 2; }
 
+RJL_ALLOWLIST="$ALLOWLIST" RJL_TRUST_PRESENT="$TRUST_PRESENT" \
 python3 - "$_TMPJSON" "$STAGE_FILTER" "$ACTION_FILTER" "$LATEST" <<'PY'
-import json, re, sys
+import json, os, re, sys
 comments_file, stage_filter, action_filter, latest = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+
+# Author-trust filter (#249): in strict mode (allowlist key present) only
+# allowlisted comment authors contribute rows. Untrusted authors are silently
+# ignored — NOT an error (they may be legitimate contributor notes).
+_allow = set(l for l in os.environ.get("RJL_ALLOWLIST", "").split("\n") if l)
+_trust_present = os.environ.get("RJL_TRUST_PRESENT", "no") == "yes"
+
+# Read-side control-char scrub at the consumer boundary (pipeline-state-tracking
+# spec § Defense in depth). Same regex as scripts/refresh-next-cache.sh.
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+def scrub(s):
+    return _CTRL.sub("", s) if isinstance(s, str) else s
 
 # Handle gh api --paginate output: it concatenates page bodies (multiple
 # JSON arrays back-to-back). raw_decode consumes one JSON value at a time
@@ -131,6 +179,11 @@ for c in data:
     body = c.get("body", "")
     if MARKER not in body:
         continue
+    # Author-trust gate (#249): drop non-allowlisted authors when strict.
+    if _trust_present:
+        author = (c.get("user") or {}).get("login", "")
+        if author not in _allow:
+            continue
     # Take everything after the marker; one or more lines.
     after = body.split(MARKER, 1)[1].lstrip("\n")
     for line in after.splitlines():
@@ -193,5 +246,6 @@ rows.sort(key=lambda r: r[0])
 if latest and rows:
     rows = rows[-1:]
 for ts, stage, action, pairs in rows:
-    print("\t".join([ts, stage, action] + pairs))
+    safe = [scrub(ts), scrub(stage), scrub(action)] + [scrub(p) for p in pairs]
+    print("\t".join(safe))
 PY

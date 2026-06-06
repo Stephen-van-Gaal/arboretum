@@ -71,10 +71,34 @@ _SYNC="${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-sync.sh"
    no conflicts remain).
    For any conflict the user chose to take, copy that file from `plugin_root` manually
    and record it via `bash "$_SYNC" --write-manifest-entry <path> <version> <sha>`.
-4. **Verify:** regenerate the register (`bash scripts/generate-register.sh`) and run
+4. **Seed journey-log trust allowlist (config migration, #249):** If `.arboretum.yml`
+   lacks `trust.journey_log_authors` (check: `bash scripts/read-trust-config.sh .arboretum.yml`
+   prints `present=no`), OFFER to seed it — do not force it.
+   - Explain in one line: pipeline-state journey-log comments (`<!-- pipeline-state:log -->`)
+     are now author-trust-gated so a drive-by commenter cannot forge `/land` state; until
+     the key is configured, entries from all authors are surfaced with a warning.
+   - Retrieve candidates from the git provider (degrade gracefully if a call fails):
+     - `gh api user --jq .login` — the account that runs the pipeline (pre-select this).
+     - `gh api repos/{owner}/{repo}/collaborators --jq '.[] | select(.permissions.push==true) | .login'`
+       — push-access collaborators (the right trust boundary; anyone who can push could merge
+       code anyway, so trusting their entries adds no marginal risk).
+     - `github-actions[bot]` — offer for CI-posted entries.
+   - Walk the human through selection with `AskUserQuestion` (multiSelect), pre-selecting the
+     current user + bot. If the collaborator call fails (org restriction / perms), fall back
+     to current user + bot and say so.
+   - Write the chosen set: `bash scripts/manage-trust.sh set .arboretum.yml <login>...`
+     (`set` is an **authoritative replace** — it writes exactly the chosen logins, so the
+     human curates add/remove here; it overwrites an existing list, which is correct because
+     this write only happens after the walk-through above. `instantiate`, by contrast, is
+     additive-only and never overwrites — but it cannot remove, so the curation path uses
+     `set`.) Confirm what landed; note it is editable in `.arboretum.yml` and that
+     `manage-trust.sh maintain` (a planned follow-up) will offer contribution-based review.
+   - If the user declines, leave the key absent — the permissive grace period + warning still
+     covers them. Never write without the walk-through.
+5. **Verify:** regenerate the register (`bash scripts/generate-register.sh`) and run
    `bash scripts/health-check.sh`; surface stale version pins. Leave everything
    uncommitted for git review — do NOT commit on the user's behalf.
-5. Summarize: N added, N updated (overwrite-safe), N local edits replaced
+6. Summarize: N added, N updated (overwrite-safe), N local edits replaced
    (overwrite-local), N conflicts surfaced, N report-only. State the
    removal-detection status: `active` → "N stale files flagged" / "none stale";
    `inconclusive` → "removal detection disabled (no manifest baseline yet)".

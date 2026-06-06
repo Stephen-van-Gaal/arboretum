@@ -51,23 +51,33 @@ chmod +x "$GH_STUB_DIR/gh"
 # Build a comments payload (a JSON array of {body:...}) with python3 so
 # the em-dash and control sequences are correctly encoded.
 # Two log comments + one non-log comment.
+# All log comments authored by the allowlisted `pipeline-bot` (#249 author-trust).
 COMMENTS=$(python3 -c "
 import json
 log = '<!-- pipeline-state:log -->'
+bot = {'login': 'pipeline-bot'}
 comments = [
     # earlier timestamp
-    {'body': log + '\n- 2026-05-30T10:00:00Z — /land summary, head_sha: abc123, head_sha_unchanged_count: 0'},
+    {'user': bot, 'body': log + '\n- 2026-05-30T10:00:00Z — /land summary, head_sha: abc123, head_sha_unchanged_count: 0'},
     # later timestamp, with a quoted value containing a comma+key-like text
-    {'body': log + '\n- 2026-05-30T11:00:00Z — /land summary, note: \"hello, world\", head_sha: def456'},
+    {'user': bot, 'body': log + '\n- 2026-05-30T11:00:00Z — /land summary, note: \"hello, world\", head_sha: def456'},
     # a /build entered row at a middle timestamp
-    {'body': log + '\n- 2026-05-30T10:30:00Z — /build entered'},
+    {'user': bot, 'body': log + '\n- 2026-05-30T10:30:00Z — /build entered'},
     # a non-log comment (no marker) — must contribute nothing
-    {'body': 'just a regular comment, no marker here'},
+    {'user': bot, 'body': 'just a regular comment, no marker here'},
 ]
 print(json.dumps(comments))
 ")
 
-run() { GH_COMMENTS_JSON="$COMMENTS" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" "$@" 2>"$GH_STUB_DIR/.err"; }
+# Present-key trust config allowlisting pipeline-bot → strict mode for RJL-1..5.
+TRUST_PRESENT_CFG="$GH_STUB_DIR/present.yml"
+cat > "$TRUST_PRESENT_CFG" <<'YML'
+trust:
+  journey_log_authors:
+    - pipeline-bot
+YML
+
+run() { GH_COMMENTS_JSON="$COMMENTS" TRUST_CONFIG_OVERRIDE="$TRUST_PRESENT_CFG" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" "$@" 2>"$GH_STUB_DIR/.err"; }
 
 # RJL-1 — all rows: 3 log rows, sorted ascending by timestamp, 3 tab-fields min
 out=$(run 42); rc=$?
@@ -132,5 +142,45 @@ out6=$(PATH="$NOGH_BIN" bash "$PROBE" 42 2>/dev/null); rc=$?
 # RJL-7 — no matching comments → exit 0, empty stdout
 out7=$(GH_COMMENTS_JSON='[]' PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" 42 2>/dev/null); rc=$?
 [ "$rc" = 0 ] && [ -z "$out7" ] && pass RJL-7 || fail_case RJL-7 "rc=$rc out=[$out7]"
+
+# ── v1.1 invariants (#249) ───────────────────────────────────────────
+# Fixture: a trusted log row + a forged row from a non-allowlisted author.
+COMMENTS_FORGED=$(python3 -c "
+import json
+log = '<!-- pipeline-state:log -->'
+print(json.dumps([
+  {'user': {'login': 'pipeline-bot'}, 'body': log + '\n- 2026-05-30T10:00:00Z — /land summary, head_sha: trusted0'},
+  {'user': {'login': 'attacker'},     'body': log + '\n- 2026-05-30T10:05:00Z — /land summary, head_sha: forged00, head_sha_unchanged_count: 1'},
+]))
+")
+
+# RJL-8 — Author-trust gated: forged (non-allowlisted) author dropped under strict.
+out8=$(GH_COMMENTS_JSON="$COMMENTS_FORGED" TRUST_CONFIG_OVERRIDE="$TRUST_PRESENT_CFG" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" 42 2>/dev/null); rc=$?
+n8=$(printf '%s\n' "$out8" | grep -c .)
+if [ "$rc" = 0 ] && [ "$n8" = 1 ] && ! printf '%s\n' "$out8" | grep -q 'forged00'; then
+  pass "RJL-8 (author-trust gated)"
+else
+  fail_case "RJL-8 (author-trust gated)" "rc=$rc n=$n8 out=$out8"
+fi
+
+# RJL-9 — absent key → permissive (both rows) + single stderr migration warning.
+TRUST_ABSENT_CFG="$GH_STUB_DIR/absent.yml"; printf 'layer: 2\n' > "$TRUST_ABSENT_CFG"
+err9=$(GH_COMMENTS_JSON="$COMMENTS_FORGED" TRUST_CONFIG_OVERRIDE="$TRUST_ABSENT_CFG" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" 42 2>&1 >/dev/null)
+out9=$(GH_COMMENTS_JSON="$COMMENTS_FORGED" TRUST_CONFIG_OVERRIDE="$TRUST_ABSENT_CFG" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" 42 2>/dev/null); rc=$?
+n9=$(printf '%s\n' "$out9" | grep -c .)
+if [ "$rc" = 0 ] && [ "$n9" = 2 ] && printf '%s\n' "$err9" | grep -qi 'trust.journey_log_authors not configured'; then
+  pass "RJL-9 (absent-key permissive + warning)"
+else
+  fail_case "RJL-9 (absent-key permissive + warning)" "rc=$rc n=$n9 err=$err9 out=$out9"
+fi
+
+# RJL-10 — read-side scrub: ESC byte stripped, printable residue preserved.
+COMMENTS_CTRL=$(printf '[{"user":{"login":"pipeline-bot"},"body":"<!-- pipeline-state:log -->\\n- 2026-05-30T10:00:00Z — /land summary, note: \\"a\\u001b[31mb\\""}]')
+out10=$(GH_COMMENTS_JSON="$COMMENTS_CTRL" TRUST_CONFIG_OVERRIDE="$TRUST_PRESENT_CFG" PATH="$GH_STUB_DIR:$PATH" bash "$PROBE" 42 2>/dev/null)
+if ! printf '%s' "$out10" | LC_ALL=C grep -q "$(printf '\033')" && printf '%s\n' "$out10" | grep -Fq 'note=a[31mb'; then
+  pass "RJL-10 (read-side scrub)"
+else
+  fail_case "RJL-10 (read-side scrub)" "out=$out10"
+fi
 
 [ "$fail" = 0 ] && echo "read-journey-log contract: ALL PASS" || exit 1

@@ -21,6 +21,7 @@
 | scripts/lib/upgrade-classify.sh | docs/contracts/upgrade-classify.contract.md | full |
 | scripts/lib/yaml-lite.sh | docs/contracts/yaml-lite.contract.md | full |
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
+| scripts/manage-trust.sh | docs/contracts/trust-config.contract.md | full |
 | scripts/parse-plan-checkboxes.sh | docs/contracts/parse-plan-checkboxes.contract.md | full |
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
 | scripts/post-review-closeout.sh | docs/contracts/review-closeout.contract.md | full |
@@ -34,6 +35,7 @@
 | scripts/read-review-config.sh | docs/contracts/read-review-config.cli-contract.md | cli |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
 | scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |
+| scripts/read-trust-config.sh | docs/contracts/trust-config.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
 | scripts/refresh-stage-cache.sh | docs/contracts/refresh-stage-cache.contract.md | full |
 | scripts/refresh-update-cache.sh | docs/contracts/refresh-update-cache.contract.md | full |

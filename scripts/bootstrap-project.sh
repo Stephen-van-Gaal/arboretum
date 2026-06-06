@@ -292,6 +292,14 @@ patch_lane:
   investigation_budget_minutes: 15
 ARBORETUM
   echo "  created: .arboretum.yml"
+  # Seed the journey-log author allowlist (#249) via the lifecycle helper.
+  # Additive-only: no-op if a trust block already exists. Best-effort on gh —
+  # writes a hinted placeholder + bot and warns if the login can't be resolved.
+  if bash "$(dirname "$0")/manage-trust.sh" instantiate "$TARGET_DIR/.arboretum.yml"; then
+    echo "  seeded: trust.journey_log_authors"
+  else
+    echo "  warning: trust allowlist not seeded — run /upgrade or edit .arboretum.yml"
+  fi
 fi
 
 # ── Initialize git if needed ─────────────────────────────────────────
