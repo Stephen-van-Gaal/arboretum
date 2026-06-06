@@ -35,7 +35,7 @@ echo '[]' > "$tmp/fix/gh-reviews.json"
 echo '[]' > "$tmp/fix/gh-conversation.json"
 echo '{}' > "$tmp/fix/gh-threads.json"
 rec="$(cd "$tmp" && COLLECT_FIXTURE_DIR="$tmp/fix" bash "$SCRIPT_DIR/collect-review.sh" 1 2>/dev/null)"
-expected='["author","backend","body","file","id","line","priority","reply_handle","status","surface"]'
+expected='["author","backend","body","file","id","is_outdated","line","priority","reply_handle","status","surface"]'
 got="$(echo "$rec" | jq -cS '.[0]|keys')"
 [ "$got" = "$expected" ] || note "normalized-record key set drifted: expected $expected, got $got"
 

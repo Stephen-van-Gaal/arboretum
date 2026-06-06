@@ -41,12 +41,12 @@ reviews = [
 conv = [{"id": 700, "user": {"login": "chatgpt-codex-connector"},
          "body": "Didn't find any major issues"}]
 threads = {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
-  {"isResolved": False, "comments": {"nodes": [
+  {"id": "THREAD111", "isResolved": False, "isOutdated": False, "comments": {"nodes": [
     {"databaseId": 111, "author": {"login": "chatgpt-codex-connector"}, "body": "x"}]}},
-  {"isResolved": True, "comments": {"nodes": [
+  {"id": "THREAD222", "isResolved": True, "isOutdated": False, "comments": {"nodes": [
     {"databaseId": 222, "author": {"login": "Copilot"}, "body": "y"},
     {"databaseId": 333, "author": {"login": "stvangaal"}, "body": "Fixed"}]}},
-  {"isResolved": False, "comments": {"nodes": [
+  {"id": "THREAD444", "isResolved": False, "isOutdated": True, "comments": {"nodes": [
     {"databaseId": 444, "author": {"login": "Copilot"}, "body": "consider X"},
     {"databaseId": 445, "author": {"login": "stvangaal"}, "body": "Done"}]}},
 ]}}}}}
@@ -75,6 +75,8 @@ echo "$out" | jq -e 'any(.[]; .id==222 and .status=="resolved")' >/dev/null 2>&1
 # reply_handle is surface-dependent: inline carries an in_reply_to target; review
 # summaries and conversation comments are not in_reply_to targets → null.
 echo "$out" | jq -e 'any(.[]; .surface=="inline" and .id==111 and .reply_handle.comment_id==111)' >/dev/null 2>&1 || note "inline reply_handle should carry comment_id"
+echo "$out" | jq -e 'any(.[]; .id==111 and .reply_handle.thread_id=="THREAD111" and .is_outdated==false)' >/dev/null 2>&1 || note "github inline should include thread_id and is_outdated=false"
+echo "$out" | jq -e 'any(.[]; .id==444 and .reply_handle.thread_id=="THREAD444" and .is_outdated==true)' >/dev/null 2>&1 || note "github inline should include outdated state"
 echo "$out" | jq -e 'any(.[]; .surface=="review-summary" and .reply_handle==null)' >/dev/null 2>&1 || note "review-summary reply_handle should be null"
 echo "$out" | jq -e 'any(.[]; .surface=="conversation" and .reply_handle==null)' >/dev/null 2>&1 || note "conversation reply_handle should be null"
 # Approval channel + comments ledger written.

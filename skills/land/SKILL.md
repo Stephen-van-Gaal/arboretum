@@ -30,7 +30,7 @@ runs three phases in strict order:
 
 1. **Phase 1: Terminal check** — MERGED, CLOSED, branch deleted on remote, or PR not found. Exits without scheduling a wake-up.
 2. **Phase 2: Stall check** — PR converted to draft, head SHA unchanged for ≥ 2 iterations, or CI in `action_required`. Surfaces guidance and exits without scheduling a wake-up.
-3. **Phase 3: Active iteration** — existing poll → triage → fix → respond → resolve sequence. **This is the only callsite in the entire skill for `ScheduleWakeup`.**
+3. **Phase 3: Active iteration** — poll → collect → evaluate → fix/push → closeout → re-request/merge handoff sequence. **This is the only callsite in the entire skill for `ScheduleWakeup`.**
 
 `ScheduleWakeup` is fire-and-forget — once queued, the runtime delivers it regardless of intervening PR state changes. The termination guarantee therefore lives in the handler: Phases 1 and 2 never queue a wake-up, so a wake-up that fires after the PR has merged enters Phase 1, self-extinguishes, and queues nothing further.
 
@@ -160,13 +160,14 @@ GitHub path only.
 Poll two sources, then schedule a wake-up rather than blocking:
 
 1. CI checks — `gh pr checks <N>`.
-2. Reviewer feedback — run `bash scripts/collect-review.sh <N>`. It aggregates **every** comment surface (review summaries, inline threads, conversation comments; ADO PR threads on the `azure-devops` backend) into one backend-neutral normalized record written to the ledger `.arboretum/land/<N>/comments.json`, with a separate `approvals.json` channel. Read triage input from that **ledger file**, not from raw `gh api` calls or the captured stdout — the script is the single place that knows which surfaces to query and how to normalize them into one backend-neutral record set. (It collects every author's comments; it does not filter to the `.arboretum.yml` reviewer list — that config drives *requesting* review, in `request-review.sh`.) (M-C adds the `--unanswered` exit gate and cadence-aware re-request.)
+2. Reviewer feedback — run `bash scripts/collect-review.sh <N>`. It aggregates **every** comment surface (review summaries, inline threads, conversation comments; ADO PR threads on the `azure-devops` backend) into one backend-neutral normalized record written to the ledger `.arboretum/land/<N>/comments.json`, with a separate `approvals.json` channel. Read triage input from that **ledger file**, not from raw `gh api` calls or the captured stdout — the script is the single place that knows which surfaces to query and how to normalize them into one backend-neutral record set. (It collects every author's comments; it does not filter to the `.arboretum.yml` reviewer list — that config drives *requesting* review, in `request-review.sh`.)
+3. Review evaluation — invoke `Skill arboretum:review-evaluate <N>`. It applies receive-review discipline and writes `.arboretum/land/<N>/dispositions.json`; `/land` reads fix clusters and judgment calls from that validated ledger.
 
 (Terminal PR state is checked in Phase 1, not here.)
 
 **Self-pacing requires `/loop` mode.** `ScheduleWakeup` is the polling mechanism — but it only fires inside a `/loop` parent. Invoked standalone (`/land <N>`), `ScheduleWakeup` queues a wake-up the runtime cannot act on, so the loop never advances beyond the first pass. Behave accordingly:
 
-- **If invoked as `/loop /land <N>`**: perform one full iteration (poll → triage → fix-if-needed → respond → resolve threads → write head-SHA summary), then call `ScheduleWakeup` at ~900s with the same `/loop /land <N>` prompt.
+- **If invoked as `/loop /land <N>`**: perform one full iteration (poll → collect → evaluate → fix-if-needed → push → closeout → write head-SHA summary), then call `ScheduleWakeup` at ~900s with the same `/loop /land <N>` prompt.
 
   ```bash
   # ScheduleWakeup callsite — see "Loop handler contract" above.
@@ -192,16 +193,29 @@ bash scripts/log-stage.sh "$LAND_ISSUE" /land summary \
   "head_sha_unchanged_count=$next_head_sha_unchanged_count"
 ```
 
-### 3. Triage
+### 3. Evaluate review records
 
-Before classifying, invoke `Skill arboretum:receive-review` so per-comment evaluation discipline (verify before implement, no performative agreement) governs the triage decisions.
+Invoke:
 
-Classify each substantive comment:
+```text
+Skill arboretum:review-evaluate <N>
+```
 
-- **Clear-cut** — real bug, encoding error, unhandled input, dead code, security
-  issue. -> auto-fixable.
-- **Judgment-call** — design choice, debatable trade-off, "would be nice."
-  -> surfaced to the human, not auto-fixed.
+Before classifying, invoke `Skill arboretum:receive-review`. In normal `/land`
+execution, this happens through `review-evaluate`; keep that review-reception
+discipline before disposition writing.
+
+That skill invokes `Skill arboretum:receive-review`, classifies each collected
+record, and writes the validated disposition ledger:
+`.arboretum/land/<N>/dispositions.json`.
+
+Read fix clusters and human judgment calls from that ledger:
+
+- **Clear-cut fix clusters** — disposition `fix` with action `fix-in-batch`.
+- **Already-addressed / no-code-change items** — reply later during closeout.
+- **Judgment-call / ask-human items** — surface to the human, not auto-fixed.
+- **Deferred / won't-fix / manual-follow-up items** — keep open unless the
+  disposition explicitly says closeout should reply and resolve.
 
 Before acting, present the triage results:
 
@@ -211,25 +225,26 @@ Wait briefly for interruption, then proceed. This is a notification, not a gate 
 
 ### 4. Fix sub-loop (cap: 2 rounds)
 
-Fix all clear-cut comments **together in one commit**, push, and re-request
-review. CI failures are fixed the same way. Once a PR is ready, commits trigger
-hosted CI through the `pull_request` `synchronize` activity, so do not create
-per-comment commits. Batch one review/CI round, push once, re-run remote
-readiness, then re-request review only when the new head is appropriate for
-reviewers. Re-enter the poll loop. After **2** fix rounds, stop fixing —
-surface whatever remains as judgment-calls.
+Fix all clear-cut clusters **together in one commit**, push, and write
+`.arboretum/land/<N>/fixes.json` with real pushed commit SHAs keyed by
+`comment_id`. CI failures are fixed the same way. Once a PR is ready, commits
+trigger hosted CI through the `pull_request` `synchronize` activity, so do not
+create per-comment commits. Batch one review/CI round, push once, re-run remote
+readiness, and re-request review only when the new head is appropriate for
+reviewers.
 
-### 5. Per-thread responses
+Before provider-visible closeout, run the current head/readiness safety check:
 
-For **every** review comment, reply on its own thread:
+- the local worktree HEAD matches the PR head;
+- every cited fix SHA is reachable from the PR head;
+- readiness/mergeability is not dirty or unknown.
 
-- **Fixed** — disposition + the commit SHA that addressed it.
-- **Deferred / won't-fix** — the reason.
-- **Judgment-call** — the reasoning and recommendation.
+Stop before GitHub mutation if any check fails.
 
-Reply via `gh api repos/{owner}/{repo}/pulls/{N}/comments -f body=... -F in_reply_to=<comment-id>`.
+After **2** fix rounds, stop fixing — surface whatever remains as
+judgment-calls.
 
-To resolve addressed threads after the fix push, invoke `Skill arboretum:receive-review`. That skill owns the GraphQL recipe (REST → thread node ID mapping + `resolveReviewThread` mutation) as the single source of truth — `/land` does not carry its own copy.
+### 5. Review closeout
 
 Do not resolve addressed threads until the pushed fix has been followed by a
 successful remote readiness recompute for the new head.
@@ -237,9 +252,32 @@ successful remote readiness recompute for the new head.
 Leave a thread open deliberately when its item is genuinely outstanding. Write
 replies to *explain* — they are a learning record, not bare acknowledgements.
 
+Invoke:
+
+```text
+Skill arboretum:review-closeout <N>
+```
+
+That skill validates `dispositions.json`, dry-runs
+`scripts/post-review-closeout.sh <N> --dry-run`, then runs the live helper only
+after the fix push and head/readiness safety checks. The helper writes in this
+order:
+
+1. per-thread replies;
+2. addressed GitHub thread resolution;
+3. top-level review summary comment;
+4. `.arboretum/land/<N>/closeout.json`.
+
+Then run `bash scripts/request-review.sh <N> --re-request` when the configured
+review policy says another review round is needed. Re-enter the poll loop.
+
 ### 6. Exit condition
 
-Exit the loop when CI is green **and** no substantive comments remain.
+Exit the loop only when CI is green, `bash scripts/collect-review.sh <N>
+--unanswered` returns no substantive undisposed records, and
+`.arboretum/land/<N>/closeout.json` has no substantive `remaining_open` items.
+Do not declare merge-ready while either hanging-review surface still contains
+substantive feedback.
 
 At the final merge-ready or deliberate pause point, report ship-tail metrics
 when the data is available:

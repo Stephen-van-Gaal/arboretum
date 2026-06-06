@@ -8,7 +8,7 @@
 # echo the comment array to stdout.
 #
 # Normalized record:
-#   { surface, backend, id, file, line, author, body, status, reply_handle, priority }
+#   { surface, backend, id, file, line, author, body, status, reply_handle, priority, is_outdated? }
 #   status ∈ open | resolved | none   (3-state, per-backend mapping)
 #   priority ∈ P1|P2|P3|null          (harvested from a reviewer self-label)
 #
@@ -71,7 +71,7 @@ case "$BACKEND" in
       gh api graphql -F number="$PR" -F owner="$OWNER" -F name="$NAME" -f query='
         query($number:Int!,$owner:String!,$name:String!){repository(owner:$owner,name:$name){
           pullRequest(number:$number){reviewThreads(first:100){nodes{
-            isResolved comments(first:50){nodes{databaseId author{login} body}}}}}}}' \
+            id isResolved isOutdated comments(first:50){nodes{databaseId author{login} body}}}}}}}' \
         > "$WORK/gh-threads.json" 2>/dev/null || {
           echo "collect-review.sh: failed to fetch review-thread state for PR $PR — refusing to write a partial ledger." >&2; exit 3; }
       SRC="$WORK"
@@ -146,25 +146,37 @@ if backend == "github":
             "beyond the first page are unclassified and may show as open. Full "
             "pagination is a follow-up.\n")
     resolved_ids, open_ids = set(), set()
+    thread_by_comment = {}
+    outdated_by_comment = {}
     for t in tnodes:
         target = resolved_ids if t.get("isResolved") else open_ids
+        thread_id = t.get("id")
+        is_outdated = bool(t.get("isOutdated"))
         for c in (t.get("comments", {}).get("nodes") or []):
             cid = c.get("databaseId")
             if cid is not None:
                 target.add(cid)
+                if thread_id:
+                    thread_by_comment[cid] = thread_id
+                outdated_by_comment[cid] = is_outdated
 
     inline = load(inline_p)
     for c in inline:
         cid = c.get("id")
         status = "resolved" if cid in resolved_ids else "open"
         body = c.get("body") or ""
+        reply_handle = {"comment_id": cid}
+        thread_id = thread_by_comment.get(cid)
+        if thread_id:
+            reply_handle["thread_id"] = thread_id
         records.append({
             "surface": "inline", "backend": "github", "id": cid,
             "file": c.get("path"), "line": c.get("line"),
             "author": (c.get("user") or {}).get("login"),
             "body": scrub(body), "status": status,
-            "reply_handle": {"comment_id": cid},
+            "reply_handle": reply_handle,
             "priority": priority(body),
+            "is_outdated": outdated_by_comment.get(cid, False),
         })
 
     for r in load(reviews_p):

@@ -23,6 +23,7 @@
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
 | scripts/parse-plan-checkboxes.sh | docs/contracts/parse-plan-checkboxes.contract.md | full |
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
+| scripts/post-review-closeout.sh | docs/contracts/review-closeout.contract.md | full |
 | scripts/pr-readiness.sh | docs/contracts/pr-readiness.cli-contract.md | cli |
 | scripts/read-doc-profile.sh | docs/contracts/read-doc-profile.cli-contract.md | cli |
 | scripts/read-doc-section.sh | docs/contracts/read-doc-section.cli-contract.md | cli |
@@ -57,6 +58,7 @@
 | scripts/validate-coverage-manifest.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/validate-cross-refs.sh | docs/contracts/validate-cross-refs.contract.md | full |
 | scripts/validate-design-spec.sh | docs/contracts/validate-design-spec.contract.md | full |
+| scripts/validate-review-dispositions.sh | docs/contracts/review-dispositions.contract.md | full |
 | scripts/validate-stage-log-line.sh | docs/contracts/validate-stage-log-line.contract.md | full |
 | scripts/validate-template-taxonomy.sh | docs/contracts/validate-template-taxonomy.cli-contract.md | cli |
 | scripts/validate-test-surface.sh | docs/contracts/validate-test-surface.contract.md | full |

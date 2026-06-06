@@ -1,6 +1,6 @@
 ---
 script: scripts/collect-review.sh
-version: 1.0
+version: 1.1
 invokers:
   - type: skill
     name: arboretum:/land
@@ -10,6 +10,7 @@ invokers:
     name: scripts/_smoke-test-contract-review-config.sh
 related-designs:
   - docs/superpowers/specs/2026-06-04-request-review-config-design.md
+  - docs/superpowers/specs/2026-06-06-review-loop-closeout-design.md
 ---
 <!-- owner: pipeline-contracts-template -->
 
@@ -44,14 +45,18 @@ collect-review.sh <pr> [--unanswered]
 ### Normalized record
 
 ```
-{ surface, backend, id, file, line, author, body, status, reply_handle, priority }
+{ surface, backend, id, file, line, author, body, status, reply_handle, priority, is_outdated? }
 ```
 
 - `status` ∈ `open | resolved | none`.
 - `priority` ∈ `P1 | P2 | P3 | null` (harvested from a reviewer self-label).
-- `reply_handle` — surface-dependent. github inline: `{comment_id}` (a valid
-  `in_reply_to` target); github review-summary and conversation: `null` (neither
-  id is an `in_reply_to` target); ado thread: `{thread_id, parent_comment_id}`.
+- `reply_handle` — surface-dependent. github inline:
+  `{comment_id, thread_id?}` (`comment_id` is a valid REST `in_reply_to`
+  target; `thread_id`, when present, is the GraphQL review-thread node id used
+  for resolution); github review-summary and conversation: `null` (neither id is
+  an `in_reply_to` target); ado thread: `{thread_id, parent_comment_id}`.
+- `is_outdated` — optional boolean. On github inline records it reflects the
+  GraphQL review-thread `isOutdated` value and defaults to `false` when absent.
 
 ### Exit codes
 
@@ -80,3 +85,5 @@ Writes `comments.json` and `approvals.json` under `.arboretum/land/<pr>/`
   scrubbed in the normalized output and the ledger.
 - **CLI-5: Surface coverage.** A refactor cannot silently drop a surface — the
   smoke test asserts each non-empty surface is represented.
+- **CLI-6: GitHub closeout metadata.** GitHub inline records preserve GraphQL
+  `thread_id` when available and expose outdated-thread state.
