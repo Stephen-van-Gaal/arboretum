@@ -13,7 +13,10 @@
 #   - timestamp matches YYYY-MM-DDTHH:MM:SSZ (literal Z, no offset)
 #   - separator between timestamp and stage is " — " (em dash)
 #   - stage is a token starting with `/` (e.g. /build, /design)
-#   - action is one of the seven-entry vocabulary (CWD-2):
+#   - action is one of the recognized vocabulary (CWD-2's seven entries). NB:
+#     `repair` is deprecated as of #570 — log-stage no longer emits it (the
+#     body-marker repair path it served is gone), but it stays recognized here
+#     so historical journey-log lines on existing issues still validate:
 #       entered | exited | skipped | re-entered | summary | repair | dispatched
 #   - kv pairs use `: ` (colon-space) rendering form, comma-space separated
 #

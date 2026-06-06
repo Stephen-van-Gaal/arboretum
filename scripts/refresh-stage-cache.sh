@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
 # refresh-stage-cache.sh — Populate .arboretum/active-stage-cache.json
-# from the active issue's body (current-stage header). See WS9 design D6.
+# from the active issue's exclusive stage:* label (#570). See WS9 design D6.
 #
 # Active-issue resolution:
 #   1. Current branch name matches `<prefix>/<slug>` where a design spec
@@ -86,35 +86,24 @@ if [ -z "$issue" ]; then
   exit 0
 fi
 
-# ── Step 3: read body, extract current-stage header ──────────────────
-# Use --json body (no --jq) so the output is {"body":"..."} JSON —
-# compatible with the default GitHub adapter and existing test stubs.
-#
-# Author-controlled strings (issue body, log-comment bodies) are
-# scrubbed of ASCII control characters before being written to the
-# cache — same defense-in-depth pattern as scripts/refresh-next-cache.sh.
-# Without this scrub, an issue-body hand-edit or a crafted comment could
-# inject ANSI terminal-escape sequences into the boot banner / statusline.
-body_json=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue" --json body 2>/dev/null || echo '{"body":""}' )
-stage=$(python3 -c '
-import re, sys, json
+# ── Step 3: read the stage:* label, derive the stage value ───────────
+# Stage lives as an exclusive `stage:<name>` label/tag (#570). Restore the
+# leading slash dropped at write time (stage:design -> /design). The value
+# is still scrubbed of control characters (belt-and-braces; label names are
+# constrained but the scrub matches the defense-in-depth pattern).
+labels_out=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue" --json labels --jq '.labels[].name' 2>/dev/null || true )
+stage=$(LABELS="$labels_out" python3 -c '
+import re, os
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
-def scrub(s):
-    return _CTRL.sub("", s) if isinstance(s, str) else s
-raw = sys.stdin.read()
-try:
-    obj = json.loads(raw)
-    body = obj.get("body", "") if isinstance(obj, dict) else raw
-except Exception:
-    body = raw
-# Decode JSON-escaped newlines (\n) that tracker adapters may emit in JSON strings.
-body = body.replace("\\n", "\n")
-m = re.search(
-    r"<!--\s*pipeline-state:current-stage\s*-->\s*\*\*Current\s+stage:\*\*\s*(\S+)",
-    body
-)
-print(scrub(m.group(1)) if m else "")
-' <<<"$body_json")
+def scrub(s): return _CTRL.sub("", s)
+stage = ""
+for line in os.environ.get("LABELS", "").splitlines():
+    line = line.strip()
+    if line.startswith("stage:"):
+        stage = "/" + line[len("stage:"):]
+        break
+print(scrub(stage))
+')
 
 # Serialize via python3 (not printf) so a stage value containing `"`
 # or `\` cannot break the JSON shape — printf '%s' just interpolates,

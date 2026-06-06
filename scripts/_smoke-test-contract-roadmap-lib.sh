@@ -386,6 +386,14 @@ if [ "$1 $2 $3" = "boards work-item show" ]; then
     printf '%s\n' '{"id":486,"fields":{"System.Title":"Whitespace-normalized ADO work item","System.State":" Done "},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/486"}}}'
     exit 0
   fi
+  if printf '%s\n' "$*" | grep -q -- '--id 47'; then
+    if printf '%s\n' "$*" | grep -q -- '--fields System.Tags'; then
+      printf '%s\n' '{"id":47,"fields":{"System.Tags":"stage:build; agent-ready"}}'
+    else
+      printf '%s\n' '{"id":47,"fields":{"System.Title":"Stage label swap","System.Description":"Body","System.Tags":"stage:build; agent-ready","System.CreatedDate":"2026-05-29T00:00:00Z","System.ChangedDate":"2026-05-30T00:00:00Z","System.State":"Active"},"_links":{"html":{"href":"https://dev.azure.com/example/Demo/_workitems/edit/47"}}}'
+    fi
+    exit 0
+  fi
   if printf '%s\n' "$*" | grep -q -- '--fields System.Tags'; then
     printf '%s\n' '{"id":42,"fields":{"System.Tags":"agent-ready; horizon:next"}}'
   else
@@ -659,6 +667,90 @@ if printf '%s\n' "$ado_closure_trimmed_default" | grep -qx 'provider=azure-devop
   pass "RL-27 (ADO closed-state trim + empty-config fallback)"
 else
   fail_case "RL-27 (ADO closed-state trim + empty-config fallback)" "out=[$ado_closure_trimmed_default]"
+fi
+
+# RL-30..RL-33 — roadmap_set_prefix_exclusive_label: within-issue exclusive
+# swap on the GitHub backend. The helper reads current labels, removes every
+# other <prefix>:* token, ensures the target exists, and applies one edit.
+# Reset the fixture to the GitHub backend (prior ADO blocks left an
+# azure-devops config in place).
+rm -f "$FIX/.arboretum.yml"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+component_values:
+  - skills
+YAML
+SX_BIN="$FIX/.sx-bin"; mkdir -p "$SX_BIN"
+cat > "$SX_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+printf '%s\n' "$*" >> "${GH_STUB_LOG:?}"
+if [ "$1 $2" = "issue view" ]; then printf '%s\n' ${SX_STUB_LABELS:-}; exit 0; fi
+if [ "$1 $2" = "label create" ]; then exit 0; fi
+if [ "$1 $2" = "issue edit" ]; then exit 0; fi
+echo "unexpected gh call: $*" >&2; exit 2
+GH
+chmod +x "$SX_BIN/gh"
+
+: > "$GH_STUB_LOG"
+SX_STUB_LABELS="stage:start agent-ready" PATH="$SX_BIN:$PATH" inlib roadmap_set_prefix_exclusive_label 42 stage design >/dev/null
+if grep -q 'issue edit 42 --add-label stage:design --remove-label stage:start' "$GH_STUB_LOG" \
+   && ! grep -q 'remove-label agent-ready' "$GH_STUB_LOG"; then
+  pass RL-30
+else
+  fail_case RL-30 "log=$(cat "$GH_STUB_LOG")"
+fi
+
+: > "$GH_STUB_LOG"
+SX_STUB_LABELS="agent-ready" PATH="$SX_BIN:$PATH" inlib roadmap_set_prefix_exclusive_label 42 stage build >/dev/null
+if grep -q 'issue edit 42 --add-label stage:build' "$GH_STUB_LOG" \
+   && ! grep -q 'remove-label' "$GH_STUB_LOG"; then
+  pass RL-31
+else
+  fail_case RL-31 "log=$(cat "$GH_STUB_LOG")"
+fi
+
+: > "$GH_STUB_LOG"
+SX_STUB_LABELS="stage:build stage:design" PATH="$SX_BIN:$PATH" inlib roadmap_set_prefix_exclusive_label 42 stage finish >/dev/null
+if grep -Eq 'issue edit 42 --add-label stage:finish --remove-label (stage:build,stage:design|stage:design,stage:build)' "$GH_STUB_LOG"; then
+  pass RL-32
+else
+  fail_case RL-32 "log=$(cat "$GH_STUB_LOG")"
+fi
+
+: > "$GH_STUB_LOG"
+SX_STUB_LABELS="stage:design" PATH="$SX_BIN:$PATH" inlib roadmap_set_prefix_exclusive_label 42 stage design >/dev/null
+if grep -q 'issue edit 42 --add-label stage:design' "$GH_STUB_LOG" \
+   && ! grep -q 'remove-label' "$GH_STUB_LOG"; then
+  pass RL-33
+else
+  fail_case RL-33 "log=$(cat "$GH_STUB_LOG")"
+fi
+
+# RL-34 — roadmap_set_prefix_exclusive_label on the Azure DevOps backend swaps
+# the stage family in the resulting System.Tags JSON-patch: target tag present,
+# prior stage tag gone, non-stage tags preserved.
+cat > "$FIX/.arboretum.yml" <<'YAML'
+backend: azure-devops
+azure_devops_organization: https://dev.azure.com/example
+azure_devops_project: Demo
+azure_devops_work_item_type: Issue
+azure_devops_done_state: Closed
+YAML
+: > "$AZ_STUB_PATCH_LOG"
+PATH="$AZ_BIN:$PATH" inlib roadmap_set_prefix_exclusive_label 47 stage finish >/dev/null \
+  || fail_case "RL-34 (ADO stage swap)" "helper failed"
+if jq -e '
+  .[]
+  | select(
+      .path == "/fields/System.Tags"
+      and (.value | contains("stage:finish"))
+      and ((.value | contains("stage:build")) | not)
+      and (.value | contains("agent-ready"))
+    )
+' "$AZ_STUB_PATCH_LOG" >/dev/null; then
+  pass "RL-34 (ADO stage swap)"
+else
+  fail_case "RL-34 (ADO stage swap)" "patch=$(cat "$AZ_STUB_PATCH_LOG" 2>/dev/null)"
 fi
 
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

@@ -67,6 +67,18 @@ add "agent-prep:in-progress"  "5319e7" "Spec-quality verified but not yet timing
 add "provisionally-resolved"  "fbca04" "Soft-state: PR evidence partially supports closing — review"
 add "provisionally-stale"     "fbca04" "Soft-state: open >90d, no activity signal — review or close"
 
+# Pipeline stage labels (exclusive per issue; set by log-stage.sh — #570)
+add "stage:start"             "0e8a16" "Pipeline stage: /start"
+add "stage:design"            "0e8a16" "Pipeline stage: /design"
+add "stage:build"             "0e8a16" "Pipeline stage: /build"
+add "stage:finish"            "0e8a16" "Pipeline stage: /finish"
+add "stage:security-review"   "0e8a16" "Pipeline stage: /security-review"
+add "stage:pr"                "0e8a16" "Pipeline stage: /pr"
+add "stage:land"              "0e8a16" "Pipeline stage: /land"
+add "stage:cleanup"           "0e8a16" "Pipeline stage: /cleanup"
+add "stage:reflect"           "0e8a16" "Pipeline stage: /reflect"
+add "stage:handoff"           "0e8a16" "Pipeline stage: /handoff"
+
 # Component labels — read from config if present and not --no-components
 if ! $no_components; then
   if [ -f "$config" ]; then

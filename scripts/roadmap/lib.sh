@@ -1386,6 +1386,34 @@ roadmap_label_exists() {
   roadmap_tracker_label_list --limit 1000 --json name --jq '.[].name' | grep -Fxq "$name"
 }
 
+# roadmap_set_prefix_exclusive_label <issue> <prefix> <value>
+# Make <prefix>:<value> the single exclusive label of its prefix family on
+# <issue>: remove every other <prefix>:* token already present, ensure the
+# target label exists, and apply the swap in ONE backend-neutral update call
+# (GitHub `gh issue edit`; ADO `System.Tags` JSON-patch). Within-issue
+# exclusivity ONLY — not cross-issue (cf. /handoff's repo-wide next-up).
+# Last-writer-wins: a concurrent non-<prefix> label edit racing the swap can
+# be lost, the same race the body-header LWW already accepted.
+roadmap_set_prefix_exclusive_label() {
+  local issue="$1" prefix="$2" value="$3"
+  local target="${prefix}:${value}"
+  local current removes="" name
+  current=$(roadmap_tracker_issue_show "$issue" --json labels --jq '.labels[].name' 2>/dev/null || true)
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    case "$name" in
+      "${prefix}:"*)
+        [ "$name" = "$target" ] && continue
+        removes="${removes:+$removes,}$name"
+        ;;
+    esac
+  done <<< "$current"
+  roadmap_tracker_label_create "$target" >/dev/null 2>&1 || true
+  local args=(--add-label "$target")
+  [ -n "$removes" ] && args+=(--remove-label "$removes")
+  roadmap_tracker_issue_update "$issue" "${args[@]}"
+}
+
 # ── Epic-aware orientation (issue #562) ──────────────────────────────
 
 # roadmap_github_epic_graph <next_up_number> — emit graph JSON on stdout.

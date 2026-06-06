@@ -35,6 +35,12 @@ case "$1 $2" in
     printf 'owner/repo\n'
     exit 0 ;;
   "issue view")
+    # Stage now lives in a stage:* label. refresh-stage-cache.sh reads it via
+    # --json labels --jq '.labels[].name', so honor that by printing the
+    # fixture label set (newline-separated names) from $GH_STUB_LABELS.
+    case "$*" in
+      *--json\ labels*) printf '%s\n' ${GH_STUB_LABELS:-}; exit 0 ;;
+    esac
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null \
       || echo '{"body":"## Context","number":307,"title":"WS9"}'
     exit 0 ;;
@@ -58,10 +64,7 @@ related-issue: 999
 ---
 # foo-bar
 SPEC
-cat > "$c1/body.json" <<'JSON'
-{"body":"<!-- pipeline-state:current-stage -->\n**Current stage:** /build\n<!-- /pipeline-state:current-stage -->\n\nbody","number":999,"title":"foo-bar build"}
-JSON
-GH_STUB_BODY="$c1/body.json" PATH="$bindir:$PATH" \
+GH_STUB_LABELS="stage:build agent-ready" PATH="$bindir:$PATH" \
   bash "$REFRESH" "$c1"
 cache="$c1/.arboretum/active-stage-cache.json"
 [ -f "$cache" ] || fail "case 1 — cache not written"
@@ -80,10 +83,7 @@ bindir=$(install_gh_stub "$c2")
 cat > "$c2/issues.json" <<'JSON'
 [{"number":555,"title":"next-up issue"}]
 JSON
-cat > "$c2/body.json" <<'JSON'
-{"body":"<!-- pipeline-state:current-stage -->\n**Current stage:** /design\n<!-- /pipeline-state:current-stage -->","number":555,"title":"next-up issue"}
-JSON
-GH_STUB_ISSUES="$c2/issues.json" GH_STUB_BODY="$c2/body.json" \
+GH_STUB_ISSUES="$c2/issues.json" GH_STUB_LABELS="stage:design" \
   PATH="$bindir:$PATH" bash "$REFRESH" "$c2"
 cache="$c2/.arboretum/active-stage-cache.json"
 python3 -c "
@@ -108,7 +108,7 @@ assert c.get('issue') is None, c
        "$(cat "$c3/.arboretum/active-stage-cache.json")"
 ok "case 3 — issue:null when no resolution path succeeds"
 
-# ── Case 4: body has no header marker → stage is null ────────────────
+# ── Case 4: no stage:* label → stage is null ─────────────────────────
 c4=$(new_repo case4)
 bindir=$(install_gh_stub "$c4")
 git -C "$c4" checkout -q -b feat/no-stage-build
@@ -117,17 +117,16 @@ cat > "$c4/docs/superpowers/specs/2026-05-23-no-stage-design.md" <<'SPEC'
 related-issue: 111
 ---
 SPEC
-echo '{"body":"## just a body","number":111,"title":"no header"}' > "$c4/body.json"
-GH_STUB_BODY="$c4/body.json" PATH="$bindir:$PATH" bash "$REFRESH" "$c4"
+GH_STUB_LABELS="agent-ready" PATH="$bindir:$PATH" bash "$REFRESH" "$c4"
 python3 -c "
 import json,sys
 c = json.load(open(sys.argv[1]))
 assert c['issue'] == 111, c
 assert c.get('stage') is None, c
 " "$c4/.arboretum/active-stage-cache.json" \
-  || fail "case 4 — stage should be null when body has no header" \
+  || fail "case 4 — stage should be null when no stage:* label present" \
        "$(cat "$c4/.arboretum/active-stage-cache.json")"
-ok "case 4 — stage is null when header missing"
+ok "case 4 — stage is null when no stage:* label present"
 
 # ── Case 5: log-comments-cache filters to pipeline-state:log markers ──
 # The stage cache is well-covered; this case asserts the SECOND cache

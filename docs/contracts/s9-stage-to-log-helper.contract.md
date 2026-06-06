@@ -22,7 +22,7 @@ owns:
 
 # S9 — Stage Skill → `scripts/log-stage.sh` Contract
 
-The seam between any pipeline-stage skill (the producer set canonized by WS2 at PR #329) and the pipeline-state helper script. Each invocation performs two **independent** tracker operations — a body edit overwriting the current-stage header marker block (LWW) and a comment post carrying one journey-log entry. Per CWD-1, the two operations have no atomicity guarantee; partial failure surfaces loudly. The action vocabulary is the seven-entry set CWD-2 finalized. The default GitHub adapter delegates the tracker operations to `gh issue view/edit/comment`.
+The seam between any pipeline-stage skill (the producer set canonized by WS2 at PR #329) and the pipeline-state helper script. Each invocation performs two **independent** tracker operations — setting the exclusive current-stage label (`stage:<name>`, LWW) and a comment post carrying one journey-log entry. Per CWD-1, the two operations have no atomicity guarantee; partial failure surfaces loudly. The action vocabulary log-stage accepts is six entries; `repair` — CWD-2's seventh action — is deprecated as of #570 (no longer emitted, since the body-marker repair path it served is gone) but remains recognized for historical journey-log entries. The default GitHub adapter delegates the tracker operations to `gh issue view/edit/comment`.
 
 ## Producer
 
@@ -46,7 +46,7 @@ The producer set is closed at any given moment but **expandable**: new stage ski
 
 `scripts/log-stage.sh`. Consumer-type: `script`.
 
-The script performs two independent tracker operations per invocation per WS9 §D2: a body edit (header overwrite) via `roadmap_tracker_issue_update`, and a comment post (log entry) via `roadmap_tracker_issue_comment`.
+The script performs two independent tracker operations per invocation per WS9 §D2: a current-stage label set via `roadmap_set_prefix_exclusive_label` (which reads the issue's labels and applies one `roadmap_tracker_issue_update --add-label/--remove-label` swap), and a comment post (log entry) via `roadmap_tracker_issue_comment`.
 
 ## Protocol shape
 
@@ -62,7 +62,7 @@ Positional arguments:
 
 - **`<issue-number>`** — positive integer naming the tracker item whose pipeline-state surfaces (body header + comment log) will be updated.
 - **`<stage-name>`** — kebab-case slash-prefixed string naming the stage that is the subject of this log entry (e.g. `/build`, `/handoff`).
-- **`<action>`** — one of the seven-entry closed enum (per Invariants below).
+- **`<action>`** — one of the six-entry closed enum (per Invariants below).
 
 Variadic arguments:
 
@@ -72,15 +72,7 @@ Variadic arguments:
 
 Two independent tracker operations.
 
-**Operation 1 — body edit (header write).** `roadmap_tracker_issue_update --body-file <file>` rewrites the marker-delimited current-stage block at the top of the item body. The block shape is:
-
-```
-<!-- pipeline-state:current-stage -->
-**Current stage:** <stage-name>
-<!-- /pipeline-state:current-stage -->
-```
-
-Non-marker body content (everything after the closing `<!-- /pipeline-state:current-stage -->` marker) is preserved byte-for-byte. The block is always placed at the top of the body. If the markers are malformed (e.g. unclosed block, orphan opening marker), the script repairs them per WS9 OQ2 and posts a separate journey-log comment with action `repair`.
+**Operation 1 — current-stage label set (#570).** `roadmap_set_prefix_exclusive_label <issue> stage <value>` makes `stage:<value>` the single exclusive label of the `stage:*` family on the item: it reads the current labels, removes any other `stage:*` token, ensures `stage:<value>` exists, and applies the swap in one `roadmap_tracker_issue_update --add-label/--remove-label` call. The label value drops the stage name's leading slash (`/build` → `stage:build`); `refresh-stage-cache.sh` restores it on read. The write is last-writer-wins, leaving exactly one `stage:*` token. **The issue body is never touched** — this replaced the former marker-delimited current-stage body block (and its malformed-marker repair path) in #570.
 
 **Operation 2 — comment post (log entry).** `roadmap_tracker_issue_comment --body-file <file>` posts a new comment whose body has the exact shape:
 
@@ -95,7 +87,7 @@ The marker (`<!-- pipeline-state:log -->`) identifies the comment as a journey-l
 
 - **`0`** — both operations succeeded.
 - **`1`** — bad args, configured tracker backend missing, or tracker authentication failure.
-- **`2`** — body-edit operation failed.
+- **`2`** — stage-label write failed.
 - **`3`** — comment-post operation failed.
 
 ### Invariants
@@ -104,23 +96,24 @@ The marker (`<!-- pipeline-state:log -->`) identifies the comment as a journey-l
 
 > The header body-edit and the journey-log comment-post are independent operations. Each succeeds or fails on its own. The script exits non-zero if either fails; partial-success states are observable. Consumers (stage skills calling the helper) must surface partial failure to the user — no automatic recovery.
 
-**Action vocabulary (seven entries, per CWD-2 extending WS9 §D5).** The `<action>` value is exactly one of:
+(CWD-1 is quoted verbatim. As of #570, operation 1 is the exclusive `stage:*` label set rather than a body edit — the independence, partial-failure, and no-auto-recovery semantics are unchanged; only the first operation's mechanism differs.)
+
+**Action vocabulary (six accepted, per CWD-2 extending WS9 §D5; `repair` deprecated — see below).** The `<action>` value log-stage accepts is exactly one of:
 
 - `entered` — stage skill began execution on this ticket.
 - `exited` — stage skill finished execution (for `/build`, see the S3 contract's two-state `exit-status:` value).
 - `skipped` — stage skill explicitly skipped (e.g. agent-target fast lane skips `/design`).
 - `re-entered` — non-linear flow; stage skill was entered again after a prior `entered`/`exited` pair.
 - `summary` — `/handoff` session-narrative line (per WS9 §D8).
-- `repair` — script-emitted maintenance entry when marker-block repair fires (per WS9 OQ2).
 - `dispatched` — stage skill handed control to a non-stage sub-skill (e.g. `superpowers:test-driven-development` for Branch 2, `superpowers:executing-plans` or `superpowers:subagent-driven-development` for Branch 3, per WS1 §D2). The dispatched-to sub-skill is named via the `target:` context key.
 
-No other action value is permitted. WS4's contract test for the action vocabulary asserts this exact seven-entry set.
+No other action value is accepted by log-stage. **Deprecated:** `repair` (CWD-2's seventh action) — formerly a script-emitted maintenance entry when marker-block repair fired (WS9 OQ2). #570 removed the body-marker mechanism, so log-stage no longer emits or accepts `repair`. It remains in CWD-2 and is still recognized by `validate-stage-log-line.sh` so historical journey-log entries on existing issues stay valid; new emissions are six-entry.
 
 **No hash-based dedupe.** Tracker adapters may retry internally; accidental duplicate invocations produce a visible duplicate log comment. The model is honest-rather-than-silent: a visible duplicate is strictly less harmful than a silently-dropped legitimate re-entry (per WS9 §D9 and the rejected-alternative in WS9 §D2).
 
-**Header LWW is intentional.** Re-running with the same stage value produces the same body. Older header values are uninteresting by definition — only the latest stage matters.
+**Label LWW is intentional.** Re-running with the same stage value leaves the same single `stage:*` label. Older stage values are uninteresting by definition — only the latest stage matters.
 
-**Body preservation.** The body edit rewrites only the content between the current-stage markers. All other body content (frontmatter, original issue body, any non-marker text) is preserved byte-for-byte. Marker-block repair (per WS9 OQ2) is the only exception, and even then the script posts a `repair` log comment recording what was fixed.
+**No body write (#570).** The helper sets the `stage:*` label and does not touch the issue body at all — there is no body content for the helper to preserve or corrupt, and no marker-repair path.
 
 **Comment serialization (tracker-side).** Comment creation is serialized by the configured tracker backend. No two writers create "the same comment"; the journey log is append-only by construction with no concurrency conflict possible at the per-entry level.
 
@@ -129,14 +122,15 @@ No other action value is permitted. WS4's contract test for the action vocabular
 ## Test surface
 
 - **S9-1: Producer-coverage.** Every stage skill in the canonical set (`/start`, `/design`, `/build`, `/finish`, `/pr`, `/land`, `/cleanup`, `/reflect`, `/handoff`) invokes `bash scripts/log-stage.sh` on entry and on exit.
-- **S9-2: Action-vocabulary.** Every action value passed to the helper is one of the seven entries (`entered`, `exited`, `skipped`, `re-entered`, `summary`, `repair`, `dispatched`). No other value appears in any callsite or in any emitted journey-log comment on `main`.
-- **S9-3: Header-body-preservation.** The body edit preserves all non-marker body content byte-for-byte; the body never loses any pre-existing line, frontmatter, or rendered Markdown outside the current-stage marker block.
-- **S9-4: Header-LWW.** Repeated invocations with the same `<stage-name>` produce the same body (LWW collapses identical writes naturally; idempotency on the header is automatic).
+- **S9-2: Action-vocabulary.** Every action value passed to the helper is one of the six accepted entries (`entered`, `exited`, `skipped`, `re-entered`, `summary`, `dispatched`). `repair` is deprecated (#570): no callsite passes it and no new journey-log comment emits it; historical `repair` entries may remain on existing issues and stay recognized by `validate-stage-log-line.sh`.
+- **S9-3: No-body-write.** As of #570 the helper sets the `stage:*` label and never edits the issue body; `gh issue edit --body-file` is not invoked on the helper's behalf, so no body content can be lost.
+- **S9-4: Label-LWW.** Repeated invocations with the same `<stage-name>` leave exactly one `stage:<name>` label — the exclusive swap removes any prior `stage:*` token and collapses identical writes (idempotent).
 - **S9-5: Comment-marker-conformance.** Every comment the helper posts begins with `<!-- pipeline-state:log -->\n- ` followed by a parseable journey-log line per WS9 §D5's format (ISO-8601-UTC zulu timestamp, stage, action, context kv pairs).
-- **S9-6: Partial-failure-loud.** If the body edit succeeds and the comment post fails (or vice versa), the script exits non-zero with an error naming the failed operation; the calling stage skill surfaces the error to the user.
+- **S9-6: Partial-failure-loud.** If the label set succeeds and the comment post fails (or vice versa), the script exits non-zero with an error naming the failed operation; the calling stage skill surfaces the error to the user.
 - **S9-7: Quoted-value-escaping.** Context values containing `, ` are double-quoted in the emitted comment; within quoted values, the three escape sequences (`\"`, `\\`, `\n`) are applied at write time and un-applied at read time by the documented parsers (boot banner + status-footer cache).
 
 ## Versioning
 
+- **1.2** (2026-06-06) — #570: Operation 1 changed from a current-stage body-marker edit to an exclusive `stage:*` label set via `roadmap_set_prefix_exclusive_label` (helper never touches the issue body). `repair` action deprecated — no longer emitted/accepted by log-stage, but retained in CWD-2 and recognized by `validate-stage-log-line.sh` for historical journey-log entries. S9-3 reframed (no-body-write), S9-4 (label-LWW).
 - **1.1** (2026-05-31) — issue reads/updates/comments flow through backend-neutral tracker helpers; GitHub remains the default adapter.
 - **1.0** (2026-05-24) — initial contract per WS9 §D1–D2; embeds CWD-1 (non-atomicity) verbatim in `### Invariants` and the seven-entry action vocabulary from CWD-2. Producer + consumer behaviour from PR #314 (WS9 build) + PR #320 (statusline-default fix).

@@ -24,7 +24,7 @@ The enforcement validator that checks a journey-log comment block — as emitted
 Reads the comment block at the file argument (arg 1) and validates the two-line shape with python3:
 
 - **Line 1** must be exactly the canonical marker `<!-- pipeline-state:log -->`.
-- **Line 2** must begin `- `, then `<ISO-8601-UTC-zulu> — <stage> <action>[, <key>: <value>]*` where: the timestamp matches `YYYY-MM-DDTHH:MM:SSZ`; the separator is ` — ` (em-dash with surrounding spaces); the stage is a `/`-prefixed lowercase-kebab token; the action is one of the seven-entry vocabulary `{entered, exited, skipped, re-entered, summary, repair, dispatched}`; KV pairs use `key: value` form, comma-space separated, with any value containing the structural `, ` delimiter double-quoted (S9-7 escaping).
+- **Line 2** must begin `- `, then `<ISO-8601-UTC-zulu> — <stage> <action>[, <key>: <value>]*` where: the timestamp matches `YYYY-MM-DDTHH:MM:SSZ`; the separator is ` — ` (em-dash with surrounding spaces); the stage is a `/`-prefixed lowercase-kebab token; the action is one of the recognized vocabulary `{entered, exited, skipped, re-entered, summary, repair, dispatched}` (CWD-2's seven entries; `repair` is deprecated as of #570 — no longer emitted by log-stage, but still recognized here so historical journey-log lines validate); KV pairs use `key: value` form, comma-space separated, with any value containing the structural `, ` delimiter double-quoted (S9-7 escaping).
 
 Emits one summary `S9-DRIFT:` line plus one indented `  - <assertion-id>: <reason>` bullet per issue to stderr; never mutates the file.
 

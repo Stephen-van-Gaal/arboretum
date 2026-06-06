@@ -434,8 +434,9 @@ try:
 except Exception:
     lc = []
 
-# `dispatched` and `repair` are NOT in the transition set — see WS9 D7:
-# Last action surfaces stage lifecycle, not mid-stage handoffs or repair audit events.
+# `dispatched` is NOT in the transition set — see WS9 D7: Last action surfaces
+# stage lifecycle, not mid-stage handoffs. (`repair` was retired in #570 when
+# current-stage moved to a label; any historical repair entries are ignored here.)
 transition_actions = {"entered", "exited", "skipped", "re-entered"}
 
 def parse(c):

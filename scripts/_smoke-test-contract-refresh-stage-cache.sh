@@ -52,6 +52,13 @@ install_gh_stub() {
 case "$1 $2" in
   "auth status") exit 0 ;;
   "issue view")
+    # Stage lives in a stage:* label; the producer reads it via
+    # --json labels --jq '.labels[].name'. Honor that arm by emitting the
+    # fixture label set from $GH_STUB_LABELS (a file of newline-separated
+    # names, so control chars / quotes survive byte-for-byte).
+    case "$*" in
+      *--json\ labels*) cat "${GH_STUB_LABELS:-/dev/null}" 2>/dev/null; exit 0 ;;
+    esac
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null \
       || echo '{"body":"## Context","number":307,"title":"WS9"}'
     exit 0 ;;
@@ -120,10 +127,8 @@ related-issue: 999
 ---
 # foo-bar
 SPEC
-cat > "$c3/body.json" <<'JSON'
-{"body":"<!-- pipeline-state:current-stage -->\n**Current stage:** /build\n<!-- /pipeline-state:current-stage -->\n\nbody","number":999,"title":"foo-bar build"}
-JSON
-GH_STUB_BODY="$c3/body.json" PATH="$bindir:$PATH" bash "$REFRESH" "$c3" >/dev/null 2>&1
+printf 'stage:build\nagent-ready\n' > "$c3/labels.txt"
+GH_STUB_LABELS="$c3/labels.txt" PATH="$bindir:$PATH" bash "$REFRESH" "$c3" >/dev/null 2>&1
 c3_res=$(python3 -c "
 import json
 c = json.load(open('$c3/.arboretum/active-stage-cache.json'))
@@ -140,7 +145,7 @@ else
   fail_case "RSC-3/RSC-4: branch resolution wrong" "$c3_res"
 fi
 
-# ── RSC-5: issue resolved, marker absent → stage null ─────────────────
+# ── RSC-5: issue resolved, no stage:* label → stage null ──────────────
 c5=$(new_repo c5)
 bindir=$(install_gh_stub "$c5")
 git -C "$c5" checkout -q -b feat/no-stage-build
@@ -149,8 +154,8 @@ cat > "$c5/docs/superpowers/specs/2026-05-23-no-stage-design.md" <<'SPEC'
 related-issue: 111
 ---
 SPEC
-echo '{"body":"## just a body","number":111,"title":"no header"}' > "$c5/body.json"
-GH_STUB_BODY="$c5/body.json" PATH="$bindir:$PATH" bash "$REFRESH" "$c5" >/dev/null 2>&1
+printf 'agent-ready\n' > "$c5/labels.txt"
+GH_STUB_LABELS="$c5/labels.txt" PATH="$bindir:$PATH" bash "$REFRESH" "$c5" >/dev/null 2>&1
 c5_res=$(python3 -c "
 import json
 c = json.load(open('$c5/.arboretum/active-stage-cache.json'))
@@ -160,15 +165,12 @@ if c.get('stage') is not None: problems.append('stage=%r (expected null)' % c.ge
 print('OK' if not problems else ' | '.join(problems))
 " 2>&1)
 if [ "$c5_res" = "OK" ]; then
-  pass "RSC-5: issue resolved but marker absent → issue:111, stage:null"
+  pass "RSC-5: issue resolved but no stage:* label → issue:111, stage:null"
 else
-  fail_case "RSC-5: marker-absent case wrong" "$c5_res"
+  fail_case "RSC-5: no-stage-label case wrong" "$c5_res"
 fi
 
 # ── RSC-6: ANSI-scrub — control char in stage stripped at write ───────
-# The issue body marker carries a stage token containing an ESC char.
-# gh stub emits VALID JSON (real gh JSON-encodes control chars), so we
-# build body.json via python3 so ESC is encoded as  inside the string.
 c6=$(new_repo c6)
 bindir=$(install_gh_stub "$c6")
 git -C "$c6" checkout -q -b feat/evil-stage-build
@@ -177,14 +179,13 @@ cat > "$c6/docs/superpowers/specs/2026-05-23-evil-stage-design.md" <<'SPEC'
 related-issue: 222
 ---
 SPEC
+# Stage:* label name with an embedded ESC (\x1b) control char. The producer
+# scrubs the derived stage value before serializing, so the ESC must not
+# survive into the cache. Write the fixture via python3 so the raw byte lands.
 python3 -c "
-import json
-# Stage token with an embedded ESC (\x1b) control char; \S+ regex captures
-# the contiguous non-space run, so the ESC must sit between non-space chars.
-body = '<!-- pipeline-state:current-stage -->\n**Current stage:** /bu\x1bild\n'
-print(json.dumps({'body': body, 'number': 222, 'title': 'evil'}))
-" > "$c6/body.json"
-GH_STUB_BODY="$c6/body.json" PATH="$bindir:$PATH" bash "$REFRESH" "$c6" >/dev/null 2>&1
+open('$c6/labels.txt','w').write('stage:bu\x1bild\n')
+"
+GH_STUB_LABELS="$c6/labels.txt" PATH="$bindir:$PATH" bash "$REFRESH" "$c6" >/dev/null 2>&1
 c6_res=$(python3 -c "
 import json
 c = json.load(open('$c6/.arboretum/active-stage-cache.json'))
@@ -213,12 +214,13 @@ cat > "$c7/docs/superpowers/specs/2026-05-23-quote-stage-design.md" <<'SPEC'
 related-issue: 333
 ---
 SPEC
+# A stage:* label name carrying a double-quote and backslash. The producer
+# serializes the derived stage via json.dumps, so these must not break the
+# cache JSON. Write the fixture via python3 so the raw bytes land verbatim.
 python3 -c "
-import json
-body = '<!-- pipeline-state:current-stage -->\n**Current stage:** a\"b\\\\c\n'
-print(json.dumps({'body': body, 'number': 333, 'title': 'q'}))
-" > "$c7/body.json"
-GH_STUB_BODY="$c7/body.json" PATH="$bindir:$PATH" bash "$REFRESH" "$c7" >/dev/null 2>&1
+open('$c7/labels.txt','w').write('stage:a\"b\\\\c\n')
+"
+GH_STUB_LABELS="$c7/labels.txt" PATH="$bindir:$PATH" bash "$REFRESH" "$c7" >/dev/null 2>&1
 c7_res=$(python3 -c "
 import json
 try:
