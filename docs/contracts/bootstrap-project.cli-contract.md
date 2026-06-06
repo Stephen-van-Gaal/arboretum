@@ -1,6 +1,6 @@
 ---
 script: scripts/bootstrap-project.sh
-version: 1.1
+version: 1.2
 invokers:
   - type: skill
     name: arboretum:/init-project
@@ -52,18 +52,19 @@ No other exit codes. When `set -euo pipefail` causes an unexpected subcommand fa
 
 ## Test surface
 
-- **CLI-1: Positional-arg and exit-code contract.** Invoking with no arguments exits 1 (usage error) — pinned (CLI-1a/CLI-1b). Invoking with a valid target directory is *intended* to exit 0, but currently aborts non-zero at the `cp`-on-directory bug (#420); that exit-0 invariant is **SKIP'd** (CLI-1c) until the fix.
-- **CLI-2: Idempotent directory creation.** Running bootstrap twice against the same target preserves the directories created before the abort (pinned). The "exits 0 both times" invariant is **SKIP'd** pending #420 (the second run also aborts at the same `cp` step). No files are overwritten on the second run.
-- **CLI-3: Core directory structure created.** After a successful run, the target contains at minimum `docs/`, `docs/specs/`, `docs/templates/`, `workflows/`, `.claude/hooks/`, `.githooks/`. Pinned in CLI-3.
-- **CLI-4: Agent adapters rendered with project name.** When `[project-name]` is supplied, `CLAUDE.md` and `AGENTS.md` in the target contain that project name. When omitted, the target directory basename is used. Template copies are pinned in CLI-4a; rendered root files are pinned in CLI-4b/CLI-4c but currently SKIP'd behind the known cp-on-directory abort (#420).
+- **CLI-1: Positional-arg and exit-code contract.** Invoking with no arguments exits 1 (usage error) — pinned (CLI-1a/CLI-1b). Invoking with a valid target directory exits 0 — pinned (CLI-1c).
+- **CLI-2: Idempotent re-run.** Running bootstrap twice against the same target exits 0 both times and preserves the directories from the first run (pinned). No files are overwritten on the second run, and the `-e` existence guard prevents `cp -R` from nesting a directory template (e.g. `issue-templates/`) inside its already-present destination.
+- **CLI-3: Core directory structure created.** After a successful run, the target contains at minimum `docs/`, `docs/specs/`, `docs/templates/`, `workflows/`, `.claude/hooks/`, `.githooks/`, and `.claude/skills/`. Pinned in CLI-3.
+- **CLI-4: Agent adapters rendered with project name.** When `[project-name]` is supplied, `CLAUDE.md` and `AGENTS.md` in the target contain that project name. When omitted, the target directory basename is used. Template copies are pinned in CLI-4a; rendered root files are pinned in CLI-4b/CLI-4c.
 - **CLI-5: .arboretum.yml created.** A fresh run creates `<target>/.arboretum.yml` containing `layer: 0` and `backend: github`. Pinned in CLI-5.
 - **CLI-6: Layer filter — pre-commit hook gated at Layer 2.** With `--layer 1`, `pre-commit-branch-check.sh` is NOT copied to `.claude/hooks/`. With `--layer 2`, it IS copied. Pinned in CLI-6.
 - **CLI-7: Layer filter — settings.json variant.** With `--layer 1`, `settings.json` contains only a `SessionStart` entry and no `PreToolUse` section. With `--layer 2` (or default), `settings.json` is the full settings copied from the arboretum installation. Pinned in CLI-7.
 - **CLI-8: Git repository initialised.** After a run against a directory that is not yet a git repo, `.git/` exists in the target and `git config core.hooksPath` returns `.githooks`. Pinned in CLI-8.
-- **CLI-9: Source-files-not-found guard.** When run outside an arboretum tree (the `docs/templates` dir is absent), the script exits non-zero with a missing-source diagnostic (`No such file or directory`). Note: under `set -euo pipefail` the `realpath "$SCRIPT_DIR/../docs/templates"` call aborts *before* the explicit "Verify source files exist" guard, so the friendly "run this script from the arboretum repo" message is not reached on a missing templates dir — a known limitation in the #420 family. Pinned in CLI-9 (non-zero exit + missing-source diagnostic).
-- **CLI-10: Agent workflow contract copied.** `ARBORETUM.md` is copied to the project root before the known template-directory abort and therefore remains asserted even while post-abort generated files are SKIP'd.
+- **CLI-9: Source-files-not-found guard.** When run outside an arboretum tree (the `docs/templates` dir is absent), the script exits non-zero with a missing-source diagnostic (`No such file or directory`). Note: under `set -euo pipefail` the `realpath "$SCRIPT_DIR/../docs/templates"` call aborts *before* the explicit "Verify source files exist" guard, so the friendly "run this script from the arboretum repo" message is not reached on a missing templates dir — a separate known limitation. Pinned in CLI-9 (non-zero exit + missing-source diagnostic).
+- **CLI-10: Agent workflow contract copied.** `ARBORETUM.md` is copied to the project root and asserted directly. Pinned in CLI-10.
 
 ## Versioning
 
+- **1.2** — #420 made `copy_if_missing` directory-aware (`cp -R` + `-e` guard); the mid-run abort on template subdirectories is gone, so CLI-1c, CLI-2 (exit-0 + no-nesting), CLI-3 (`.githooks/`, `.claude/skills/`), CLI-4b/CLI-4c, CLI-5, CLI-6, CLI-7, and CLI-8 are now real assertions rather than SKIP'd (2026-06-06, issue #420).
 - **1.1** — adds `ARBORETUM.md` root-copy coverage and `AGENTS.md` adapter-template/generation coverage to match the agent workflow contract distribution path (2026-06-03, issue #487 review fix).
 - **1.0** — initial contract (2026-05-30).

@@ -85,7 +85,9 @@ copy_if_missing() {
   if [ -e "$dst" ]; then
     echo "  exists: $dst"
   else
-    cp "$src" "$dst"
+    # -R so directory templates (e.g. docs/templates/issue-templates/)
+    # copy recursively instead of aborting the run (issue #420).
+    cp -R "$src" "$dst"
     echo "  created: $dst"
   fi
 }

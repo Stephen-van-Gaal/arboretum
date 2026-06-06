@@ -89,10 +89,14 @@ done
 copy_if_missing() {
   local src="$1"
   local dst="$2"
-  if [ -f "$dst" ]; then
+  # -e (not -f) so directory destinations are guarded too: a re-run must
+  # skip an existing dir, else `cp -R` would nest src *inside* it.
+  if [ -e "$dst" ]; then
     echo "  exists: $(basename "$dst")"
   else
-    cp "$src" "$dst"
+    # -R so directory templates (e.g. docs/templates/issue-templates/)
+    # copy recursively instead of aborting the run under set -euo pipefail.
+    cp -R "$src" "$dst"
     echo "  created: $(basename "$dst")"
   fi
 }

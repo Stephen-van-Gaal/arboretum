@@ -59,16 +59,15 @@ head -20 "$PROJECT_ROOT/docs/templates/PRINCIPLES.md" \
 FIXTURE=$(mktemp -d)
 trap 'rm -rf "$FIXTURE"' EXIT
 
-# bootstrap-project.sh exit code is ignored here: an unrelated
-# pre-existing bug in the template-copy loop (cp on subdirectories
-# like docs/templates/issue-templates/) makes the script return
-# non-zero even when PRINCIPLES.md copies cleanly. PRINCIPLES.md is
-# copied early in the run, so we assert on its presence directly.
-# Bootstrap output is captured (not suppressed) so failure diagnostics
-# include the actual error if the relocation broke something upstream.
+# bootstrap-project.sh must complete cleanly (exit 0): #420 made the
+# template-copy loop directory-aware, so the prior cp-on-subdirectory abort
+# no longer swallows the exit status. Bootstrap output is captured (not
+# suppressed) so failure diagnostics include the actual error if the
+# relocation broke something upstream.
 BOOTSTRAP_LOG=$(mktemp)
 trap 'rm -rf "$FIXTURE" "$BOOTSTRAP_LOG"' EXIT
-bash "$BOOTSTRAP" "$FIXTURE" test-project >"$BOOTSTRAP_LOG" 2>&1 || true
+bash "$BOOTSTRAP" "$FIXTURE" test-project >"$BOOTSTRAP_LOG" 2>&1 \
+  || fail "bootstrap-project.sh exited non-zero" "$(cat "$BOOTSTRAP_LOG")"
 
 [ -f "$FIXTURE/PRINCIPLES.md" ] \
   || fail "bootstrap did not create PRINCIPLES.md in consumer project root" \

@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # Smoke test for docs/contracts/bootstrap-project.cli-contract.md.
-# Exercises CLI-1, CLI-3, CLI-4 (partial), CLI-9 directly by running
-# bootstrap-project.sh against temp fixture directories. Picked up
-# automatically by ci-checks.sh's === Smoke tests === loop.
+# Exercises CLI-1 through CLI-10 directly by running bootstrap-project.sh
+# against temp fixture directories. Picked up automatically by ci-checks.sh's
+# === Smoke tests === loop.
 #
-# KNOWN LIMITATION: bootstrap-project.sh aborts mid-run (exit 1) on macOS
-# when `cp` is called on a subdirectory inside docs/templates/ (specifically
-# issue-templates/). This is a pre-existing defect documented in
-# _smoke-test-principles-template.sh. Assertions for CLI-4 (rendered CLAUDE.md),
-# CLI-5 (.arboretum.yml), CLI-6 (layer filtering), CLI-7 (settings.json),
-# and CLI-8 (git init) require code that runs AFTER the abort and cannot be
-# exercised until that defect is resolved. Those invariants are pinned in the
-# contract and tested here with skip markers so the test surface is honest.
+# History: invariants CLI-1c, CLI-2 (exit-0), CLI-3 (.githooks/skills), CLI-4b,
+# CLI-4c, CLI-5, CLI-6, CLI-7, CLI-8 were previously pinned with skip markers
+# because bootstrap-project.sh aborted mid-run on `cp` of a template
+# subdirectory (issue-templates/). #420 made copy_if_missing directory-aware
+# (cp -R + -e guard), so the run now completes and every invariant is a real
+# assertion.
 
 set -uo pipefail
 
@@ -25,7 +23,6 @@ fail=0
 
 pass()      { echo "PASS: $1"; }
 fail_msg()  { echo "FAIL: $1" >&2; fail=1; }
-skip_note() { echo "SKIP (known cp-on-dir bug): $1"; }
 
 # ── Fixture setup ────────────────────────────────────────────────────────────
 TMPBASE=$(mktemp -d)
@@ -33,17 +30,13 @@ trap 'rm -rf "$TMPBASE"' EXIT
 
 TARGET="$TMPBASE/fresh"
 
-# Run bootstrap. Aborts with exit 1 when cp hits docs/templates/issue-templates/
-# (a subdirectory) — see KNOWN LIMITATION above. Suppress output; assert
-# on individual artefacts. Capture the exit code so the documented
-# "valid target → exit 0" invariant is explicitly SKIP'd (not silently
-# swallowed) until #420 fixes the cp-on-directory abort.
+# ── CLI-1c: valid-target run exits 0 ─────────────────────────────────────────
 bootstrap_rc=0
 bash "$BOOTSTRAP" "$TARGET" "MyProject" >/dev/null 2>&1 || bootstrap_rc=$?
 if [ "$bootstrap_rc" -eq 0 ]; then
   pass "CLI-1c: valid-target run exits 0"
 else
-  skip_note "CLI-1c: valid-target exit-0 invariant — bootstrap aborts at exit $bootstrap_rc on the cp-on-directory bug (#420); verify after fix"
+  fail_msg "CLI-1c: valid-target run — expected exit 0, got $bootstrap_rc"
 fi
 
 # ── CLI-1: Positional-arg and exit-code contract ─────────────────────────────
@@ -61,18 +54,15 @@ else
   fail_msg "CLI-1b: no-arg invocation — expected usage message; got: $no_arg_out"
 fi
 
-# ── CLI-2: Idempotent directory creation ─────────────────────────────────────
-# Second run against the same (partially-created) target must not fail
-# on mkdir-if-missing (those dirs already exist — the guard must handle it).
-# Capture the exit so the "second run → exit 0" invariant is explicitly
-# SKIP'd (not swallowed) — the cp-on-directory abort (#420) makes the second
-# run exit non-zero too; the dir-preservation checks below are still asserted.
+# ── CLI-2: Idempotent re-run ─────────────────────────────────────────────────
+# Second run against the same target must exit 0 (every copy is now guarded by
+# the -e existence check) and must not overwrite or nest existing artefacts.
 rerun_rc=0
 bash "$BOOTSTRAP" "$TARGET" "MyProject" >/dev/null 2>&1 || rerun_rc=$?
 if [ "$rerun_rc" -eq 0 ]; then
   pass "CLI-2: second run exits 0"
 else
-  skip_note "CLI-2: second-run exit-0 invariant — aborts at exit $rerun_rc on the cp-on-directory bug (#420); verify after fix"
+  fail_msg "CLI-2: second run — expected exit 0, got $rerun_rc"
 fi
 # Directories created in the first run must still be present.
 for dir in docs docs/specs docs/templates workflows ".claude/hooks"; do
@@ -82,22 +72,27 @@ for dir in docs docs/specs docs/templates workflows ".claude/hooks"; do
     fail_msg "CLI-2: second run — directory missing after re-run: $TARGET/$dir"
   fi
 done
+# The -e guard must prevent cp -R from nesting a directory template inside its
+# already-present destination on the second run.
+if [ ! -e "$TARGET/docs/templates/issue-templates/issue-templates" ]; then
+  pass "CLI-2: re-run did not nest directory template (issue-templates/)"
+else
+  fail_msg "CLI-2: re-run nested issue-templates/ inside itself — idempotency guard failed"
+fi
 
 # ── CLI-3: Core directory structure created ───────────────────────────────────
-# Directories created before the cp-on-dir abort must all be present.
-for dir in docs docs/specs docs/templates workflows ".claude/hooks"; do
+# After a successful run the full directory set must be present, including the
+# .githooks/ and .claude/skills/ trees that only appear post-template-copy.
+for dir in docs docs/specs docs/templates workflows ".claude/hooks" ".githooks" ".claude/skills"; do
   if [ -d "$TARGET/$dir" ]; then
     pass "CLI-3: directory created — $dir"
   else
     fail_msg "CLI-3: expected directory missing — $TARGET/$dir"
   fi
 done
-# .githooks and skills/ require the post-abort section; skip with note.
-skip_note "CLI-3: .githooks/ and .claude/skills/ (require post-abort section)"
 
-# ── CLI-4: CLAUDE.md rendered with project name ──────────────────────────────
-# The rendered CLAUDE.md at the project root requires the post-abort section.
-# The agent adapter templates are copied to docs/templates/ (pre-abort).
+# ── CLI-4: Agent adapters rendered with project name ──────────────────────────
+# Templates land in docs/templates/; rendered root adapters carry the name.
 if [ -f "$TARGET/docs/templates/CLAUDE.md" ]; then
   pass "CLI-4a: CLAUDE.md template copied to docs/templates/"
 else
@@ -113,21 +108,68 @@ if [ -f "$TARGET/ARBORETUM.md" ]; then
 else
   fail_msg "CLI-10: ARBORETUM.md not copied to project root"
 fi
-# Rendered root adapter files require post-abort code — skip.
-skip_note "CLI-4b: rendered CLAUDE.md at project root (requires post-abort section)"
-skip_note "CLI-4c: rendered AGENTS.md at project root (requires post-abort section)"
+if [ -f "$TARGET/CLAUDE.md" ] && grep -q "^# CLAUDE.md — MyProject" "$TARGET/CLAUDE.md"; then
+  pass "CLI-4b: rendered CLAUDE.md at project root carries project name"
+else
+  fail_msg "CLI-4b: rendered root CLAUDE.md missing project-name heading"
+fi
+if [ -f "$TARGET/AGENTS.md" ] && grep -q "^# AGENTS.md — MyProject" "$TARGET/AGENTS.md"; then
+  pass "CLI-4c: rendered AGENTS.md at project root carries project name"
+else
+  fail_msg "CLI-4c: rendered root AGENTS.md missing project-name heading"
+fi
 
 # ── CLI-5: .arboretum.yml created ────────────────────────────────────────────
-skip_note "CLI-5: .arboretum.yml creation (requires post-abort section)"
+if [ -f "$TARGET/.arboretum.yml" ] \
+   && grep -qE '^layer:[[:space:]]*0' "$TARGET/.arboretum.yml" \
+   && grep -qE '^backend:[[:space:]]*github' "$TARGET/.arboretum.yml"; then
+  pass "CLI-5: .arboretum.yml created with layer: 0 and backend: github"
+else
+  fail_msg "CLI-5: .arboretum.yml missing or lacks layer:0 / backend:github"
+fi
 
-# ── CLI-6: Layer filter — pre-commit hook ────────────────────────────────────
-skip_note "CLI-6: layer-gated pre-commit hook install (requires post-abort section)"
+# ── CLI-6: Layer filter — pre-commit hook gated at Layer 2 ────────────────────
+LAYER1="$TMPBASE/layer1"
+bash "$BOOTSTRAP" --layer 1 "$LAYER1" L1 >/dev/null 2>&1 || true
+if [ ! -f "$LAYER1/.claude/hooks/pre-commit-branch-check.sh" ]; then
+  pass "CLI-6: --layer 1 omits pre-commit-branch-check.sh"
+else
+  fail_msg "CLI-6: --layer 1 unexpectedly copied pre-commit-branch-check.sh"
+fi
+LAYER2="$TMPBASE/layer2"
+bash "$BOOTSTRAP" --layer 2 "$LAYER2" L2 >/dev/null 2>&1 || true
+if [ -f "$LAYER2/.claude/hooks/pre-commit-branch-check.sh" ]; then
+  pass "CLI-6: --layer 2 copies pre-commit-branch-check.sh"
+else
+  fail_msg "CLI-6: --layer 2 did not copy pre-commit-branch-check.sh"
+fi
 
 # ── CLI-7: Layer filter — settings.json variant ──────────────────────────────
-skip_note "CLI-7: settings.json layer variant (requires post-abort section)"
+# --layer 1: SessionStart-only, no PreToolUse. --layer 2: full settings.
+if grep -q "SessionStart" "$LAYER1/.claude/settings.json" \
+   && ! grep -q "PreToolUse" "$LAYER1/.claude/settings.json"; then
+  pass "CLI-7: --layer 1 settings.json is SessionStart-only (no PreToolUse)"
+else
+  fail_msg "CLI-7: --layer 1 settings.json variant wrong (expected SessionStart, no PreToolUse)"
+fi
+if grep -q "PreToolUse" "$LAYER2/.claude/settings.json"; then
+  pass "CLI-7: --layer 2 settings.json is the full installation copy (has PreToolUse)"
+else
+  fail_msg "CLI-7: --layer 2 settings.json missing PreToolUse — not the full copy"
+fi
 
 # ── CLI-8: Git repository initialised ────────────────────────────────────────
-skip_note "CLI-8: git init + core.hooksPath (requires post-abort section)"
+if [ -d "$TARGET/.git" ]; then
+  pass "CLI-8: git repository initialised (.git/ present)"
+else
+  fail_msg "CLI-8: .git/ not created in target"
+fi
+hooks_path=$(cd "$TARGET" && git config core.hooksPath 2>/dev/null || true)
+if [ "$hooks_path" = ".githooks" ]; then
+  pass "CLI-8: core.hooksPath configured to .githooks"
+else
+  fail_msg "CLI-8: core.hooksPath not set to .githooks (got: '$hooks_path')"
+fi
 
 # ── CLI-9: Source-files-not-found guard ──────────────────────────────────────
 # Copy the bootstrap script into a temp scripts/ dir that has no arboretum
@@ -138,7 +180,7 @@ skip_note "CLI-8: git init + core.hooksPath (requires post-abort section)"
 # "Verify source files exist" guard is reached — so the assertable invariant
 # is "non-zero exit with a missing-source diagnostic", NOT the friendly
 # "run this script from the arboretum repo" message (which is unreachable on
-# a missing templates dir — a known bootstrap limitation in the #420 family).
+# a missing templates dir).
 FAKE_SCRIPTS="$TMPBASE/fake-scripts"
 mkdir -p "$FAKE_SCRIPTS"
 cp "$BOOTSTRAP" "$FAKE_SCRIPTS/bootstrap-project.sh"
