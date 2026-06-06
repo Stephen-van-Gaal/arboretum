@@ -204,6 +204,21 @@ grep -Fq "git commit --only -m \"<message>\" -- <file> [<file>...]" "$FINISH" \
   || fail "case 13a — /finish checkpoint does not restrict commit contents to named files"
 ok "case 13a — /finish Step 1 offers an explicit named-file commit checkpoint"
 
+# Case 13b: /finish runs template taxonomy validation when relevant files changed
+grep -q "Step 5.4: Template taxonomy advisory gate" "$FINISH" \
+  || fail "case 13b — /finish template taxonomy advisory gate missing"
+grep -q "scripts/validate-template-taxonomy.sh" "$FINISH" \
+  || fail "case 13b — /finish does not invoke validate-template-taxonomy.sh"
+grep -q "docs/templates/document-shapes.yaml" "$FINISH" \
+  || fail "case 13b — /finish template taxonomy gate missing document-shapes trigger"
+grep -q "docs/definitions/document-section-schema.md" "$FINISH" \
+  || fail "case 13b — /finish template taxonomy gate missing section-schema trigger"
+grep -q "exits \`1\`" "$FINISH" \
+  || fail "case 13b — /finish template taxonomy gate missing exit 1 pause rule"
+grep -q "exits \`2\`, stop" "$FINISH" \
+  || fail "case 13b — /finish template taxonomy gate missing exit 2 stop rule"
+ok "case 13b — /finish template taxonomy advisory gate present"
+
 # Case 14: /health-check has Step 0 (flag read)
 grep -q "^### Step 0: Read the pipeline\.workflow flag" "$HEALTH" \
   || fail "case 14 — /health-check Step 0 (flag read) missing"

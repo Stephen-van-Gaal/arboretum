@@ -146,6 +146,29 @@ Always invoke it, regardless of whether agent-facing files appear in the diff.
 The skill self-gates and exits fast when no injection surface is present, so the
 cost is near zero on changes that genuinely need nothing.
 
+### Step 5.4: Template taxonomy advisory gate
+
+If `scripts/validate-template-taxonomy.sh` exists, inspect changed paths against
+the default branch:
+
+```bash
+BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)
+CHANGED=$(git diff "$BASE"...HEAD --name-only)
+```
+
+Run `bash scripts/validate-template-taxonomy.sh` only when at least one changed
+path matches:
+
+- `docs/templates/document-shapes.yaml`
+- `docs/templates/*.md`
+- `docs/definitions/document-section-schema.md`
+
+If the validator exits `0`, present its summary and continue. Warnings and
+`lifecycle-required` findings are review items, not blockers. If it exits `1`,
+pause the ship tail and ask whether to fix the hard alignment failure before PR
+creation or explicitly proceed with the failure called out in PR context. If it
+exits `2`, stop because the validation result is unknown.
+
 ### Step 5.5: Pre-PR local CI gate
 
 Determine the local check command from the project's declared testing shape. If
@@ -240,8 +263,8 @@ fi
 ## Unified ship tail
 
 The ship tail sequence is: verify → identify affected specs → health-check →
-`/consolidate` → `/security-review` → local CI gate → backend-aware `/pr` →
-backend-aware `/land`.
+`/consolidate` → `/security-review` → template taxonomy advisory gate →
+local CI gate → backend-aware `/pr` → backend-aware `/land`.
 
 The model-level differences that matter to `/finish` are upstream:
 everything-else pre-build work produces an in-flight design spec, and `/design`

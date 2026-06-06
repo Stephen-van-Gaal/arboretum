@@ -55,6 +55,7 @@
 | scripts/validate-cross-refs.sh | docs/contracts/validate-cross-refs.contract.md | full |
 | scripts/validate-design-spec.sh | docs/contracts/validate-design-spec.contract.md | full |
 | scripts/validate-stage-log-line.sh | docs/contracts/validate-stage-log-line.contract.md | full |
+| scripts/validate-template-taxonomy.sh | docs/contracts/validate-template-taxonomy.cli-contract.md | cli |
 | scripts/validate-test-surface.sh | docs/contracts/validate-test-surface.contract.md | full |
 | scripts/verify-agent-ready.sh | docs/contracts/verify-agent-ready.contract.md | full |
 | scripts/write-agent-brief.sh | docs/contracts/write-agent-brief.contract.md | full |
