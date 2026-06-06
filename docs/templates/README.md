@@ -92,7 +92,7 @@ explicit:
 | Architecture overview | `docs/templates/architecture.md` | `docs/ARCHITECTURE.md` | Cross-cutting | System map: major groups, boundaries, data flow, cross-cutting decisions. | Project setup; major topology or boundary change. |
 | Group document | `docs/templates/group.md` | `docs/groups/<group>.md` | Cross-cutting | Optional middle layer for subsystems. Explains child modules, integration, orchestration, shared schemas/contracts. | When a subsystem has enough modules that a map is needed. |
 | Governed spec | `docs/templates/spec.md` | `docs/specs/<topic>.spec.md` | Cross-cutting | Module-level authority: purpose, behaviour, boundaries, dependencies, owned files, tests, decisions. | Intent/seam authority may be created or edited during `/design`; generated/evidence sections are reconciled by `/consolidate`; active by PR time. |
-| Shared definition | `docs/templates/definition.md` | `docs/definitions/<name>.md` | Cross-cutting | Shared data or concept contract used by multiple specs. Defines fields, meanings, invariants, versioning. | During design before multiple modules consume the noun; bumped on stable changes. |
+| Shared definition | `docs/templates/definition.md` | `docs/definitions/<name>.md` | Cross-cutting | Shared data, concept contract, or controlled-vocabulary index used by multiple specs. Defines fields, meanings, invariants, versioning, or canonical owner lookup. | During design before multiple modules consume the noun; bumped on stable changes. |
 | Module contract | `docs/templates/module-contract.md` | `docs/contracts/<seam>.contract.md` | Cross-cutting | Producer/consumer seam contract across skills, scripts, hooks, plugins, repos, or modules. | When drift across a seam would break another component. |
 | CLI contract | `docs/templates/cli-contract.md` | `docs/contracts/<script>.cli-contract.md` | Cross-cutting | Contract variant for standalone scripts invoked by humans, skills, or CI. | When a script has external callers or CI coverage expectations. |
 | Test infrastructure spec | `docs/templates/test-infrastructure.spec.md` | `docs/specs/test-infrastructure.spec.md` | Child projects + arboretum-dev | Declares the default-safe test command, test tiers, fixture conventions, and opt-in test commands. | Project setup; test runner or suite-shape change. |
@@ -111,11 +111,12 @@ explicit:
   the vision or a governed spec's Behaviour section.
 - If it explains system topology, put it in architecture or a group document.
 - If it names a shared framework concept or cross-document vocabulary, check
-  `docs/definitions/concept-catalog.md` first. If the concept is new and can
-  drift across specs, add or update a catalog row before scattering the term
-  across templates, skills, or issue bodies. If it is a data structure or
-  versioned noun consumed by multiple specs, put the detailed shape in its own
-  definition and cite it from the catalog where useful.
+  `docs/definitions/README.md` first. That index names the controlled
+  vocabularies and their canonical owners. If the concept is new and can drift
+  across specs, add or update a `docs/definitions/concept-catalog.md` row before
+  scattering the term across templates, skills, or issue bodies. If it is a data
+  structure or versioned noun consumed by multiple specs, put the detailed shape
+  in its own definition and cite it from the catalog where useful.
 - If it names a producer/consumer protocol, put it in a contract.
 - If it explains why a change is being made now, put it in a provider-owned
   AI-facing session document or equivalent build-support artifact.

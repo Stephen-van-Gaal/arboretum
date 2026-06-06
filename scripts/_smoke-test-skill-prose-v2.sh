@@ -178,6 +178,24 @@ for phrase in "Durable Document Change Set" "intent authority" "seam authority" 
 done
 ok "case 10b — /design invokes design-package and preserves durable-doc review gate"
 
+# Case 10c: /design consults the definitions index and concept catalog compact
+# profiles before vocabulary-sensitive Slipstream design work.
+grep -q "definitions index" "$DESIGN" \
+  || fail "case 10c — /design does not read the definitions index"
+grep -q "docs/definitions/README.md compact" "$DESIGN" \
+  || fail "case 10c — /design missing definitions README compact read"
+grep -q "concept catalog compact profile" "$DESIGN" \
+  || fail "case 10c — /design does not read the concept catalog compact profile"
+grep -q "shared vocabulary" "$DESIGN" \
+  || fail "case 10c — /design missing shared vocabulary trigger"
+grep -q "routing/design taxonomy" "$DESIGN" \
+  || fail "case 10c — /design missing routing/design taxonomy trigger"
+grep -q "public/adopter checkouts" "$DESIGN" \
+  || fail "case 10c — /design missing public/adopter checkout fallback"
+grep -q "authority-unavailable warning" "$DESIGN" \
+  || fail "case 10c — /design missing authority-unavailable warning"
+ok "case 10c — /design serves concept catalog during survey"
+
 # Case 11: /design unified phase exits to /build with design spec path
 grep -q "/build docs/superpowers/specs" "$DESIGN" \
   || fail "case 11 — /design unified phase does not exit to /build with design spec path"

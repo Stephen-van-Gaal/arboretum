@@ -82,6 +82,29 @@ missing, or insufficient for the design question, fall back to
 `scripts/read-doc-section.sh` for explicit headings, then to a whole-file read
 with the reason recorded in the survey summary.
 
+When the request or survey touches shared vocabulary, workflow terms, tracker
+labels or states, document shapes, read-profile language, routing/design taxonomy,
+release-intent language, or review-cadence language, read the definitions index
+and concept catalog compact profiles:
+
+```bash
+bash scripts/read-doc-profile.sh docs/definitions/README.md compact
+bash scripts/read-doc-profile.sh docs/definitions/concept-catalog.md compact
+```
+
+Treat the definitions index as the controlled-vocabulary inventory and the
+concept catalog as naming/context authority. They point to owner specs and
+canonical surfaces; they do not replace those owner specs for behaviour.
+
+Read repo-relative owner or canonical paths from those profiles only when those
+paths exist in the current checkout. In public/adopter checkouts, arboretum-dev
+specs, design docs, plans, and dev release contracts may be absent; use the
+public fallback surfaces named in the profiles (skills, workflows, templates,
+contracts, helper scripts, and local config) and surface an
+authority-unavailable warning before relying on any missing owner. If a profile
+read fails, surface an authority warning and continue with the normal
+governed-spec survey instead of claiming that profile was consulted.
+
 ### 2. Triage change kind to Branch 1 mode
 
 Branch 1 has four modes; each converges on a design spec but the dialogue shape differs. Ask the user (via `AskUserQuestion`) which mode fits, with the default inferred from the request type:
