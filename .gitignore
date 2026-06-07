@@ -26,6 +26,9 @@ venv/
 # customer checkouts and must never be tracked.
 .arboretum/customer-testbeds/
 
+# Scratch workspace for spikes / reference logic (never shipped).
+.arboretum/scratch/
+
 # Session-handoff transient markers (issue #251).
 .arboretum/handoff-done
 .arboretum/handoff-nudged
@@ -56,6 +59,10 @@ venv/
 # Per-contributor token-accounting ledgers (#453). Append-only JSONL written by
 # scripts/lib/token-ledger.sh, rotated at /cleanup. Generated, not source.
 .arboretum/token-ledger/
+
+# Token "journey" report artifacts (#627). Written by token-report.sh journey /
+# read-session-journey.sh. Generated, not source.
+.arboretum/token-journey/
 
 # Runtime lock files and worktree storage. Lock files are session-scoped;
 # worktrees are git-managed alternate working trees that should never be

@@ -38,7 +38,9 @@
 | scripts/read-review-config.sh | docs/contracts/read-review-config.cli-contract.md | cli |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
 | scripts/read-session-billed.sh | docs/contracts/read-session-billed.cli-contract.md | cli |
+| scripts/read-session-journey.sh | docs/contracts/read-session-journey.cli-contract.md | cli |
 | scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |
+| scripts/read-token-journey-config.sh | docs/contracts/read-token-journey-config.cli-contract.md | cli |
 | scripts/read-trust-config.sh | docs/contracts/trust-config.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
 | scripts/refresh-stage-cache.sh | docs/contracts/refresh-stage-cache.contract.md | full |

@@ -131,5 +131,29 @@ for i in range(1,len(rows)):
 print(f"\ntotal avoidable cache-bust cost: ${waste:.4f}  (compaction excluded)")
 PY
     ;;
+  journey)
+    set -- "${args[@]}"
+    t="${ARBORETUM_TRANSCRIPT:-}"; out_dir=""; fmt=""; passthru=()
+    while [ $# -gt 0 ]; do case "$1" in
+      --transcript) t="$2"; shift 2;;
+      --output-dir) out_dir="$2"; shift 2;;
+      --format) fmt="$2"; shift 2;;
+      --stdout) passthru+=(--stdout); shift;;
+      --descriptor) passthru+=(--descriptor "$2"); shift 2;;
+      *) shift;; esac; done
+    [ -n "$t" ] || { echo "set --transcript or ARBORETUM_TRANSCRIPT" >&2; exit 2; }
+    # Precedence: flag > env > .arboretum.yml > default. An absent config defaults
+    # cleanly (exit 0); a present-but-invalid config is a blocking error — surface
+    # it rather than silently falling back (config reader contract).
+    if ! cfg="$(bash "$ROOT/scripts/read-token-journey-config.sh" .arboretum.yml 2>&1)"; then
+      printf '%s\n' "$cfg" >&2; exit 1
+    fi
+    cfg_dir="$(printf '%s\n' "$cfg" | sed -n 's/^output_dir=//p')"
+    cfg_fmt="$(printf '%s\n' "$cfg" | sed -n 's/^format=//p')"
+    [ -n "$out_dir" ] || out_dir="${ARBORETUM_TOKEN_JOURNEY_DIR:-${cfg_dir:-.arboretum/token-journey}}"
+    [ -n "$fmt" ] || fmt="${cfg_fmt:-md}"
+    # bash 3.2 (macOS default) errors on empty "${arr[@]}" under set -u; guard it.
+    bash "$ROOT/scripts/read-session-journey.sh" --transcript "$t" \
+      --output-dir "$out_dir" --format "$fmt" "${passthru[@]+"${passthru[@]}"}" ;;
   *) echo "unknown subcommand: $sub" >&2; exit 2 ;;
 esac
