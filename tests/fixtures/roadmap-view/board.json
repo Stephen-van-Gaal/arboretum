@@ -1,0 +1,6 @@
+[
+  {"number":622,"title":"Epic: Branch/worktree collision avoidance","state":"OPEN","labels":[{"name":"horizon:next"},{"name":"type:epic"}]},
+  {"number":621,"title":"Script the what's-open roadmap view","state":"OPEN","labels":[{"name":"horizon:later"}]},
+  {"number":467,"title":"Epic: Reduce agent token burn","state":"OPEN","labels":[{"name":"horizon:now"},{"name":"type:epic"}]},
+  {"number":174,"title":"Optimize build-skill token spend","state":"OPEN","labels":[{"name":"horizon:now"}]}
+]

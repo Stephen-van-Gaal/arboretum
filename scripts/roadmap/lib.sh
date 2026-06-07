@@ -1598,6 +1598,79 @@ PY
 # Emits graph JSON on stdout. Always exits 0 (fail-soft): a github fetch
 # failure (or empty output) degrades to an empty graph here, so direct
 # callers need no extra guard.
+roadmap_ado_epic_graph() {
+  # ADO native hierarchy via the work-item `relations` field
+  # (Hierarchy-Forward = children, Hierarchy-Reverse = parent). Produces the
+  # same {next_up, nodes{...}} graph shape as roadmap_github_epic_graph so
+  # epic-walk.sh consumes either backend identically (epic-walk.contract v1.1).
+  # Stage is always null for ADO children: Azure Boards has no pipeline-state
+  # stage signal equivalent to GitHub's, so epic-walk's "active = stage ≥ /design"
+  # detection is GitHub-only in v1. Labels are populated from System.Tags so
+  # blocked/horizon detection still works; next/blocked selection still applies.
+  local n="$1"
+  [ -n "$n" ] || { printf '%s\n' '{"next_up":null,"nodes":{}}'; return 0; }
+  # Pass the resolved org/project to every az call (repos relying on
+  # .arboretum.yml/roadmap.config.yaml rather than global az defaults — matches
+  # the other roadmap_ado_* helpers).
+  local org project
+  org="$(roadmap_ado_organization 2>/dev/null || true)"
+  project="$(roadmap_ado_project 2>/dev/null || true)"
+  local az_ctx=()
+  [ -n "$org" ] && az_ctx+=(--organization "$org")
+  [ -n "$project" ] && az_ctx+=(--project "$project")
+  local root_query='{id:id,title:fields."System.Title",state:fields."System.State",type:fields."System.WorkItemType",tags:fields."System.Tags",rels:relations}'
+  local root_json
+  root_json=$(az boards work-item show --id "$n" "${az_ctx[@]}" \
+    --query "$root_query" -o json 2>/dev/null) || { printf '%s\n' '{"next_up":null,"nodes":{}}'; return 1; }
+  [ -n "$root_json" ] || { printf '%s\n' '{"next_up":null,"nodes":{}}'; return 1; }
+
+  local child_ids parent_id closed_list
+  child_ids=$(printf '%s' "$root_json" | jq -r '(.rels // [])[] | select(.rel=="System.LinkTypes.Hierarchy-Forward") | (.url | capture("/workItems/(?<id>[0-9]+)$").id)' 2>/dev/null)
+  parent_id=$(printf '%s' "$root_json" | jq -r 'first((.rels // [])[] | select(.rel=="System.LinkTypes.Hierarchy-Reverse") | (.url | capture("/workItems/(?<id>[0-9]+)$").id)) // empty' 2>/dev/null)
+  # Clean pipe-joined closed-state list for state normalization in python.
+  closed_list=$(roadmap_ado_config_get azure_devops_closed_states "Closed,Done,Removed" | tr ',' '|')
+
+  ROOT_JSON="$root_json" CHILD_IDS="$child_ids" PARENT_ID="$parent_id" CLOSED="$closed_list" N="$n" \
+  ORG="$org" PROJECT="$project" \
+  python3 <<'PY'
+import os, json, subprocess
+closed={s.strip() for s in os.environ["CLOSED"].split("|") if s.strip()}
+def norm(state): return "closed" if (state or "").strip() in closed else "open"
+def tags(s): return [t.strip() for t in (s or "").split(";") if t.strip()]
+CTX=[]
+if os.environ.get("ORG"): CTX += ["--organization", os.environ["ORG"]]
+if os.environ.get("PROJECT"): CTX += ["--project", os.environ["PROJECT"]]
+CHILD_QUERY='{id:id,title:fields."System.Title",state:fields."System.State",type:fields."System.WorkItemType",tags:fields."System.Tags"}'
+def fetch(i):
+    r=subprocess.run(["az","boards","work-item","show","--id",str(i),*CTX,
+        "--query",CHILD_QUERY,"-o","json"],capture_output=True,text=True)
+    if r.returncode!=0 or not r.stdout.strip(): return None
+    try: return json.loads(r.stdout)
+    except Exception: return None
+def node(wi, number, parent, children, is_root_type=None):
+    return {"number":number,"is_epic":(wi.get("type")=="Epic"),"state":norm(wi.get("state")),
+            "title":wi.get("title") or "","labels":tags(wi.get("tags")),
+            "parent":parent,"children":children,"stage":None}
+n=int(os.environ["N"])
+root=json.loads(os.environ["ROOT_JSON"])
+children=[int(x) for x in os.environ["CHILD_IDS"].split() if x.strip()]
+parent_raw=os.environ["PARENT_ID"].strip()
+parent_num=int(parent_raw) if parent_raw else None
+nodes={str(n):node(root, n, parent_num, children)}
+# Insert the parent node so epic-walk can resolve nodes.get(parent) when the
+# next-up is a child work item (not the epic itself).
+if parent_num is not None:
+    pj=fetch(parent_num)
+    if pj:
+        nodes[str(parent_num)]=node(pj, parent_num, None, [n])
+for c in children:
+    cj=fetch(c)
+    if not cj: continue
+    nodes[str(c)]=node(cj, c, n, [])
+print(json.dumps({"next_up":n,"nodes":nodes}))
+PY
+}
+
 roadmap_epic_graph() {
   local out
   case "${ROADMAP_BACKEND:-$(roadmap_backend)}" in
@@ -1608,7 +1681,13 @@ roadmap_epic_graph() {
         printf '%s\n' '{"next_up":null,"nodes":{}}'
       fi
       ;;
-    azure-devops) printf '%s\n' '{"next_up":null,"nodes":{}}' ;;   # v1: ADO native links deferred → degrade
+    azure-devops)
+      if out=$(roadmap_ado_epic_graph "$1" 2>/dev/null) && [ -n "$out" ]; then
+        printf '%s\n' "$out"
+      else
+        printf '%s\n' '{"next_up":null,"nodes":{}}'
+      fi
+      ;;
     *)            printf '%s\n' '{"next_up":null,"nodes":{}}' ;;
   esac
 }

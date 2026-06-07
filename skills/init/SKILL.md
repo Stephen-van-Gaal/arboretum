@@ -142,7 +142,7 @@ done
 chmod +x scripts/*.sh 2>/dev/null || true
 
 # Roadmap scripts live in a subdirectory; the glob above is non-recursive
-# and would otherwise miss them (lib.sh, render-run.sh, maintain-*.sh, …),
+# and would otherwise miss them (lib.sh, view.sh, maintain-*.sh, …),
 # leaving /roadmap broken in the new project.
 mkdir -p scripts/roadmap
 for script in "$PLUGIN_ROOT/scripts/roadmap/"*.sh; do

@@ -26,6 +26,7 @@ Parse the first argument:
 | `shape <n>` / `ready <n>` | (Phase 3) | same |
 | `agent-prep <n>` | §4 below — batch front-door | implemented (capture; dispatch is Phase 5b) |
 | `agent-prep` (no arg) | §4 below — in-flight front-door | implemented (capture; dispatch is Phase 5b) |
+| `view <preset\|"nl">` | §5 below — scripted query/render | implemented |
 | `sprint open` / `sprint close` | (Phase 4) | same |
 | `revise` | (Phase 6) | same |
 
@@ -51,12 +52,12 @@ For other methods, refuse and ask the user to instantiate first.
 Cheap, fast, read-only. No mutations.
 
 ```bash
-bash scripts/roadmap/render-run.sh
+bash scripts/roadmap/view.sh --format full
 ```
 
-The renderer produces a one-screen view: Done (last 7d) / Now / Next / Agent-ready / Later (top 5) / Slack / Recommend.
+The shared `view.sh` core produces a one-screen view: Done (last 7d) / Now / Next / Agent-ready / Later (top 5) / Slack / Recommend.
 
-If invoked with `--condensed`, output is the ~5-line orientation block used by the SessionStart hook. The hook calls this directly.
+The SessionStart hook calls `view.sh --format condensed --quiet` directly for the ~5-line orientation block.
 
 ### Recommend logic
 
@@ -69,6 +70,65 @@ The renderer's RECOMMEND block surfaces a single line. The skill should narrate 
 | WIP = 0 AND now-list empty AND next-list non-empty | "Promote #<n> from NEXT (run `/roadmap maintain` to triage and shape the backlog)." |
 | All lists empty | "Capture new work with `/idea`." |
 | agent-ready list non-empty | "★ #<n> is agent-ready — pick it up with `/start <n>` (autonomous dispatch lands in Phase 5b)." |
+
+## §5. `/roadmap view` — scripted query/render
+
+Deterministic, read-only. The model's ONLY job is to produce a validated
+query-spec; `view.sh` does the rest and prints the answer. **After calling
+`view.sh`, stop — do not read the result back or re-summarize it.** The
+script's stdout is the answer.
+
+### Presets (no LLM)
+
+Build the query-spec directly and pipe it via a quoted heredoc:
+
+- `active`  → `{"label_any":["horizon:now"]}`
+- `next`    → `{"label_any":["horizon:now","agent-ready"]}`
+- `about <terms>` → `{"text_match":["<term1>","<term2>",...]}` (split args literally)
+- `epic <N>` → `{"epic":<N>}`
+
+```bash
+bash scripts/roadmap/view.sh --format view <<'EOF'
+{"text_match":["token","cost"]}
+EOF
+```
+
+### Free-form NL (subagent)
+
+For a query that no preset covers, translate it to a query-spec **in a
+subagent**, never in the main context — this keeps the translation cost
+constant regardless of how long the parent session has run.
+
+1. **Dispatch a subagent (Haiku)** with a *fixed minimal prompt* containing only:
+   - the query-spec schema (cite `docs/definitions/roadmap-view-spec.md`),
+   - the project label vocabulary (`roadmap_config_list component_values` plus
+     the `horizon:*` / `type:*` labels in use),
+   - the user's raw query string.
+
+   Instruct it to **return only the query-spec JSON object — nothing else**. The
+   prompt MUST NOT include the parent session transcript.
+
+2. **Re-validate** the returned JSON before trusting it (defense in depth):
+
+   ```bash
+   printf '%s' "$SUBAGENT_JSON" | bash scripts/roadmap/view.sh --validate-spec
+   ```
+
+3. **On validation failure** (exit 3): surface the controlled
+   `view: invalid query-spec — <field>` error and stop. Do **not** guess or
+   hand-edit a spec.
+
+4. **On success**: pipe the spec to `view.sh` over stdin and **stop** — the
+   script's stdout is the answer. Use the same `printf '%s' | …` form as the
+   re-validate step (never an unquoted heredoc): the value is passed as data on
+   stdin, never expanded by the shell.
+
+   ```bash
+   printf '%s' "$SUBAGENT_JSON" | bash scripts/roadmap/view.sh --format view
+   ```
+
+The query-spec schema, this prompt, and `view.sh`'s validator are the same
+single source (`docs/definitions/roadmap-view-spec.md`) — keep them in sync.
 
 ## §2. `/roadmap instantiate` — one-time setup
 

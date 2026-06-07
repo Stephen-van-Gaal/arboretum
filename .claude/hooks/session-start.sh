@@ -879,14 +879,14 @@ if [ -d "$SKILLS_DIR" ]; then
 fi
 
 # ── Roadmap orientation (issue #152) ─────────────────────────────────
-# render-run.sh exits silently when roadmap.config.yaml is absent, so this
-# is a no-op on projects that haven't instantiated the roadmap system.
-# Nag machinery runs inside render-run.sh before the gh guard.
+# view.sh --format condensed exits silently when roadmap.config.yaml is absent,
+# so this is a no-op on projects that haven't instantiated the roadmap system.
+# Nag machinery runs inside view.sh before the gh guard.
 
-ROADMAP_RENDER="$PROJECT_DIR/scripts/roadmap/render-run.sh"
+ROADMAP_RENDER="$PROJECT_DIR/scripts/roadmap/view.sh"
 if [ -x "$ROADMAP_RENDER" ]; then
   orientation_status=0
-  orientation_text="$(bash "$ROADMAP_RENDER" --condensed 2>/dev/null)" || orientation_status=$?
+  orientation_text="$(bash "$ROADMAP_RENDER" --format condensed --quiet 2>/dev/null)" || orientation_status=$?
   if [ -n "$orientation_text" ]; then
     [ -n "$output" ] && output+=$'\n'
     output+="$orientation_text"

@@ -1,0 +1,8 @@
+{ "next_up": 622,
+  "nodes": {
+    "622": {"number":622,"is_epic":true,"state":"open","title":"Epic: Branch/worktree collision avoidance","labels":["horizon:next"],"parent":null,"children":[623,624,625],"stage":null},
+    "623": {"number":623,"is_epic":false,"state":"open","title":"workspace-context helper","labels":["horizon:next"],"parent":622,"children":[],"stage":"/build"},
+    "624": {"number":624,"is_epic":false,"state":"open","title":"Collision MVP","labels":["horizon:next"],"parent":622,"children":[],"stage":"/design"},
+    "625": {"number":625,"is_epic":false,"state":"closed","title":"Worktrees-always sentinel","labels":["horizon:later"],"parent":622,"children":[],"stage":null}
+  }
+}

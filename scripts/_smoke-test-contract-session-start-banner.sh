@@ -101,17 +101,17 @@ else
 fi
 
 # ── SSB-3: roadmap orientation passthrough is appended (and NOT scrubbed) ─
-# Stub render-run.sh --condensed to emit a [roadmap] block whose content
+# Stub view.sh --format condensed to emit a [roadmap] block whose content
 # carries a raw ESC byte. The contract documents that this passthrough is
 # NOT control-char scrubbed by the hook (known gap). We assert the block is
 # appended verbatim — including the ESC byte — which documents the gap
 # behaviourally without claiming the lack of scrub is desirable.
 fix=$(new_fixture ssb3)
-cat > "$fix/scripts/roadmap/render-run.sh" <<'SH'
+cat > "$fix/scripts/roadmap/view.sh" <<'SH'
 #!/usr/bin/env bash
 printf '[roadmap] evil\033INJECT block\n'
 SH
-chmod +x "$fix/scripts/roadmap/render-run.sh"
+chmod +x "$fix/scripts/roadmap/view.sh"
 out=$(run_hook "$fix")
 if ! echo "$out" | grep -q '\[roadmap\]'; then
   fail_case SSB-3 "[roadmap] passthrough block not appended" "$out"
@@ -203,11 +203,11 @@ cat > "$fix/roadmap.config.yaml" <<'YAML'
 profile: lean
 wip_limit: 1
 YAML
-cat > "$fix/scripts/roadmap/render-run.sh" <<'SH'
+cat > "$fix/scripts/roadmap/view.sh" <<'SH'
 #!/usr/bin/env bash
 exit 42
 SH
-chmod +x "$fix/scripts/roadmap/render-run.sh"
+chmod +x "$fix/scripts/roadmap/view.sh"
 out=$(run_hook "$fix")
 if echo "$out" | grep -qF "[roadmap] Configured, but render failed — run /roadmap run for details."; then
   pass "SSB-6b"

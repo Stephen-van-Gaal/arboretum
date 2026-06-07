@@ -49,14 +49,13 @@
 | scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
 | scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
 | scripts/roadmap/audit-board.sh | docs/contracts/roadmap-audit-board.cli-contract.md | cli |
-| scripts/roadmap/build-orientation.sh | docs/contracts/roadmap-build-orientation.cli-contract.md | cli |
 | scripts/roadmap/epic-walk.sh | docs/contracts/epic-walk.contract.md | full |
 | scripts/roadmap/install-labels.sh | docs/contracts/roadmap-install-labels.cli-contract.md | cli |
 | scripts/roadmap/lib.sh | docs/contracts/roadmap-lib.contract.md | full |
 | scripts/roadmap/maintain-apply.sh | docs/contracts/roadmap-maintain-apply.cli-contract.md | cli |
 | scripts/roadmap/maintain-scan.sh | docs/contracts/roadmap-maintain-scan.contract.md | full |
 | scripts/roadmap/nag.sh | docs/contracts/roadmap-nag.contract.md | full |
-| scripts/roadmap/render-run.sh | docs/contracts/roadmap-render-run.contract.md | full |
+| scripts/roadmap/view.sh | docs/contracts/roadmap-view.contract.md | full |
 | scripts/seed-settings.sh | docs/contracts/seed-settings.cli-contract.md | cli |
 | scripts/stage-codex-plugin-marketplace.sh | docs/contracts/stage-codex-plugin-marketplace.cli-contract.md | cli |
 | scripts/sync-contracts.sh | docs/contracts/sync-contracts.contract.md | full |

@@ -1,6 +1,6 @@
 ---
 seam: session-start-banner
-version: 1.1
+version: 1.2
 producer-type: hook
 consumer-type: skill
 consumes:
@@ -33,7 +33,7 @@ Blocks rendered (in output order):
 - **`[Arboretum] Update available: …`** / **`[Arboretum] Plugin not found …`** / **`[Arboretum] Could not check latest release …`** / **`[Arboretum] Project tree is behind …`** — read from `.arboretum/update-cache.json` (refresh-update-cache seam) and `.arboretum/install-manifest.json`. Scrubbed.
 - **`[Build cycle]`** — shell-only branch/spec/plan detection (no cache).
 - **`[Spec Status]` / `[Stale]` / `[Draft]` / `[Register]` / `[Stale Version Pins]` / `[Layer Suggestion]` / `[Active Skills]`** — parsed from `docs/REGISTER.md`, `contracts.yaml`, `docs/definitions/`, `.claude/skills/`.
-- **roadmap orientation / diagnostics** — `scripts/roadmap/render-run.sh --condensed` stdout captured into `orientation_text` and appended verbatim. When `roadmap.config.yaml` exists but the renderer is missing or exits non-zero with no stdout, the hook renders a single `[roadmap]` diagnostic. Captured renderer output is **NOT scrubbed** (see the scrub gap in Invariants; producer-side gap also recorded in `docs/contracts/roadmap-render-run.contract.md`).
+- **roadmap orientation / diagnostics** — `scripts/roadmap/view.sh --format condensed --quiet` stdout captured into `orientation_text` and appended verbatim. When `roadmap.config.yaml` exists but the renderer is missing or exits non-zero with no stdout, the hook renders a single `[roadmap]` diagnostic. Captured renderer output is **NOT scrubbed** (see the scrub gap in Invariants; producer-side gap recorded in `docs/contracts/roadmap-view.contract.md`).
 
 The hook **always exits 0**.
 
@@ -69,7 +69,7 @@ Files read (each guarded; absence → that block silent):
 - `.arboretum/update-cache.json` + `.arboretum/install-manifest.json` — refresh-update-cache seam + project install manifest (24-hour TTL).
 - `.arboretum/handoff-pending.json` — SessionEnd safety-net flag (surfaced + cleared on boot).
 - `.claude/skills/*/SKILL.md` — per-skill `layer:` for the Active Skills block.
-- `scripts/roadmap/render-run.sh --condensed` — captured stdout (roadmap-render-run seam).
+- `scripts/roadmap/view.sh --format condensed --quiet` — captured stdout (roadmap-view seam).
 
 No CLI args, no stdin.
 
@@ -87,7 +87,7 @@ stdout (echoed once at end): a newline-separated multi-block banner, or empty st
   - **Workspace block** — `scrub()` (~line 211) applied to branch, upstream name, recorded handoff branch. (Source-side in `refresh-workspace-cache.sh`; clause RWC-8.)
   - **Pipeline-state block** — `scrub()` (~line 333) applied to stage, last-action fields, summary text, timestamps. (Source-side in `refresh-stage-cache.sh`.)
   - **Update block** — `_CTRL.sub` (~line 456) applied to installed/latest version in the python3 reader, and the shell fallback mirrors that control-char scrub before interpolating version strings; the install-manifest staleness line uses `tr -d` (~lines 496–497).
-- **Scrub gap — roadmap orientation passthrough (KNOWN, not fixed here).** The roadmap orientation block is captured from `render-run.sh --condensed` into `orientation_text` (~line 780) and appended to `output` (~line 783) **WITHOUT** the control-char `scrub()` the other blocks apply. Issue titles flow verbatim from `gh` → `render-run.sh` → this passthrough → `additionalContext`, scrubbed by neither the producer nor this hook. This is an author-controlled-content-into-context gap per CLAUDE.md's "scrub author-controlled content" rule. This contract records the gap honestly; closing it (scrub at render-run's title emission and/or at the hook's append) is follow-up work, out of scope for this read-only contract. The same gap is recorded on the producer side in `docs/contracts/roadmap-render-run.contract.md`.
+- **Scrub gap — roadmap orientation passthrough (KNOWN, not fixed here).** The roadmap orientation block is captured from `view.sh --format condensed` into `orientation_text` and appended to `output` **WITHOUT** the control-char `scrub()` the other blocks apply. Issue titles flow verbatim from the tracker → `view.sh` → this passthrough → `additionalContext`, scrubbed by neither the producer nor this hook. This is an author-controlled-content-into-context gap per CLAUDE.md's "scrub author-controlled content" rule. This contract records the gap honestly; closing it (scrub at `view.sh`'s title emission and/or at the hook's append) is follow-up work, out of scope for this read-only contract. The same gap is recorded on the producer side in `docs/contracts/roadmap-view.contract.md`.
 - **Synchronous workspace refresh.** The workspace cache is refreshed synchronously every boot (not TTL/backgrounded) so the staleness rail reflects this session's refs — a backgrounded fetch could falsely report "current ✓" from last session's refs.
 - **Read-only-to-governance.** The hook does not mutate governed documents, specs, or caches it reads (it only refreshes caches via the `refresh-*` scripts and clears per-session handoff markers).
 
@@ -95,12 +95,13 @@ stdout (echoed once at end): a newline-separated multi-block banner, or empty st
 
 - **SSB-1:** Pipeline-state block — with a stage cache + log-comments cache seeded, the banner renders `Stage:`, `Last action:`, and `Last session:` lines; with no stage cache, those lines are absent (mirrors `_smoke-test-pipeline-state-banner.sh`).
 - **SSB-2:** Scrub invariant (scrubbed block) — a next-cache issue title carrying a raw ESC (`0x1b`) control byte renders into the `[Next-up]` block with the ESC byte stripped (consumer re-scrub), printable residue preserved.
-- **SSB-3:** Scrub gap (unscrubbed passthrough) — the roadmap orientation block is appended verbatim from `render-run.sh --condensed`; this contract documents that it is NOT control-char scrubbed by the hook (covered-vs-documented: the scrub *absence* is documented, not asserted as desirable behaviour, because asserting an unscrubbed control byte survives would codify the gap as intended).
+- **SSB-3:** Scrub gap (unscrubbed passthrough) — the roadmap orientation block is appended verbatim from `view.sh --format condensed`; this contract documents that it is NOT control-char scrubbed by the hook (covered-vs-documented: the scrub *absence* is documented, not asserted as desirable behaviour, because asserting an unscrubbed control byte survives would codify the gap as intended).
 - **SSB-4:** Always-exits-0 + empty-on-no-signal — on a clean fixture with no signal-bearing caches the hook exits 0 (banner may be empty or carry only non-cache blocks); no input degradation aborts it.
 - **SSB-5:** Update-cache diagnostics — `manifest-not-found` renders a plugin-install hint; `gh-call-failed` / `no-release` render a latest-release lookup failure line including the installed version when known; the no-`python3` shell fallback strips control chars before rendering that version.
 - **SSB-6:** Roadmap diagnostics — with `roadmap.config.yaml` present, a missing renderer produces a `/upgrade` hint and a renderer that exits non-zero with no stdout produces a `/roadmap run` diagnostic.
 
 ## Versioning
 
+- **1.2** (2026-06-07) — roadmap orientation producer changed from `render-run.sh --condensed` to `view.sh --format condensed --quiet` (the shared view core; #621). The scrub-gap cross-reference moves to `roadmap-view.contract.md`.
 - **1.1** (2026-06-03) — configured startup failures produce concise diagnostics: update-cache closed-error states and configured roadmap renderer failures.
-- **1.0** (2026-05-30) — initial contract. Producer shape as of `.claude/hooks/session-start.sh` on `feat/ws5-pr7a-full-shape-sweep`. Issue #303 (WS5 PR 7a). Documents the known roadmap-passthrough scrub gap (shared with `roadmap-render-run.contract.md`).
+- **1.0** (2026-05-30) — initial contract. Producer shape as of `.claude/hooks/session-start.sh` on `feat/ws5-pr7a-full-shape-sweep`. Issue #303 (WS5 PR 7a). Documents the known roadmap-passthrough scrub gap.

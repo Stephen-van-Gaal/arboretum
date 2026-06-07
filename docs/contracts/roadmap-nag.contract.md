@@ -15,7 +15,7 @@ owns:
 
 # roadmap-nag — `roadmap/nag.sh` Nag-Line Stdout Contract
 
-The seam between `scripts/roadmap/nag.sh` (which computes time-based roadmap nags and emits them to stdout) and the scripts that capture that stdout — `scripts/roadmap/build-orientation.sh` (~line 18) and `scripts/roadmap/render-run.sh` (~line 47), both via `$(bash nag.sh 2>/dev/null || true)`. The script's stdout is a line protocol: zero or more `[nag] <message>` lines, where no output means "no nags due." This contract pins the line prefix, the empty-when-quiet semantics, the fail-silent exit-0 guarantee, and the per-nag throttle so callers can capture and concatenate the output without parsing it.
+The seam between `scripts/roadmap/nag.sh` (which computes time-based roadmap nags and emits them to stdout) and the script that captures that stdout — `scripts/roadmap/view.sh`'s orientation render, via `$(bash nag.sh 2>/dev/null || true)`. The script's stdout is a line protocol: zero or more `[nag] <message>` lines, where no output means "no nags due." This contract pins the line prefix, the empty-when-quiet semantics, the fail-silent exit-0 guarantee, and the per-nag throttle so callers can capture and concatenate the output without parsing it.
 
 ## Producer
 
@@ -33,10 +33,9 @@ Each fired nag prints one `[nag] <message>` line and records its name; after all
 
 ## Consumer
 
-Consumer-type: `script`. Two downstream consumers, both capturing stdout via command substitution:
+Consumer-type: `script`. One downstream consumer capturing stdout via command substitution:
 
-- **`scripts/roadmap/build-orientation.sh`** (~line 18) `NAG_OUTPUT="$(bash "$SCRIPT_DIR/nag.sh" 2>/dev/null || true)"`, printed after the orientation block (and on the no-tracker early-exit path so review nags surface offline).
-- **`scripts/roadmap/render-run.sh`** (~line 47) `nag_output="$(bash "$SCRIPT_DIR/nag.sh" 2>/dev/null || true)"`, appended to both the full view (trailing) and the no-tracker early-exit path.
+- **`scripts/roadmap/view.sh`** (orientation render) `nag_output="$(bash "$SCRIPT_DIR/nag.sh" 2>/dev/null || true)"`, run before the tracker guard and appended to the full view (trailing) and the no-tracker early-exit path so review nags surface offline.
 
 **Consumer obligations:**
 

@@ -1,6 +1,6 @@
 ---
 seam: epic-walk
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes:
@@ -23,7 +23,7 @@ The resolver operates in two modes: `--graph-file <path>` (test seam — reads a
 
 **Active = stage rank ≥ `/design`.** Stage rank order: `/start`(1) < `/design`(2) < `/build`(3) < `/finish`(4) < `/pr`(5) < `/land`(6). Opening a PR advances the stage to `/pr` — "open linked PR" needs no separate query, it is subsumed by the stage signal.
 
-**ADO backend** returns an empty graph in v1 (`{"next_up":null,"nodes":{}}`), degrading silently — same output contract as an unlinked GitHub epic. GitHub native sub-issue linkage only; ADO native link support is out of scope for v1.
+**ADO backend** resolves native hierarchy from the work-item `relations` field (`System.LinkTypes.Hierarchy-Forward` = children, `System.LinkTypes.Hierarchy-Reverse` = parent), via `roadmap_ado_epic_graph` in `scripts/roadmap/lib.sh` (added v1.1). It produces the same `{next_up, nodes{...}}` graph shape as the GitHub branch, so the resolver and downstream consumers behave identically across backends. `Related` and other non-hierarchy link types are ignored. ADO state is normalized to `open`/`closed` via the configured `azure_devops_closed_states`. The empty graph (`{"next_up":null,"nodes":{}}`) is now emitted only on fetch failure or an unlinked epic — not as a blanket backend stub.
 
 ## Producer
 
@@ -125,7 +125,7 @@ Exit codes:
 - **Inclusion correctness.** An epic appears in `epics_in_flight` if and only if it has ≥1 active child or is the nearest epic ancestor of the current `next_up`. Idle linked epics (no active child, not parent-of-next-up) are excluded.
 - **Blocked-ordering contract.** In the no-active case, `blocked[]` contains only blocked children that appear before the first ready child in children-list (native) order. Children that appear after the selected `next` are not listed in `blocked`.
 - **Recursion depth cap.** The auto-advance upward walk is bounded by `DEPTH_CAP = 5` iterations and a visited-set cycle guard. Cycles in the parent graph never produce an infinite loop.
-- **ADO degrade.** When the configured backend is `azure-devops`, `roadmap_epic_graph` returns `{"next_up":null,"nodes":{}}` (v1 stub). The resolver output is `{"epics_in_flight":[],"auto_advance":null}`, exit 0. Same contract as unlinked.
+- **ADO native hierarchy (v1.1).** When the configured backend is `azure-devops`, `roadmap_epic_graph` resolves the epic graph from the work-item `relations` field via `roadmap_ado_epic_graph`, producing the same `{next_up, nodes}` shape as GitHub. Only `Hierarchy-Forward` (children) and `Hierarchy-Reverse` (parent) links are read; other link types (`Related`, etc.) are ignored. State is normalized via `azure_devops_closed_states`. The empty graph is emitted only on fetch failure or an unlinked epic (exit 0, fail-soft) — not as a backend-wide stub.
 
 ## Test surface
 
@@ -139,6 +139,11 @@ Asserted by `scripts/_smoke-test-contract-epic-walk.sh` against fixtures in `tes
 - **EW-6: Recursion — auto-advance climbs past complete epics.** When the current `next_up` is closed and its nearest epic ancestor is also complete (all children closed), the auto-advance walk climbs to the parent epic and emits the first ready child there. Depth cap and cycle guard prevent infinite loops. Fixture: `recursion.json` (`next_up = 111` closed, parent epic #110 complete; grandparent epic #100 has ready child #101). Asserts `auto_advance.from == 111`, `auto_advance.to == 101`, `auto_advance.epic == 100`.
 - **EW-7: Unlinked / fetch-failure → empty result, exit 0.** Given a `next_up` with no epic parent (or an empty graph from a fetch failure), the output is `{"epics_in_flight":[],"auto_advance":null}` and the script exits 0. Fixture: `unlinked.json` (`next_up = 800`, no parent). Asserts `epics_in_flight == []` and `auto_advance is None`.
 
+ADO native-hierarchy production is asserted separately by `scripts/_smoke-test-contract-roadmap-ado-epic-graph.sh` (PATH-shadowed `az` stub, no network):
+
+- **EWA-1: ADO relations → graph.** Given an ADO epic whose `relations` carry two `Hierarchy-Forward` children (one Active, one Closed) and a `Related` link, `roadmap_epic_graph` (backend `azure-devops`) emits `{next_up, nodes}` with the epic flagged `is_epic`, `children == [<both hierarchy ids>]`, the `Related` target absent, child states normalized (`open`/`closed`), and `parent` back-pointers set.
+
 ## Versioning
 
+- **1.1** (2026-06-07) — ADO native hierarchy via `roadmap_ado_epic_graph` (work-item `relations`). ADO no longer a blanket empty stub; same `{next_up, nodes}` shape as GitHub. Adds EWA-1 (ADO graph production). Issue #621.
 - **1.0** (2026-06-05) — initial contract. Producer + consumer shapes as of `scripts/roadmap/epic-walk.sh` post-Tasks-1-3 and `scripts/refresh-next-cache.sh` pre-Task-5 on `feat/562-epic-aware-orientation`. Covers EW-1..EW-7. ADO degrade documented (v1 stub). Issue #562.
