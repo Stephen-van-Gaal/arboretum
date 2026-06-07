@@ -96,6 +96,9 @@ if ! timeout 90 claude plugin install "arboretum@$MKT_NAME" --scope user >/dev/n
 fi
 
 # One concise line for Claude's context (SessionStart stdout → additionalContext).
-echo "[web-setup] arboretum plugin staged from the local working tree and installed — in-repo dev skills available this session."
+# Sets turn-2 expectations: a SessionStart hook installs the plugin *after* the
+# CLI has already enumerated skills for turn 1, so the skills register on the
+# next message, not the first. See docs/superpowers/specs/2026-06-07-web-session-boot-skill-load-design.md.
+echo "[web-setup] Arboretum skills installed for this web session. In a fresh web session they register after your first message — if an arboretum command (/start, /design, …) returns \"Unknown command\" on your first try, just resend it."
 
 exit 0
