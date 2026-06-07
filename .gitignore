@@ -53,6 +53,10 @@ venv/
 # only, rebuilt every boot; never source.
 .arboretum/web-plugin/
 
+# Per-contributor token-accounting ledgers (#453). Append-only JSONL written by
+# scripts/lib/token-ledger.sh, rotated at /cleanup. Generated, not source.
+.arboretum/token-ledger/
+
 # Runtime lock files and worktree storage. Lock files are session-scoped;
 # worktrees are git-managed alternate working trees that should never be
 # tracked as ordinary files. Both the legacy `.claude/worktrees/` location

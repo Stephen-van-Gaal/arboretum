@@ -10,6 +10,7 @@ fail=0
 CI_MODE="${ARBORETUM_CI_MODE:-balanced}"
 CI_JOBS="${ARBORETUM_CI_JOBS:-8}"
 smoke_selection_failed=0
+TOKEN_RUNTIME_BYTES=0   # token accounting: replayed smoke-test output bytes
 
 case "$CI_MODE" in
   balanced|full|auto) ;;
@@ -335,23 +336,34 @@ smoke_test_selected_for_mode() {
 
 run_smoke_test_serial() {
   local f="$1"
+  local slice rc _b
+  slice="$(mktemp)"
+  bash "$f" >"$slice" 2>&1
+  rc=$?
+  # token accounting: byte-count the test body (parity with the parallel path,
+  # which counts $idx.out, not the header). Most smoke tests default to the
+  # serial path, so without this the runtime ledger systematically undercounts.
+  _b="$(wc -c < "$slice" | tr -d ' ')"
 
   if [ "$QUIET" != "1" ]; then
+    # verbose: replay output to stdout; the caller absorbs all of it.
     echo "--- $f ---"
-    bash "$f" || fail=1
+    cat "$slice"
+    TOKEN_RUNTIME_BYTES=$(( TOKEN_RUNTIME_BYTES + ${_b:-0} ))
+    [ "$rc" = "0" ] || fail=1
+    rm -f "$slice"
     return
   fi
 
-  local slice rc
-  slice="$(mktemp)"
-  { echo "--- $f ---"; bash "$f"; } >"$slice" 2>&1
-  rc=$?
-  cat "$slice" >> "$RAW_LOG"
+  { echo "--- $f ---"; cat "$slice"; } >> "$RAW_LOG"
   if [ "$rc" = "0" ]; then
     smoke_pass=$((smoke_pass + 1))
   else
     smoke_fail=$((smoke_fail + 1))
+    echo "--- $f ---"
     cat "$slice"
+    # quiet mode: only this replayed failing output reaches stdout, so count it.
+    TOKEN_RUNTIME_BYTES=$(( TOKEN_RUNTIME_BYTES + ${_b:-0} ))
     echo "FAIL: $f exited $rc" >&2
     fail=1
   fi
@@ -404,14 +416,24 @@ INNER
       else
         smoke_fail=$((smoke_fail + 1))
         echo "--- $f ---"
-        [ -f "$tmp/logs/$idx.out" ] && cat "$tmp/logs/$idx.out"
+        if [ -f "$tmp/logs/$idx.out" ]; then
+          cat "$tmp/logs/$idx.out"
+          # token accounting: under quiet mode only failing output reaches stdout
+          _b="$(wc -c < "$tmp/logs/$idx.out" | tr -d ' ')"
+          TOKEN_RUNTIME_BYTES=$(( TOKEN_RUNTIME_BYTES + ${_b:-0} ))
+        fi
         echo "FAIL: $f exited $rc" >&2
         fail=1
       fi
       continue
     fi
     echo "--- $f ---"
-    [ -f "$tmp/logs/$idx.out" ] && cat "$tmp/logs/$idx.out"
+    if [ -f "$tmp/logs/$idx.out" ]; then
+      cat "$tmp/logs/$idx.out"
+      # token accounting: sum the replayed output bytes a caller would absorb
+      _b="$(wc -c < "$tmp/logs/$idx.out" | tr -d ' ')"
+      TOKEN_RUNTIME_BYTES=$(( TOKEN_RUNTIME_BYTES + ${_b:-0} ))
+    fi
     if [ "$rc" != "0" ]; then
       echo "FAIL: $f exited $rc" >&2
       fail=1
@@ -530,6 +552,15 @@ if [ "$QUIET" = "1" ]; then
   else
     echo "Checks FAILED · full log: $RAW_LOG"
   fi
+fi
+
+# --- token accounting (advisory; never affects output/exit) ---
+# Measures the smoke-test output bytes a caller absorbs on stdout. Under quiet
+# mode (#610, now default) only failing-test output is replayed to stdout, so
+# this count reflects the reduced surface; verbose/CI runs count the full stream.
+if [ -f scripts/lib/token-ledger.sh ]; then
+  source scripts/lib/token-ledger.sh
+  ARBORETUM_BUCKET=on-demand ledger_append runtime "ci-checks" "${TOKEN_RUNTIME_BYTES:-0}" 2>/dev/null || true
 fi
 
 exit $fail

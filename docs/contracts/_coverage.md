@@ -19,6 +19,8 @@
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
+| scripts/lib/token-ledger.sh | docs/contracts/token-ledger.contract.md | full |
+| scripts/lib/token-rates.sh | docs/contracts/token-rates.contract.md | full |
 | scripts/lib/upgrade-classify.sh | docs/contracts/upgrade-classify.contract.md | full |
 | scripts/lib/yaml-lite.sh | docs/contracts/yaml-lite.contract.md | full |
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
@@ -35,6 +37,7 @@
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
 | scripts/read-review-config.sh | docs/contracts/read-review-config.cli-contract.md | cli |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
+| scripts/read-session-billed.sh | docs/contracts/read-session-billed.cli-contract.md | cli |
 | scripts/read-test-config.sh | docs/contracts/test-infrastructure.contract.md | full |
 | scripts/read-trust-config.sh | docs/contracts/trust-config.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
@@ -55,6 +58,9 @@
 | scripts/seed-settings.sh | docs/contracts/seed-settings.cli-contract.md | cli |
 | scripts/stage-codex-plugin-marketplace.sh | docs/contracts/stage-codex-plugin-marketplace.cli-contract.md | cli |
 | scripts/sync-contracts.sh | docs/contracts/sync-contracts.contract.md | full |
+| scripts/token-cleanup.sh | docs/contracts/token-cleanup.cli-contract.md | cli |
+| scripts/token-report.sh | docs/contracts/token-report.cli-contract.md | cli |
+| scripts/token-scenario.sh | docs/contracts/token-scenario.cli-contract.md | cli |
 | scripts/upgrade-sync.sh | docs/contracts/upgrade-sync.cli-contract.md | cli |
 | scripts/validate-build-exit.sh | docs/contracts/validate-build-exit.contract.md | full |
 | scripts/validate-cli-contract.sh | docs/contracts/validate-cli-contract.contract.md | full |

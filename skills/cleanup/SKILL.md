@@ -236,6 +236,20 @@ the active session worktree was removed. This is the final filesystem action.
 Tell the user to end this session or open a fresh session from a valid checkout;
 do not run further commands from the removed path.
 
+### Step 3.5: Print token-accounting summary + rotate ledger
+
+Surface where this cycle's tokens went, then clear the live ledger. Advisory —
+never blocks cleanup.
+
+```bash
+ARBORETUM_TRANSCRIPT="${ARBORETUM_TRANSCRIPT:-}" bash scripts/token-cleanup.sh || true
+```
+
+This prints the per-contributor `diagnose` summary (and, when a transcript path
+is available, the `billed` cache/cost split and captured cache-bust events),
+then rotates the run ledger into `.arboretum/token-ledger/archive/` (pruned to
+the last 20). Skip silently if no ledger exists for the run.
+
 ### Step 4: Suggest reflection
 
 Resolve the reflection handoff through the workflow skill slot resolver before

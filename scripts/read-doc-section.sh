@@ -5,7 +5,17 @@ set -euo pipefail
 [ "$#" -eq 2 ] || { echo "Usage: $0 <markdown-file> <section-heading>" >&2; exit 2; }
 [ -f "$1" ] || { echo "read-doc-section: file not found: $1" >&2; exit 1; }
 
-python3 - "$1" "$2" <<'PY'
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# --- token accounting (advisory; never affects output/exit) ---
+if [ -f "${ROOT}/scripts/lib/token-ledger.sh" ]; then
+  # shellcheck source=/dev/null
+  source "${ROOT}/scripts/lib/token-ledger.sh"
+  _tok_capture() { ARBORETUM_BUCKET=on-demand ledger_append reads "${1}@${2}" "${3}" 2>/dev/null || true; }
+fi
+
+# Capture the section output, print it byte-for-byte unchanged, then ledger it.
+out="$(python3 - "$1" "$2" <<'PY'
 import re
 import sys
 
@@ -94,3 +104,17 @@ if not section:
 sys.stdout.write(section)
 sys.stdout.write("\n")
 PY
+)"
+
+# Print the captured section byte-for-byte (Python emitted section + one trailing
+# newline; the command substitution stripped that newline, so re-add exactly one).
+printf '%s\n' "$out"
+# Advisory ledger emit; must never change this script's exit code. The trailing
+# `&& cmd` form would return 1 (and trip `set -e`) when the ledger lib is absent
+# and `_tok_capture` is undefined, so gate it as a non-failing statement.
+if [ "$(type -t _tok_capture)" = function ]; then
+  # Count payload bytes (not characters): ${#out} undercounts multi-byte UTF-8,
+  # skewing the ledger's `bytes`/`est_tokens`. wc -c is byte-exact + locale-safe.
+  _b="$(printf '%s' "$out" | wc -c | tr -d ' ')"
+  _tok_capture "$1" "$2" "${_b:-0}"
+fi
