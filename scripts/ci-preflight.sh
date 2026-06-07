@@ -8,6 +8,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APPLY_SAFE_REPAIRS=0
 CONTINUE_AFTER_REPAIR=0
 SCOPE="standard"
+BRANCH_CONTEXT="auto"
+DEFAULT_BRANCH="${CI_PREFLIGHT_DEFAULT_BRANCH:-main}"
+EFFECTIVE_CONTEXT="integration"
 REPAIR_COMMIT_MODE="none"
 REPAIR_BRANCH="${CI_PREFLIGHT_REPAIR_BRANCH:-}"
 PUSH_SAFE_REPAIRS=0
@@ -22,7 +25,7 @@ repair_branch_prepared=0
 declare -a blockers=()
 
 usage() {
-  echo "usage: ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [--continue-after-repair] [--repair-commit-mode none|same-branch|repair-pr] [--repair-branch <branch>] [--push-safe-repairs] [--gh-cmd <cmd>] [--root <path>]" >&2
+  echo "usage: ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [--branch-context auto|in-flight|integration] [--continue-after-repair] [--repair-commit-mode none|same-branch|repair-pr] [--repair-branch <branch>] [--push-safe-repairs] [--gh-cmd <cmd>] [--root <path>]" >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -38,6 +41,11 @@ while [ "$#" -gt 0 ]; do
     --scope)
       [ $# -ge 2 ] || { usage; exit 2; }
       SCOPE="$2"
+      shift 2
+      ;;
+    --branch-context)
+      [ $# -ge 2 ] || { usage; exit 2; }
+      BRANCH_CONTEXT="$2"
       shift 2
       ;;
     --repair-commit-mode)
@@ -84,6 +92,14 @@ case "$SCOPE" in
     ;;
 esac
 
+case "$BRANCH_CONTEXT" in
+  auto|in-flight|integration) ;;
+  *)
+    echo "ci-preflight: invalid branch context '$BRANCH_CONTEXT' (expected auto, in-flight, or integration)" >&2
+    exit 2
+    ;;
+esac
+
 case "$REPAIR_COMMIT_MODE" in
   none|same-branch|repair-pr) ;;
   *)
@@ -112,6 +128,40 @@ if [ "$REPAIR_COMMIT_MODE" = "same-branch" ] && [ -z "$REPAIR_BRANCH" ]; then
 fi
 
 before_status="$(git -C "$ROOT" status --short 2>/dev/null || true)"
+
+# Resolve whether this run validates an in-flight feature branch or the
+# integration/default branch. Check-7 built-state drift is expected on a
+# feature branch (reconciled at /consolidate) and must not block there; it
+# stays blocking at integration and in release scope.
+#
+# Release scope is always integration. An explicit --branch-context wins over
+# auto-detection. Auto compares HEAD's commit to origin/<default>'s tip by SHA
+# (robust to detached-HEAD CI checkouts); if either ref is unresolvable
+# (e.g. no origin locally) it falls back to in-flight so local feature work is
+# never blocked — hosted CI always fetches the ref, so the real gate is intact.
+resolve_branch_context() {
+  if [ "$SCOPE" = "release" ]; then
+    echo "integration"
+    return
+  fi
+  case "$BRANCH_CONTEXT" in
+    in-flight|integration)
+      echo "$BRANCH_CONTEXT"
+      return
+      ;;
+  esac
+
+  local head_sha def_sha
+  head_sha="$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null)" || { echo "in-flight"; return; }
+  def_sha="$(git -C "$ROOT" rev-parse --verify "refs/remotes/origin/$DEFAULT_BRANCH" 2>/dev/null)" || { echo "in-flight"; return; }
+  if [ "$head_sha" = "$def_sha" ]; then
+    echo "integration"
+  else
+    echo "in-flight"
+  fi
+}
+
+EFFECTIVE_CONTEXT="$(resolve_branch_context)"
 
 add_blocker() {
   blockers+=("$1")
@@ -165,6 +215,20 @@ run_health_preflight() {
   if ! printf '%s\n' "$out" | has_unrecorded_health_drift; then
     echo "PASS: no unrecorded health-check drift"
     return
+  fi
+
+  if [ "$EFFECTIVE_CONTEXT" = "in-flight" ]; then
+    # The branch-context gate downgrades ONLY Check 7 built-state drift. If the
+    # health-check output also carries non-Check-7 failures (✗ lines that are
+    # not the Check 7 drift marker), those are out of this gate's scope and must
+    # still block — do not let the Check-7 warning path hide them.
+    other_failures="$(printf '%s\n' "$out" | grep -F '✗' | grep -Fv 'run with --reconcile to update' || true)"
+    if [ -z "$other_failures" ]; then
+      echo "WARNING: Check-7 built-state drift on in-flight branch — expected before /consolidate; reconcile before merge (not blocking here):"
+      printf '%s\n' "$out" | grep -F 'run with --reconcile to update' | sed 's/^/  /'
+      return
+    fi
+    echo "Non-Check-7 health failure present alongside Check-7 drift — blocking despite in-flight branch context."
   fi
 
   echo "BLOCKER: unrecorded health-check drift"
@@ -409,6 +473,7 @@ commit_repair_changes() {
 
 echo "=== CI preflight ==="
 echo "scope=$SCOPE"
+echo "branch-context=$EFFECTIVE_CONTEXT"
 
 run_health_preflight
 run_coverage_preflight

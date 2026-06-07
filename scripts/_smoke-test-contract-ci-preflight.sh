@@ -143,6 +143,13 @@ PY
     echo "  ✗ example.spec.md: drift detected (scripts/example.sh modified after spec's last commit abc123) — run with --reconcile to update"
     exit 1
     ;;
+  drift-plus)
+    # Check-7 drift co-occurring with a non-Check-7 health failure (e.g. Check 2
+    # register-vs-disk). The branch-context gate must NOT hide the other failure.
+    echo "  ✗ example.spec.md: drift detected (scripts/example.sh modified after spec's last commit abc123) — run with --reconcile to update"
+    echo "  ✗ Check 2: register lists scripts/missing.sh but it does not exist on disk"
+    exit 1
+    ;;
 esac
 echo "unexpected health state: $state" >&2
 exit 9
@@ -199,6 +206,18 @@ UPDATE
   git -C "$repo" remote add origin "$origin"
   git -C "$repo" push -q -u origin main
   printf '%s\n' "$repo"
+}
+
+# Move a fixture's HEAD onto a feature branch ahead of origin/main, so the
+# auto branch-context detection resolves to in-flight (HEAD != origin tip).
+# The health-check stub is state-driven, so commit content is irrelevant to
+# drift detection; only the branch position matters for context resolution.
+make_inflight() {
+  local repo="$1"
+  git -C "$repo" "${GIT_ID[@]}" checkout -q -b feature/inflight
+  printf '%s\n' "x" >"$repo/scripts/example.sh"
+  git -C "$repo" "${GIT_ID[@]}" add scripts/example.sh
+  git -C "$repo" "${GIT_ID[@]}" commit -q -m "feature change"
 }
 
 [ -f "$CONTRACT" ] || { echo "FAIL: contract missing: $CONTRACT" >&2; exit 1; }
@@ -302,5 +321,80 @@ release_out="$TMP/release.out"
 rc="$(run_preflight "$release_out" --root "$release" --scope release)"
 check "release-scope blocker exits 1" "1" "$rc"
 contains "release blocker reported" "Release blocker" "$release_out"
+
+# ── #612: branch-context-aware Check-7 drift ────────────────────────────
+# Check-7 built-state drift is expected on an in-flight feature branch
+# (reconciled at /consolidate) and must not block; it stays blocking on the
+# integration/default branch and in release scope.
+
+# in-flight branch + drift → non-blocking warning, exit 0, spec left active
+inflight="$(make_fixture inflight drift clean)"
+make_inflight "$inflight"
+inflight_out="$TMP/inflight.out"
+rc="$(run_preflight "$inflight_out" --root "$inflight")"
+check "in-flight drift exits 0 (non-blocking)" "0" "$rc"
+contains "in-flight drift prints warning" "WARNING" "$inflight_out"
+contains "in-flight drift warning mentions reconcile" "reconcile" "$inflight_out"
+contains "in-flight drift warning names drifted spec" "example.spec.md" "$inflight_out"
+contains "in-flight drift reports branch-context" "branch-context=in-flight" "$inflight_out"
+
+# in-flight + drift + --apply-safe-repairs → still non-blocking, no reconcile
+inflight_repair="$(make_fixture inflight-repair drift clean)"
+make_inflight "$inflight_repair"
+inflight_repair_out="$TMP/inflight-repair.out"
+rc="$(run_preflight "$inflight_repair_out" --root "$inflight_repair" --apply-safe-repairs)"
+check "in-flight drift with apply-safe-repairs exits 0" "0" "$rc"
+contains "in-flight drift leaves spec active" "status: active" "$inflight_repair/docs/specs/example.spec.md"
+
+# explicit --branch-context integration on a feature branch → blocks
+ctx_integration="$(make_fixture ctx-integration drift clean)"
+make_inflight "$ctx_integration"
+ctx_integration_out="$TMP/ctx-integration.out"
+rc="$(run_preflight "$ctx_integration_out" --root "$ctx_integration" --branch-context integration)"
+check "explicit integration context blocks on feature branch" "1" "$rc"
+contains "explicit integration names blocker" "unrecorded health-check drift" "$ctx_integration_out"
+
+# explicit --branch-context in-flight on main → non-blocking
+ctx_inflight="$(make_fixture ctx-inflight drift clean)"
+ctx_inflight_out="$TMP/ctx-inflight.out"
+rc="$(run_preflight "$ctx_inflight_out" --root "$ctx_inflight" --branch-context in-flight)"
+check "explicit in-flight context non-blocking on main" "0" "$rc"
+contains "explicit in-flight prints warning" "WARNING" "$ctx_inflight_out"
+
+# --scope release forces integration even on a feature branch → blocks drift
+release_drift="$(make_fixture release-drift drift clean)"
+make_inflight "$release_drift"
+release_drift_out="$TMP/release-drift.out"
+rc="$(run_preflight "$release_drift_out" --root "$release_drift" --scope release)"
+check "release scope forces integration (blocks drift on feature branch)" "1" "$rc"
+
+# auto with unresolvable origin/<default> → falls back to in-flight
+no_origin="$(make_fixture no-origin drift clean)"
+git -C "$no_origin" remote remove origin
+no_origin_out="$TMP/no-origin.out"
+rc="$(run_preflight "$no_origin_out" --root "$no_origin")"
+check "auto with unresolvable origin falls back to in-flight" "0" "$rc"
+contains "auto fallback prints warning" "WARNING" "$no_origin_out"
+
+# in-flight + Check-7 drift co-occurring with a non-Check-7 health failure → blocks
+# (the branch-context gate downgrades ONLY Check-7 drift; other findings still block)
+inflight_plus="$(make_fixture inflight-plus drift-plus clean)"
+make_inflight "$inflight_plus"
+inflight_plus_out="$TMP/inflight-plus.out"
+rc="$(run_preflight "$inflight_plus_out" --root "$inflight_plus")"
+check "in-flight non-Check-7 failure still blocks" "1" "$rc"
+contains "in-flight non-Check-7 failure names blocker" "unrecorded health-check drift" "$inflight_plus_out"
+
+# invalid --branch-context value → exit 2 with named diagnostic
+bad_ctx="$(make_fixture bad-ctx clean clean)"
+bad_ctx_out="$TMP/bad-ctx.out"
+rc="$(run_preflight "$bad_ctx_out" --root "$bad_ctx" --branch-context bogus)"
+check "invalid branch-context exits 2" "2" "$rc"
+contains "invalid branch-context names the error" "invalid branch context" "$bad_ctx_out"
+
+# CONTRACT: the new arg/env are documented
+contains "contract names branch-context arg" "branch-context" "$CONTRACT"
+contains "contract names default-branch env" "CI_PREFLIGHT_DEFAULT_BRANCH" "$CONTRACT"
+contains "contract names in-flight drift behaviour" "in-flight" "$CONTRACT"
 
 exit "$fail"

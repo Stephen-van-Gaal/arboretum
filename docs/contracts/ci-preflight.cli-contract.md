@@ -1,6 +1,6 @@
 ---
 script: scripts/ci-preflight.sh
-version: 1.0
+version: 1.1
 invokers:
   - type: script
     name: scripts/ci-checks.sh
@@ -11,6 +11,7 @@ invokers:
   - type: developer
 related-designs:
   - docs/superpowers/specs/2026-06-06-standard-ci-preflight-design.md
+  - docs/superpowers/specs/2026-06-06-preflight-check7-branch-context-design.md
 ---
 <!-- owner: pipeline-contracts-template -->
 
@@ -27,7 +28,7 @@ run.
 Usage:
 
 ```bash
-bash scripts/ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [--continue-after-repair] [--repair-commit-mode none|same-branch|repair-pr]
+bash scripts/ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [--branch-context auto|in-flight|integration] [--continue-after-repair] [--repair-commit-mode none|same-branch|repair-pr]
 ```
 
 ## Protocol
@@ -38,6 +39,9 @@ bash scripts/ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [
   preflight is read-only.
 - `--scope standard|release` selects standard blockers only, or standard plus
   release-lane blockers. Default: `standard`.
+- `--branch-context auto|in-flight|integration` selects how Check 7 built-state
+  drift is gated (see *Branch context* below). Default: `auto`. `--scope release`
+  always forces `integration` regardless of this flag.
 - `--continue-after-repair` allows a local/debug caller to exit 0 after repairs
   resolve blockers. Hosted workflows do not set this flag.
 - `--repair-commit-mode none|same-branch|repair-pr` controls automated repair
@@ -71,6 +75,39 @@ bash scripts/ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [
 Preflight must not run `/consolidate`, rewrite human-authored spec prose,
 resolve merge conflicts, edit release intent, or repair arbitrary smoke-test
 failures.
+
+### Branch context
+
+Check 7 built-state drift ("an `active` spec's owned file was modified after the
+spec's last commit") is **expected** on an in-flight feature branch — it is
+reconciled at `/consolidate` before merge — but represents real un-reconciled
+state on the integration/default branch. Preflight gates it by context:
+
+- **integration** — Check 7 drift blocks (or safe-repairs under the trusted
+  commit modes), exactly as the *Safe repairs* section describes.
+- **in-flight** — Check 7 drift is **non-blocking**: preflight prints a visible
+  `WARNING:` naming the drifted spec(s), does not reconcile or flip status, and
+  continues. Drift is never silently suppressed — the warning always prints.
+
+`--branch-context auto` (default) resolves context by comparing HEAD's commit to
+the tip of `refs/remotes/origin/<default-branch>` by SHA (robust to detached-HEAD
+CI checkouts): equal → `integration`, otherwise → `in-flight`. If either ref is
+unresolvable (e.g. no `origin` configured locally), it falls back to `in-flight`
+so local feature work is never blocked; hosted CI fetches the ref, so the
+integration gate stays intact there. `CI_PREFLIGHT_DEFAULT_BRANCH` (default
+`main`) names the integration branch. `--branch-context in-flight|integration`
+overrides detection; `--scope release` always forces `integration`.
+
+This context gate applies **only** to Check 7 drift. Coverage-manifest drift and
+release-scope blockers are unaffected. If the health-check output carries a
+non-Check-7 failure alongside the Check 7 drift (any `✗` line that is not the
+Check 7 drift marker), preflight **still blocks** even on an in-flight branch —
+the in-flight downgrade never hides a non-Check-7 health failure.
+
+### Environment
+
+- `CI_PREFLIGHT_DEFAULT_BRANCH` — names the integration branch for `auto`
+  branch-context detection. Default: `main`.
 
 ### Release scope
 
@@ -140,7 +177,7 @@ flowchart TD
 ## Test surface
 
 - **CLI-1: Contract shape.** The contract names safe repairs, release scope,
-  automated commit modes, and the manual PR/nightly diagrams.
+  automated commit modes, branch context, and the manual PR/nightly diagrams.
 - **CLI-2: Clean standard preflight.** A fixture with no unrecorded drift and
   fresh coverage exits 0 and prints `PREFLIGHT OK`.
 - **CLI-3: Recorded stale drift does not block.** A fixture whose health check
@@ -161,8 +198,28 @@ flowchart TD
   `scripts/generate-coverage.sh` only in repair mode.
 - **CLI-10: Release-scope blockers stop early.** Release-scope smoke failures
   exit 1 and are not repaired automatically.
+- **CLI-11: In-flight drift is non-blocking.** On a feature branch (HEAD differs
+  from `origin/<default>`), unrecorded Check 7 drift exits 0, prints a `WARNING:`
+  naming the drifted spec, reports `branch-context=in-flight`, and does not flip
+  the spec — even with `--apply-safe-repairs`.
+- **CLI-12: Integration drift still blocks.** With `--branch-context integration`
+  (or on the default branch), unrecorded Check 7 drift exits 1 as in CLI-4/CLI-5.
+- **CLI-13: Explicit context overrides detection.** `--branch-context in-flight`
+  is non-blocking even on the default branch; `--branch-context integration`
+  blocks even on a feature branch.
+- **CLI-14: Release scope forces integration.** `--scope release` blocks Check 7
+  drift even on a feature branch.
+- **CLI-15: Auto fallback is in-flight.** When `origin/<default>` is unresolvable,
+  `auto` resolves to in-flight (non-blocking). An invalid `--branch-context`
+  value exits 2 with a named diagnostic.
+- **CLI-16: In-flight downgrade is Check-7-only.** When the health-check output
+  carries a non-Check-7 failure alongside Check 7 drift, preflight blocks (exit 1)
+  even on an in-flight branch — the warning path never hides other health failures.
 
 ## Versioning
 
+- **1.1** - add `--branch-context` (auto|in-flight|integration) and
+  `CI_PREFLIGHT_DEFAULT_BRANCH`; Check 7 built-state drift is non-blocking on
+  in-flight feature branches, blocking at integration/release (#612, 2026-06-06).
 - **1.0** - initial standard CI preflight contract with safe repair and scoped
   automated repair commits (2026-06-06).

@@ -253,6 +253,31 @@ Stop before GitHub mutation if any check fails.
 After **2** fix rounds, stop fixing — surface whatever remains as
 judgment-calls.
 
+**Owned-spec drift (defense in depth, #612).** A fix commit that touches a
+governed-spec-owned source file leaves that file newer than its spec → expected
+Check-7 built-state drift. The preflight branch-context gate already keeps this
+**non-blocking on the in-flight branch** (warns, does not fail — see
+`git-workflow-tooling.spec.md` D42), so the fix round itself stays green. As a
+second layer, when a fix round touched governed-spec-owned files, re-run
+`/consolidate` so the owning specs are reconciled and kept **`active`**, leaving
+the post-merge integration preflight green. Never reconcile this drift with a
+bare `scripts/health-check.sh --reconcile` here — it flips specs to `stale`,
+which is not a shippable state mid-`/land`; `/consolidate` is the only sanctioned
+reconciler.
+
+**`/consolidate` output is part of the fix round, not a trailing step.**
+`/consolidate` writes spec/register changes, so its output must be **committed
+and pushed within the fix round and then revalidated** before the PR can be
+declared merge-ready — never run it *after* the readiness/closeout gate. If
+`/consolidate` produces any changes: commit and push them on the PR branch,
+re-run `scripts/pr-readiness.sh remote "$PR"`, and let hosted CI validate the
+new head (treat it as another fix-round push, subject to the 2-round cap). Only
+declare merge-ready once the consolidate commit is pushed, CI is green on that
+head, and remote readiness recomputes to `ready`. A `/consolidate` run that
+leaves uncommitted changes, or whose pushed changes have not been re-validated,
+blocks the merge handoff — the head/readiness safety check below must see the
+consolidate commit as the PR head.
+
 ### 5. Review closeout
 
 Do not resolve addressed threads until the pushed fix has been followed by a
