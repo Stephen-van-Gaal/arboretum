@@ -46,6 +46,12 @@ venv/
 # Per-PR /land run-state (comments ledger, fix ledger) — regenerable, gitignored
 .arboretum/land/
 
+# Staged local plugin copy built by .claude/hooks/web-setup.sh on web/dogfood
+# session start — a real-file snapshot of skills/ + hooks/ that is installed as
+# the arboretum plugin so web sessions load the in-repo dev skills. Runtime
+# only, rebuilt every boot; never source.
+.arboretum/web-plugin/
+
 # Runtime lock files and worktree storage. Lock files are session-scoped;
 # worktrees are git-managed alternate working trees that should never be
 # tracked as ordinary files. Both the legacy `.claude/worktrees/` location
