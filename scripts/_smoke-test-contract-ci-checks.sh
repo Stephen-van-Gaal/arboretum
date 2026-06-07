@@ -294,6 +294,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# CLI-14: Quiet mode (#601)
+# Default-quiet-except-CI output mode: gated on $CI / ARBORETUM_CI_VERBOSE,
+# writes a stable raw log, and is documented in the contract at version 1.12.
+# (CLI-13 is the preflight gate added by #600.)
+# ---------------------------------------------------------------------------
+if grep -q 'ARBORETUM_CI_VERBOSE' "$TARGET" \
+  && grep -q '\${CI:-}' "$TARGET"; then
+  echo "PASS: CLI-14a — quiet mode is gated on \$CI and ARBORETUM_CI_VERBOSE"
+else
+  echo "FAIL: CLI-14a — quiet-mode trigger (\$CI / ARBORETUM_CI_VERBOSE) is missing" >&2
+  fail=1
+fi
+
+if grep -q '\.arboretum/ci-checks-last\.log' "$TARGET"; then
+  echo "PASS: CLI-14b — quiet mode writes the stable raw log path"
+else
+  echo "FAIL: CLI-14b — quiet-mode raw-log path is missing" >&2
+  fail=1
+fi
+
+if grep -q '^run_capture()' "$TARGET"; then
+  echo "PASS: CLI-14c — run_capture suppression helper is present"
+else
+  echo "FAIL: CLI-14c — run_capture suppression helper is missing" >&2
+  fail=1
+fi
+
+CONTRACT="$SCRIPT_DIR/../docs/contracts/ci-checks.cli-contract.md"
+if [ -f "$CONTRACT" ]; then
+  if grep -q 'CLI-14' "$CONTRACT" && grep -q '^version: 1.12' "$CONTRACT"; then
+    echo "PASS: CLI-14d — contract documents CLI-14 at version 1.12"
+  else
+    echo "FAIL: CLI-14d — contract does not document CLI-14 at version 1.12" >&2
+    fail=1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Final result
 # ---------------------------------------------------------------------------
 if [ "$fail" -ne 0 ]; then

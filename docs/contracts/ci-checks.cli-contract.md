@@ -1,6 +1,6 @@
 ---
 script: scripts/ci-checks.sh
-version: 1.11
+version: 1.12
 invokers:
   - type: skill
     name: /finish
@@ -13,6 +13,7 @@ related-designs:
   - docs/superpowers/specs/2026-06-03-release-intent-lane-design.md
   - docs/superpowers/specs/2026-06-03-ci-checks-runtime-design.md
   - docs/superpowers/specs/2026-06-06-standard-ci-preflight-design.md
+  - docs/superpowers/specs/2026-06-06-ci-checks-quiet-mode-design.md
 ---
 <!-- owner: pipeline-contracts-template -->
 
@@ -81,6 +82,22 @@ When it equals `1`, `ci-checks.sh` prints
 `SKIP: CI preflight already completed by caller` and proceeds to the expensive
 stages without invoking `scripts/ci-preflight.sh` again.
 
+The `ARBORETUM_CI_VERBOSE` environment variable controls output verbosity. The
+script is **quiet by default**: passing sub-process output bodies are suppressed
+from stdout and written to a raw log instead, while the orchestrator's own
+structural lines (the seven `=== … ===` banners, the `CI mode:` line, and every
+`SKIP:`/`FAIL:` diagnostic) and a compact per-stage summary are always printed.
+Quiet mode is disabled — output reverts to the verbose, byte-for-byte legacy
+behaviour — when the `CI` environment variable is non-empty (GitHub Actions sets
+`CI=true`, so CI logs stay fully readable) **or** when `ARBORETUM_CI_VERBOSE=1`
+is set. In quiet mode the full combined output of every stage is written to
+`.arboretum/ci-checks-last.log` (relative to the resolved root, created with
+`mkdir -p` and truncated at the start of each run); on a stage failure the
+failing item's captured output is replayed to stdout (failing-item-first
+diagnostics), and the raw-log path is printed at the end of the run. Quiet mode
+requires `mkdir`, `mktemp`, `cat`, and `rm` on `PATH` (already required by the
+parallel smoke runner).
+
 The `BASE_REF`, `RELEASE_INTENT_EVENT`, and `RELEASE_INTENT_BODY_FILE` environment variables are consumed transitively by `dev-tools/release/check-version-bump.sh` and the delegated release gate when that dev-only tooling is installed. When called from `.github/workflows/ci.yml`, `BASE_REF` is set to `origin/<base_ref>` for pull-request events or `origin/main` for push events. `RELEASE_INTENT_EVENT` may point at the GitHub event JSON file, and `RELEASE_INTENT_BODY_FILE` may point at a local PR-body draft. When called locally without these variables, the release-gate scripts apply their own fallbacks.
 
 ### Exit codes
@@ -138,9 +155,11 @@ for captured logs and statuses.
   `ARBORETUM_CI_PREFLIGHT_DONE=1`, it prints a skip line and does not rerun
   preflight. The old late `=== Health check (non-blocking) ===` drift tail is
   absent.
+- **CLI-14: Quiet mode (default-quiet except CI).** The script resolves a `QUIET` flag from `${CI:-}` and `ARBORETUM_CI_VERBOSE`: quiet is the default, disabled when `$CI` is non-empty or `ARBORETUM_CI_VERBOSE=1`. In quiet mode a passing sub-process body is suppressed from stdout and routed to `.arboretum/ci-checks-last.log` via the `run_capture` helper (which prints `  ok` on success and replays the captured slice on failure); the smoke-test stage prints a `N passed · N skipped · N failed` summary; a failing smoke test replays only the failing item; the seven stage banners, the `CI mode:` line, and all `SKIP:`/`FAIL:` diagnostics still print; and the raw-log path is printed at the end. In verbose mode (`$CI` set or `ARBORETUM_CI_VERBOSE=1`) output is byte-for-byte the legacy behaviour and no raw log is written.
 
 ## Versioning
 
+- **1.12** — add default-quiet output mode (`ARBORETUM_CI_VERBOSE`/`CI` trigger, `run_capture` body suppression, per-stage summary, failing-item replay, `.arboretum/ci-checks-last.log` raw log) so agent-invoked local runs do not dump green transcripts into model context; verbose mode unchanged (2026-06-06).
 - **1.11** — add standard CI preflight as the first stop gate, remove the late
   non-blocking health-check tail, and document `ARBORETUM_CI_PREFLIGHT_DONE`
   hosted-job handoff (2026-06-06).

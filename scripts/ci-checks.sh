@@ -33,6 +33,48 @@ case "$CI_JOBS" in
     ;;
 esac
 
+# Quiet mode (#601): default-quiet so agent-invoked local runs (/finish, /build)
+# do not dump green-test transcripts into model context. Disabled — output
+# reverts to the verbose, byte-for-byte legacy behaviour — when running under a
+# CI runner ($CI set, e.g. GitHub Actions) or when explicitly overridden with
+# ARBORETUM_CI_VERBOSE=1.
+QUIET=1
+if [ -n "${CI:-}" ] || [ "${ARBORETUM_CI_VERBOSE:-0}" = "1" ]; then
+  QUIET=0
+fi
+RAW_LOG=".arboretum/ci-checks-last.log"
+if [ "$QUIET" = "1" ]; then
+  mkdir -p .arboretum
+  : > "$RAW_LOG"
+fi
+# Smoke-test tallies for the quiet-mode per-stage summary.
+smoke_pass=0
+smoke_fail=0
+smoke_skip=0
+
+# run_capture <cmd...> — in quiet mode route the command's combined output to the
+# raw log and replay it to stdout only on a non-zero exit (failing-item-first
+# diagnostics), printing a compact "  ok" on success; in verbose mode run the
+# command unchanged so legacy output is preserved. Returns the command's status.
+run_capture() {
+  if [ "$QUIET" != "1" ]; then
+    "$@"
+    return $?
+  fi
+  local slice rc
+  slice="$(mktemp)"
+  "$@" >"$slice" 2>&1
+  rc=$?
+  cat "$slice" >> "$RAW_LOG"
+  if [ "$rc" = "0" ]; then
+    echo "  ok"
+  else
+    cat "$slice"
+  fi
+  rm -f "$slice"
+  return $rc
+}
+
 is_plugin_root() {
   [ -d skills ] \
     && [ -d hooks ] \
@@ -124,14 +166,14 @@ run_declared_default_command() {
   fi
 
   echo "--- $default_command ---"
-  ARBORETUM_CI_CHECKS_RUNNING_DEFAULT=1 bash -c "$default_command" || fail=1
+  ARBORETUM_CI_CHECKS_RUNNING_DEFAULT=1 run_capture bash -c "$default_command" || fail=1
 }
 
 run_plugin_check_if_available() {
   local script="$1"
 
   if [ -f "$script" ]; then
-    bash "$script" || fail=1
+    run_capture bash "$script" || fail=1
     return
   fi
 
@@ -162,7 +204,7 @@ run_contract_coverage_check_if_available() {
     return
   fi
 
-  bash "$script" || fail=1
+  run_capture bash "$script" || fail=1
 }
 
 run_ci_preflight() {
@@ -171,7 +213,14 @@ run_ci_preflight() {
     return 0
   fi
 
-  bash scripts/ci-preflight.sh --apply-safe-repairs
+  if run_capture bash scripts/ci-preflight.sh --apply-safe-repairs; then
+    return 0
+  fi
+  # Preflight is a hard stop gate (caller does `run_ci_preflight || exit 1`), so
+  # print the raw-log pointer the contract promises on every failing quiet run
+  # before that exit fires.
+  [ "$QUIET" = "1" ] && echo "Checks FAILED · full log: $RAW_LOG"
+  return 1
 }
 
 ci_mode_triggered_by_path() {
@@ -287,8 +336,26 @@ smoke_test_selected_for_mode() {
 run_smoke_test_serial() {
   local f="$1"
 
-  echo "--- $f ---"
-  bash "$f" || fail=1
+  if [ "$QUIET" != "1" ]; then
+    echo "--- $f ---"
+    bash "$f" || fail=1
+    return
+  fi
+
+  local slice rc
+  slice="$(mktemp)"
+  { echo "--- $f ---"; bash "$f"; } >"$slice" 2>&1
+  rc=$?
+  cat "$slice" >> "$RAW_LOG"
+  if [ "$rc" = "0" ]; then
+    smoke_pass=$((smoke_pass + 1))
+  else
+    smoke_fail=$((smoke_fail + 1))
+    cat "$slice"
+    echo "FAIL: $f exited $rc" >&2
+    fail=1
+  fi
+  rm -f "$slice"
 }
 
 run_smoke_tests_parallel() {
@@ -329,9 +396,22 @@ INNER
   xargs -P "$CI_JOBS" -n 2 "$worker" "$tmp/logs" "$statuses" < "$list"
 
   while read -r idx f; do
+    rc="$(cat "$statuses/$idx" 2>/dev/null || printf '1')"
+    if [ "$QUIET" = "1" ]; then
+      { echo "--- $f ---"; [ -f "$tmp/logs/$idx.out" ] && cat "$tmp/logs/$idx.out"; } >> "$RAW_LOG"
+      if [ "$rc" = "0" ]; then
+        smoke_pass=$((smoke_pass + 1))
+      else
+        smoke_fail=$((smoke_fail + 1))
+        echo "--- $f ---"
+        [ -f "$tmp/logs/$idx.out" ] && cat "$tmp/logs/$idx.out"
+        echo "FAIL: $f exited $rc" >&2
+        fail=1
+      fi
+      continue
+    fi
     echo "--- $f ---"
     [ -f "$tmp/logs/$idx.out" ] && cat "$tmp/logs/$idx.out"
-    rc="$(cat "$statuses/$idx" 2>/dev/null || printf '1')"
     if [ "$rc" != "0" ]; then
       echo "FAIL: $f exited $rc" >&2
       fail=1
@@ -376,6 +456,9 @@ run_smoke_tests_selected() {
 
 EFFECTIVE_CI_MODE="$(resolve_ci_mode "$CI_MODE")"
 echo "CI mode: $EFFECTIVE_CI_MODE"
+if [ "$QUIET" = "1" ]; then
+  echo "(quiet mode — passing output goes to $RAW_LOG; set ARBORETUM_CI_VERBOSE=1 for the full stream)"
+fi
 
 echo "=== CI preflight ==="
 run_ci_preflight || exit 1
@@ -390,7 +473,7 @@ if command -v shellcheck >/dev/null 2>&1; then
   if [ "${#shellcheck_roots[@]}" -eq 0 ]; then
     echo "SKIP: no ShellCheck roots found"
   else
-    find "${shellcheck_roots[@]}" -name '*.sh' ! -path '*/_archived/*' \
+    run_capture find "${shellcheck_roots[@]}" -name '*.sh' ! -path '*/_archived/*' \
       -exec shellcheck --severity=warning {} + || fail=1
   fi
 elif [ "${REQUIRE_SHELLCHECK:-0}" = "1" ]; then
@@ -405,8 +488,15 @@ selected_smoke_tests=()
 for f in scripts/_smoke-test-*.sh; do
   [ -e "$f" ] || continue
   [[ "$f" == *"_smoke-test-ci-checks.sh" ]] && continue  # skip self-referential meta-test
-  smoke_test_applicable "$f" || continue
-  smoke_test_selected_for_mode "$f" || continue
+  smoke_test_applicable "$f" || { smoke_skip=$((smoke_skip + 1)); continue; }
+  # smoke_test_selected_for_mode returns non-zero for a legitimate full-tier
+  # skip AND for malformed metadata (where it also sets smoke_selection_failed).
+  # Only the former is a real skip — counting a metadata error as "skipped"
+  # would hide the selection failure behind a green-looking summary.
+  smoke_test_selected_for_mode "$f" || {
+    [ "$smoke_selection_failed" = "1" ] || smoke_skip=$((smoke_skip + 1))
+    continue
+  }
   smoke_test_parallel_mode "$f" >/dev/null || {
     fail=1
     smoke_selection_failed=1
@@ -418,17 +508,28 @@ done
 if [ "$smoke_selection_failed" = "0" ]; then
   run_smoke_tests_selected "${selected_smoke_tests[@]}"
 fi
+if [ "$QUIET" = "1" ]; then
+  echo "  ${smoke_pass} passed · ${smoke_skip} skipped · ${smoke_fail} failed"
+fi
 
 echo "=== Declared test command ==="
 run_declared_default_command
 
 echo "=== Cross-reference validation ==="
-bash scripts/validate-cross-refs.sh || fail=1
+run_capture bash scripts/validate-cross-refs.sh || fail=1
 
 echo "=== Contract coverage validation ==="
 run_contract_coverage_check_if_available
 
 echo "=== Release gate ==="
 run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"
+
+if [ "$QUIET" = "1" ]; then
+  if [ "$fail" = "0" ]; then
+    echo "All checks passed · full log: $RAW_LOG"
+  else
+    echo "Checks FAILED · full log: $RAW_LOG"
+  fi
+fi
 
 exit $fail

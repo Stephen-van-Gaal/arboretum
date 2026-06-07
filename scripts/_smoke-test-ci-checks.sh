@@ -46,7 +46,9 @@ make_ci_fixture() {
   cp "$PREFLIGHT" "$repo/scripts/ci-preflight.sh"
   chmod +x "$repo/scripts/ci-checks.sh" "$repo/scripts/ci-preflight.sh"
 
-  for tool in bash dirname find grep; do
+  # bash/dirname/find/grep for the orchestrator + preflight; mkdir/mktemp/cat/rm
+  # for quiet-mode raw-log capture (#601).
+  for tool in bash dirname find grep mkdir mktemp cat rm; do
     ln -s "$(command -v "$tool")" "$bin/$tool"
   done
 
@@ -173,7 +175,7 @@ make_declared_command_consumer_fixture() {
 
   python_exe=$(python3 -c 'import sys; print(sys.executable)')
 
-  for tool in bash dirname find grep head mktemp rm sed touch; do
+  for tool in bash dirname find grep head mktemp rm sed touch mkdir cat; do
     ln -s "$(command -v "$tool")" "$bin/$tool"
   done
   ln -s "$python_exe" "$bin/python3"
@@ -522,3 +524,79 @@ grep -qF "SKIP: scripts/validate-coverage-manifest.sh requires docs/contracts in
   exit 1
 }
 echo "PASS: consumer roots skip installed contract-coverage validator when docs/contracts is absent"
+
+# ---------------------------------------------------------------------------
+# Quiet mode (issue #601, CLI-14)
+# Default-quiet except CI: suppress passing sub-process bodies, keep orchestrator
+# structural lines, write a full raw log, replay only the failing item.
+# ---------------------------------------------------------------------------
+
+# Q1 — quiet is the default (no $CI, no ARBORETUM_CI_VERBOSE): a passing smoke
+# test's body is suppressed from stdout but preserved in the raw log; banners
+# and the verbose hint still print.
+tmp="$(new_tmp_dir)"
+make_plugin_root_fixture "$tmp"
+qrepo="$tmp/repo"
+cat > "$qrepo/scripts/_smoke-test-quiet-probe.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+# ci-parallel: safe
+echo "QUIET_MARKER_BODY"
+exit 0
+INNER
+chmod +x "$qrepo/scripts/_smoke-test-quiet-probe.sh"
+quiet_out="$(cd "$qrepo" && env -u CI -u ARBORETUM_CI_VERBOSE PATH="$tmp/bin" bash scripts/ci-checks.sh 2>&1)"
+if grep -qF "QUIET_MARKER_BODY" <<< "$quiet_out"; then
+  fail "quiet mode (default) leaked a passing smoke test body to stdout" "$quiet_out"
+fi
+[ -f "$qrepo/.arboretum/ci-checks-last.log" ] \
+  || fail "quiet mode did not write .arboretum/ci-checks-last.log" "$quiet_out"
+grep -qF "QUIET_MARKER_BODY" "$qrepo/.arboretum/ci-checks-last.log" \
+  || fail "raw log is missing the suppressed body"
+grep -qF "=== Smoke tests ===" <<< "$quiet_out" \
+  || fail "quiet mode dropped the Smoke tests banner" "$quiet_out"
+grep -qF "ARBORETUM_CI_VERBOSE=1" <<< "$quiet_out" \
+  || fail "quiet mode did not print the verbose-restore hint" "$quiet_out"
+echo "PASS: quiet mode is default — bodies suppressed, raw log written, banners kept"
+
+# Q2 — ARBORETUM_CI_VERBOSE=1 restores full body output.
+verbose_out="$(cd "$qrepo" && env -u CI ARBORETUM_CI_VERBOSE=1 PATH="$tmp/bin" bash scripts/ci-checks.sh 2>&1)"
+grep -qF "QUIET_MARKER_BODY" <<< "$verbose_out" \
+  || fail "ARBORETUM_CI_VERBOSE=1 did not restore full body output" "$verbose_out"
+echo "PASS: ARBORETUM_CI_VERBOSE=1 restores verbose output"
+
+# Q3 — a non-empty CI env restores verbose output (GitHub Actions logs stay readable).
+ci_out="$(cd "$qrepo" && CI=true PATH="$tmp/bin" bash scripts/ci-checks.sh 2>&1)"
+grep -qF "QUIET_MARKER_BODY" <<< "$ci_out" \
+  || fail "CI=true did not restore verbose output" "$ci_out"
+echo "PASS: CI env restores verbose output"
+
+# Q4 — failure path replays only the failing item (serial smoke tests).
+tmp="$(new_tmp_dir)"
+make_plugin_root_fixture "$tmp"
+frepo="$tmp/repo"
+cat > "$frepo/scripts/_smoke-test-quiet-pass.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+echo "PASSING_BODY_MARKER"
+exit 0
+INNER
+cat > "$frepo/scripts/_smoke-test-quiet-fail.sh" <<'INNER'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+echo "FAILING_BODY_MARKER"
+exit 1
+INNER
+chmod +x "$frepo/scripts/_smoke-test-quiet-pass.sh" "$frepo/scripts/_smoke-test-quiet-fail.sh"
+set +e
+fail_out="$(cd "$frepo" && env -u CI -u ARBORETUM_CI_VERBOSE PATH="$tmp/bin" bash scripts/ci-checks.sh 2>&1)"
+fail_status=$?
+set -e
+[ "$fail_status" -ne 0 ] \
+  || fail "quiet mode should still exit non-zero when a smoke test fails" "$fail_out"
+grep -qF "FAILING_BODY_MARKER" <<< "$fail_out" \
+  || fail "quiet mode did not replay the failing item body" "$fail_out"
+if grep -qF "PASSING_BODY_MARKER" <<< "$fail_out"; then
+  fail "quiet failure path replayed a passing item body (should be failing item only)" "$fail_out"
+fi
+echo "PASS: quiet failure path replays only the failing item"
