@@ -125,6 +125,38 @@ change, why it matters, and phase. Use these boundaries:
 | Seam authority | May be edited before build when implementation depends on it. Includes definitions and contracts the implementation must obey. |
 | Generated/evidence authority | Do not finalize before build unless the evidence already exists. Ownership, Tests, Design record, decision harvest, register, and contract coverage remain `/finish`/`/consolidate` work. |
 
+**New-script gate-prerequisite seam scaffolding.** When the Durable Document
+Change Set introduces one or more new `scripts/*.sh` files (excluding `_`-prefixed
+components, which the gates skip), the build gate (`scripts/ci-checks.sh`) will
+demand two artifacts *the instant the script exists* — long before
+`/consolidate`:
+
+- a covering contract per script, indexed in `docs/contracts/_coverage.md`
+  (`scripts/validate-coverage-manifest.sh`), and
+- a `docs/specs/<owner>.spec.md` that exists for each script's `# owner:` header
+  (`scripts/_smoke-test-script-owners.sh` assertion 3).
+
+Emit these as **seam-authority** rows (Phase: pre-build) so the strict gate is
+fed rather than loosened:
+
+- a **contract stub** per new script — `docs/contracts/<script>.cli-contract.md`
+  (or `.contract.md` for full-shape scripts), enough to carry the CLI seam and
+  satisfy coverage;
+- a **draft owner-spec seed** (`status: draft`, Purpose + Boundaries stubs only)
+  per distinct new `# owner:` topic that has no existing
+  `docs/specs/<topic>.spec.md`;
+- a note to regenerate `docs/contracts/_coverage.md` via
+  `scripts/generate-coverage.sh` so the new rows are indexed.
+
+This is the seam/build-time reframe, not new authority: a contract stub and a
+draft owner-spec are seam authority (definitions the implementation must obey),
+which this step already permits before build. Distinguish **"stub exists"** (the
+build-time gate requirement) from **"materialized active"** (the `/consolidate`
+requirement). Do **not** finalize the full contract body, Tests, Ownership,
+`owns:` lists, or flip the spec to `active` — those stay generated/evidence
+authority reconciled at `/finish`. If the change set adds no non-`_` scripts,
+emit no scaffolding (no empty ceremony).
+
 The package must preserve intent authority, seam authority, and
 generated/evidence boundaries.
 

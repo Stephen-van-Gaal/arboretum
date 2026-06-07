@@ -151,6 +151,19 @@ spec is written, invoke `superpowers:writing-plans` with a brief that includes:
 - Project plan convention: `docs/plans/YYYY-MM-DD-<topic>.md` (NOT the writing-plans default `docs/superpowers/plans/`)
 - Test taxonomy from `CLAUDE.md ## Testing`
 - Workflow stage: plans end at `/finish`; no "promote spec to active" step (status flips automatically at `/consolidate`)
+- **Build-time governance prerequisites:** if the plan will create any
+  `scripts/*.sh` (excluding `_`-prefixed components), the brief must instruct
+  `writing-plans` to open the plan with a **Task 0: governance scaffolding** that
+  creates a contract stub per new script, seeds a draft owner-spec for each new
+  `# owner:` topic lacking a `docs/specs/<topic>.spec.md`, and regenerates
+  `docs/contracts/_coverage.md` — *before* any task that adds a script. The build
+  gate (`scripts/ci-checks.sh`) enforces contract coverage and owner→spec
+  existence the instant a script appears, so this work must be budgeted up front
+  rather than improvised mid-build; it mirrors the seam scaffolding
+  `design-package` Step 6 emits into the Durable Document Change Set.
+  `writing-plans` is an **external superpowers skill** Arboretum cannot edit, so
+  this rule lives in the brief `/design` hands it (and in `/design`'s own plan
+  authoring when superpowers is absent), not in `writing-plans` itself.
 
 After writing-plans returns, verify the plan landed at `docs/plans/`, not `docs/superpowers/plans/`. If it landed in the wrong place, move it with `git mv` (preserves history) and update the `plan:` field in the design spec frontmatter to match the new path — `/build` reads that field, and a stale `plan:` pointer causes a "plan path not found" error.
 

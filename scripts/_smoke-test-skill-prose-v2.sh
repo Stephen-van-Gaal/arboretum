@@ -21,9 +21,10 @@ CLEANUP="skills/cleanup/SKILL.md"
 REFLECT="skills/reflect/SKILL.md"
 CONSOLIDATE="skills/consolidate/SKILL.md"
 HEALTH="skills/health-check/SKILL.md"
+DESIGNPKG="skills/design-package/SKILL.md"
 
 missing_skill_files=()
-for skill_file in "$START" "$DESIGN" "$FINISH" "$CLEANUP" "$REFLECT" "$CONSOLIDATE" "$HEALTH"; do
+for skill_file in "$START" "$DESIGN" "$FINISH" "$CLEANUP" "$REFLECT" "$CONSOLIDATE" "$HEALTH" "$DESIGNPKG"; do
   [ -f "$skill_file" ] || missing_skill_files+=("$skill_file")
 done
 
@@ -452,5 +453,30 @@ for f in AGENTS.md CLAUDE.md; do
     || fail "case 39 - $f does not mention the ## Stages/## Flow fallback"
 done
 ok "case 39 - project entrypoints use stage/flow workflow section guidance"
+
+# Case 40: design-package Step 6 front-loads gate-prerequisite seam scaffolding
+# for new scripts/*.sh (contract stub + draft owner-spec seed + coverage regen),
+# classified as seam authority before build — not deferred to /consolidate.
+grep -q "gate-prerequisite seam scaffolding" "$DESIGNPKG" \
+  || fail "case 40 — design-package Step 6 missing the new-script seam-scaffolding rule"
+grep -q "contract stub" "$DESIGNPKG" \
+  || fail "case 40 — design-package does not name the contract stub artifact"
+grep -q "stub exists" "$DESIGNPKG" \
+  || fail "case 40 — design-package does not distinguish stub-exists from materialized-active"
+ok "case 40 — design-package front-loads gate-prerequisite seam scaffolding for new scripts"
+
+# Case 41: design Step 4 (plan fold-in) budgets a Task-0 governance-scaffolding
+# rule in the writing-plans brief, grounded in writing-plans being external.
+grep -q "Task 0: governance scaffolding" "$DESIGN" \
+  || fail "case 41 — design Step 4 missing the Task-0 governance-scaffolding rule"
+grep -q "external superpowers skill" "$DESIGN" \
+  || fail "case 41 — design does not ground the rule in writing-plans being external"
+ok "case 41 — design Step 4 budgets Task-0 governance scaffolding in the plan brief"
+
+# Case 42: workflow-unification records the pre-build gate-prerequisite
+# seam-scaffolding obligation /design now carries.
+grep -q "gate-prerequisite seam scaffolding" docs/specs/workflow-unification.spec.md \
+  || fail "case 42 — workflow-unification.spec.md does not record the seam-scaffolding obligation"
+ok "case 42 — workflow-unification records the pre-build seam-scaffolding obligation"
 
 echo "ALL PASS: skill-prose unified invariants"
