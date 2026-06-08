@@ -111,7 +111,9 @@ EOF
 
 echo "# owner: alpha" > "$FIXTURE/src/alpha.py"
 echo "# owner: beta"  > "$FIXTURE/src/beta.py"
-echo "# owner: gamma" > "$FIXTURE/src/gamma.py"
+# Real (non-comment) content so the drift commit below is a behaviour change —
+# Check 7 is content-aware (#238); a comment-only edit would be benign.
+printf '# owner: gamma\ndef g():\n    return 1\n' > "$FIXTURE/src/gamma.py"
 
 git -C "$FIXTURE" init -q
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
@@ -121,7 +123,7 @@ git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "fixture init"
 # Check 7 compares `git log -1` of the spec vs each owned file — drift
 # means the owned file has a strictly newer commit than the spec.
 # Modifying the file without committing isn't enough (same commit hash).
-echo "# owner: gamma (modified)" > "$FIXTURE/src/gamma.py"
+printf '# owner: gamma\ndef g():\n    return 2\n' > "$FIXTURE/src/gamma.py"
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t add src/gamma.py >/dev/null
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "edit gamma owned file"
 
@@ -222,12 +224,13 @@ owns:
 
 # widget
 EOF
-  echo "# owner: widget" > "$dir/src/widget.py"
+  printf '# owner: widget\ndef w():\n    return 1\n' > "$dir/src/widget.py"
   git -C "$dir" init -q
   git -C "$dir" -c user.email=t@t -c user.name=t add . >/dev/null
   git -C "$dir" -c user.email=t@t -c user.name=t commit -q -m "init"
-  # Trigger drift on widget so Check 7 has something to act on.
-  echo "# owner: widget (modified)" > "$dir/src/widget.py"
+  # Trigger drift on widget so Check 7 has something to act on — must be a
+  # behaviour change (content-aware Check 7, #238; comment-only is benign).
+  printf '# owner: widget\ndef w():\n    return 2\n' > "$dir/src/widget.py"
   git -C "$dir" -c user.email=t@t -c user.name=t add src/widget.py >/dev/null
   git -C "$dir" -c user.email=t@t -c user.name=t commit -q -m "edit"
   bash "$GEN" "$dir" >/dev/null

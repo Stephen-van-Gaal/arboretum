@@ -164,6 +164,113 @@ _in_array() {
   return 1
 }
 
+# ── Check 7 content-aware drift classifier (issue #238) ──────────────
+# Decide whether the NET change in an owned file since its spec's last
+# commit is benign (no real drift) or a genuine behaviour change.
+# Verdict: "benign" | "drift" | "unknown". Tier 1 is deterministic;
+# Tiers 2/3 are extension seams that pass through ("unknown"). Design
+# D2 fail-safe: a non-benign verdict (including all "unknown") is drift.
+# Callers run after PROJECT_DIR is set; functions capture it at call time.
+
+# Line-comment prefix for a path, or "" if unknown (fail-safe: unknown
+# file types can never be classified benign on the comment basis).
+# Markdown (.md) is intentionally excluded: a leading `#` in Markdown is a
+# heading (document content), not a line comment — treating it as one would
+# hide real heading/prose edits to owned .md specs/contracts (#238 review).
+_comment_prefix() {
+  case "$1" in
+    *.sh|*.bash|*.py|*.rb|*.yaml|*.yml) printf '#' ;;
+    *) printf '' ;;
+  esac
+}
+
+# Content of a file at a commit (empty if absent). Always called in an
+# assignment/command-substitution context, which is exempt from `set -e`, so a
+# non-zero `git show` (file absent at that commit) yields "" rather than
+# aborting — "absent here, present at HEAD" then resolves to drift downstream.
+_blob() { git -C "$PROJECT_DIR" show "$1:$2" 2>/dev/null; }
+
+# Strip a COMPLETE leading Markdown/YAML frontmatter block (--- … ---) from
+# stdin. If line 1 is `---` but there is no closing `---`, nothing is stripped
+# (the original is emitted) — an unterminated marker must not eat the whole file
+# and mask real changes (#238 review). Caller restricts this to .md files.
+_strip_frontmatter() {
+  awk '
+    NR==1 && $0=="---" { open=1; buf=$0 ORS; next }
+    open==1 && $0=="---" { open=2; buf=""; next }
+    open==1 { buf=buf $0 ORS; next }
+    { body=body $0 ORS }
+    END { if (open==2) printf "%s", body; else printf "%s%s", buf, body }
+  '
+}
+
+# Drop blank lines and whole-line comments (comment prefix = $1) from stdin.
+_strip_comments_blank() {
+  local p="$1"
+  if [ -n "$p" ]; then grep -vE "^[[:space:]]*(${p}|\$)" || true
+  else grep -vE "^[[:space:]]*\$" || true; fi
+}
+
+# Trim only LEADING and TRAILING whitespace per line. Internal whitespace is
+# preserved, so a meaningful data change like `"a  b"` → `"a b"` is NOT masked
+# as whitespace-only (#238 review).
+_trim_ws() { sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
+
+# Tier 1: deterministic diff-class. Echoes benign|unknown.
+# Strategy: apply a benign-class transform to BOTH versions and compare — if a
+# single class of change fully accounts for the difference, it is benign.
+# Comparing whole transformed blobs (not diff hunks) handles additions AND
+# deletions symmetrically. Returns `unknown` (not `drift`) when no benign class
+# matches, so the dispatcher consults later tiers; the dispatcher applies the
+# D2 fail-safe (all-unknown → drift).
+_tier1_diff_class() {
+  local spec_commit="$1" file_rel="$2" a b prefix
+  a="$(_blob "$spec_commit" "$file_rel")"
+  b="$(_blob HEAD "$file_rel")"
+
+  # (a) net-empty / pure rename.
+  [ "$a" = "$b" ] && { printf benign; return; }
+
+  # (b) whitespace-only (leading/trailing per line — never internal).
+  [ "$(printf '%s' "$a" | _trim_ws)" = "$(printf '%s' "$b" | _trim_ws)" ] \
+    && { printf benign; return; }
+
+  # (c) frontmatter-only — Markdown front matter only (covers `owner:` keys).
+  #     YAML `---` document markers are NOT frontmatter, so this never fires
+  #     on .yaml/.yml owned files (#238 review).
+  case "$file_rel" in
+    *.md)
+      [ "$(printf '%s' "$a" | _strip_frontmatter)" = "$(printf '%s' "$b" | _strip_frontmatter)" ] \
+        && { printf benign; return; } ;;
+  esac
+
+  # (d) comment-only / `# owner:` marker only (known comment-prefix files).
+  prefix="$(_comment_prefix "$file_rel")"
+  if [ -n "$prefix" ]; then
+    [ "$(printf '%s' "$a" | _strip_comments_blank "$prefix")" = "$(printf '%s' "$b" | _strip_comments_blank "$prefix")" ] \
+      && { printf benign; return; }
+  fi
+
+  printf unknown
+}
+
+# Tier 2 (behaviour-surface) and Tier 3 (LLM semantic) — extension seams.
+# Tier 1 returns `unknown` for diffs it cannot prove benign, so these tiers ARE
+# reached for non-benign diffs; wiring real logic here needs no dispatcher edit.
+_tier2_behaviour_surface() { printf unknown; }
+_tier3_semantic()          { printf unknown; }
+
+# Dispatcher: first benign|drift verdict wins; all-unknown → drift (D2 fail-safe).
+classify_post_spec_diff() {
+  local spec_commit="$1" file_rel="$2" v tier
+  for tier in _tier1_diff_class _tier2_behaviour_surface _tier3_semantic; do
+    v="$("$tier" "$spec_commit" "$file_rel")"
+    [ "$v" = benign ] && { printf benign; return; }
+    [ "$v" = drift ]  && { printf drift;  return; }
+  done
+  printf drift
+}
+
 # ── Status enum config ───────────────────────────────────────────────
 #
 # Defaults match the plugin's canonical vocabulary. A project can override
@@ -1085,11 +1192,17 @@ while IFS='|' read -r _ spec status _ owns _; do
       owned_last_commit=$(git -C "$PROJECT_DIR" log -1 --format=%H -- "$owned_rel" 2>/dev/null)
       [ -z "$owned_last_commit" ] && continue
       [ "$owned_last_commit" = "$spec_last_commit" ] && continue
-      # spec_last_commit ancestor of owned_last_commit → owned modified later → drift
+      # spec_last_commit ancestor of owned_last_commit → owned committed
+      # later. That makes it a drift CANDIDATE; classify the net change
+      # to decide whether it is a real behaviour change (#238). Benign
+      # diff-classes (frontmatter/owner-only, comment, whitespace,
+      # net-empty, rename) are not drift; anything else flags (D2).
       if git -C "$PROJECT_DIR" merge-base --is-ancestor "$spec_last_commit" "$owned_last_commit" 2>/dev/null; then
-        drift=true
-        drift_file="$owned_rel"
-        break 2
+        if [ "$(classify_post_spec_diff "$spec_last_commit" "$owned_rel")" = drift ]; then
+          drift=true
+          drift_file="$owned_rel"
+          break 2
+        fi
       fi
     done
   done

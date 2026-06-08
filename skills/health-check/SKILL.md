@@ -34,7 +34,7 @@ The reader must succeed before interpreting results.
    - Check 4: contracts.yaml vs. spec Requires tables
    - Check 5: contracts.yaml vs. definition versions (staleness)
    - Check 6: Spec status consistency (enum is one of `draft`, `active`, `stale`)
-   - Check 7: Spec drift detection (reports which specs are out of sync with their owned files; **read-only by default** — pass `--reconcile` to write `active → stale` flips into `docs/REGISTER.md` and spec frontmatter)
+   - Check 7: Spec drift detection (reports which specs are out of sync with their owned files — **content-aware**: an owned file committed after its spec is only flagged when the *net change* is non-benign; comment/whitespace/frontmatter-only and net-empty changes are not drift. **Read-only by default** — pass `--reconcile` to write `active → stale` flips into `docs/REGISTER.md` and spec frontmatter)
    - Check 8: Plan files — Tests section (advisory)
    - Check 9: Strategic Anchor — section present in CLAUDE.md, time horizon future, in/out scope non-empty, cadence not overdue (silent pass when `roadmap.config.yaml` absent)
 3. If the script exits with code 0 (healthy), confirm the project is in good shape

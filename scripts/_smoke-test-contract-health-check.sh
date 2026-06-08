@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-health-check.sh — Contract test for
-# docs/contracts/health-check.contract.md. Asserts HC-1..HC-7
+# docs/contracts/health-check.contract.md. Asserts HC-1..HC-9
 # from the contract's ## Test surface against scripts/health-check.sh.
 #
 # Uses the fixture-project pattern: mktemp -d a project skeleton,
@@ -509,7 +509,10 @@ owns:
 # zeta
 INNER
 
-echo "# owner: zeta" > "$DRIFT_FIXTURE/src/zeta.py"
+# Real (non-comment) content so the drift commit below is a behaviour
+# change — a comment/whitespace/frontmatter-only edit is benign under
+# Check 7's content-aware classifier (#238) and would not flag (see HC-9).
+printf '# owner: zeta\ndef z():\n    return 1\n' > "$DRIFT_FIXTURE/src/zeta.py"
 
 cat > "$DRIFT_FIXTURE/docs/REGISTER.md" <<'INNER'
 # Project Register
@@ -535,9 +538,10 @@ cat > "$DRIFT_FIXTURE/docs/REGISTER.md" <<'INNER'
 ## Dependency Resolution Order
 INNER
 
-# Commit spec first, then owned-file mutation second — that's the drift order.
-(cd "$DRIFT_FIXTURE" && git add docs/specs/zeta.spec.md docs/REGISTER.md && git commit -q -m "spec")
-(cd "$DRIFT_FIXTURE" && echo "# owner: zeta — modified" > src/zeta.py && git add src/zeta.py && git commit -q -m "drift")
+# Commit spec + baseline code first, then a behaviour change second —
+# that's the drift order (and the change must be non-benign to flag).
+(cd "$DRIFT_FIXTURE" && git add docs/specs/zeta.spec.md docs/REGISTER.md src/zeta.py && git commit -q -m "spec")
+(cd "$DRIFT_FIXTURE" && printf '# owner: zeta\ndef z():\n    return 2\n' > src/zeta.py && git add src/zeta.py && git commit -q -m "drift: behaviour change")
 
 # Snapshot pre-run state of spec frontmatter and REGISTER row.
 PRE_SPEC=$(grep "^status:" "$DRIFT_FIXTURE/docs/specs/zeta.spec.md")
@@ -584,10 +588,67 @@ else
   fail_case "HC-5: Check 7 --reconcile expected exit 1 (per HC-2 contract: --reconcile doesn't change exit-code semantics), got $reconcile_exit"
 fi
 
+# ── HC-9: Check 7 content-aware — benign diff does NOT flag ───────────
+BENIGN_FIXTURE=$(mktemp -d)
+trap 'rm -rf "$FIXTURE" "$MINI_FIXTURE" "$UNRELATED_DIR" "$DRIFT_FIXTURE" "$BENIGN_FIXTURE"' EXIT
+mkdir -p "$BENIGN_FIXTURE/docs/specs" "$BENIGN_FIXTURE/docs/definitions" "$BENIGN_FIXTURE/src" "$BENIGN_FIXTURE/workflows"
+touch "$BENIGN_FIXTURE/CLAUDE.md" "$BENIGN_FIXTURE/contracts.yaml" "$BENIGN_FIXTURE/workflows/README.md" "$BENIGN_FIXTURE/docs/ARCHITECTURE.md"
+(cd "$BENIGN_FIXTURE" && git init -q && git config user.email t@t && git config user.name t)
+cat > "$BENIGN_FIXTURE/docs/specs/eta.spec.md" <<'INNER'
+---
+name: eta
+status: active
+owner: architecture
+owns:
+  - src/eta.py
+---
+
+# eta
+INNER
+printf '# owner: eta\ndef e():\n    return 1\n' > "$BENIGN_FIXTURE/src/eta.py"
+cat > "$BENIGN_FIXTURE/docs/REGISTER.md" <<'INNER'
+# Project Register
+
+## Definitions Index
+
+(none)
+
+## Spec Index
+
+| Spec | Status | Owner | Owns (files/directories) |
+|------|--------|-------|--------------------------|
+| eta.spec.md | active | architecture | src/eta.py |
+
+## Status Summary
+
+| Status | Count |
+|--------|-------|
+| active | 1 |
+
+## Unowned Code
+
+## Dependency Resolution Order
+INNER
+(cd "$BENIGN_FIXTURE" && git add docs/specs/eta.spec.md docs/REGISTER.md src/eta.py && git commit -q -m "baseline")
+# Benign drift: add a comment line only, committed after the spec.
+(cd "$BENIGN_FIXTURE" && printf '# owner: eta\n# benign note\ndef e():\n    return 1\n' > src/eta.py && git add src/eta.py && git commit -q -m "comment only")
+
+PRE_ETA=$(grep "^status:" "$BENIGN_FIXTURE/docs/specs/eta.spec.md")
+benign_out=$(bash "$HC" "$BENIGN_FIXTURE" 2>&1)
+POST_ETA=$(grep "^status:" "$BENIGN_FIXTURE/docs/specs/eta.spec.md")
+
+if printf '%s\n' "$benign_out" | grep -q 'eta.spec.md: drift detected'; then
+  fail_case "HC-9: benign comment-only change flagged as drift" "$benign_out"
+elif [ "$PRE_ETA" != "$POST_ETA" ]; then
+  fail_case "HC-9: benign change mutated spec status" "$PRE_ETA -> $POST_ETA"
+else
+  pass "HC-9: content-aware Check 7 passes a benign diff (no flag, no mutation)"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 if [ $fail -eq 0 ]; then
-  echo "All health-check contract assertions passed (HC-1..HC-7)."
+  echo "All health-check contract assertions passed (HC-1..HC-9)."
   exit 0
 else
   echo "health-check contract test FAILED" >&2

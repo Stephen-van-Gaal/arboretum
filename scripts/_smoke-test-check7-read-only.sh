@@ -69,7 +69,9 @@ owns:
 Fixture spec.
 EOF
 
-echo "# owner: foo" > "$FIXTURE/src/foo.py"
+# Real (non-comment) content so Commit B is a behaviour change — Check 7
+# is content-aware (#238) and would treat a comment-only edit as benign.
+printf '# owner: foo\ndef foo():\n    return 1\n' > "$FIXTURE/src/foo.py"
 
 git -C "$FIXTURE" init -q
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
@@ -82,8 +84,8 @@ bash "$GEN" "$FIXTURE" >/dev/null \
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "fixture init"
 
-# Commit B: modify owned file AFTER the spec → introduces drift
-echo "# owner: foo — updated" > "$FIXTURE/src/foo.py"
+# Commit B: behaviour change to owned file AFTER the spec → introduces drift
+printf '# owner: foo\ndef foo():\n    return 2\n' > "$FIXTURE/src/foo.py"
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t add src/foo.py >/dev/null
 git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "update foo"
 
