@@ -3,9 +3,13 @@
 # Append-only per-contributor token ledger. Source me; call ledger_append.
 # Dependency-free except jq (already a project dependency).
 
+# Device-stable base resolver, sourced once at load (not per-call) — anchors at
+# the main checkout, not the invoking worktree (#673).
+. "$(dirname "${BASH_SOURCE[0]}")/state-dir.sh"
+
 _token_ledger_path() {
   if [ -n "${ARBORETUM_TOKEN_LEDGER:-}" ]; then printf '%s' "$ARBORETUM_TOKEN_LEDGER"; return; fi
-  local dir="${ARBORETUM_STATE_DIR:-.arboretum}/token-ledger"
+  local dir; dir="$(arboretum_state_dir)/token-ledger"
   mkdir -p "$dir"
   printf '%s/%s.jsonl' "$dir" "${ARBORETUM_RUN_ID:-session}"
 }

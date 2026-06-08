@@ -19,6 +19,7 @@
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
+| scripts/lib/state-dir.sh | docs/contracts/state-dir.contract.md | full |
 | scripts/lib/token-ledger.sh | docs/contracts/token-ledger.contract.md | full |
 | scripts/lib/token-rates.sh | docs/contracts/token-rates.contract.md | full |
 | scripts/lib/upgrade-classify.sh | docs/contracts/upgrade-classify.contract.md | full |

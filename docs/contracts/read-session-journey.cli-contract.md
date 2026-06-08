@@ -1,6 +1,6 @@
 ---
 script: scripts/read-session-journey.sh
-version: 1.0
+version: 1.1
 invokers:
   - type: script
     name: scripts/token-report.sh
@@ -39,8 +39,10 @@ read-session-journey.sh --transcript <file.jsonl> [--stdout] [--output-dir <dir>
 
 - `--transcript <file.jsonl>` *(required)* — path to the session transcript.
   Missing or non-existent triggers a usage error to stderr and exit `2`.
-- `--output-dir <dir>` *(optional, default `.arboretum/token-journey`)* — directory
-  for the written report artifact.
+- `--output-dir <dir>` *(optional; default is the device-stable
+  `<state-dir>/token-journey`, where `<state-dir>` is resolved by
+  `scripts/lib/state-dir.sh` — the main checkout's `.arboretum`, not the
+  invoking worktree's, #673)* — directory for the written report artifact.
 - `--descriptor <x>` *(optional)* — report name stem. When omitted, resolved by a
   best-effort cascade: open PR number > `$ISSUE` > branch number > session id.
 - `--format md|json` *(optional, default `md`)* — report format. `md` is the
@@ -94,3 +96,5 @@ Covered by `scripts/_smoke-test-token-journey.sh`.
 - **1.0** — initial contract: per-stage/skill/subagent journey reporter with
   depth-agnostic subagent join, intake diagnostic, idempotent persistence, and
   output inversion (2026-06-07).
+- **1.1** — default `--output-dir` is now device-stable, anchored at the main
+  checkout via `scripts/lib/state-dir.sh` (#673) (2026-06-08).

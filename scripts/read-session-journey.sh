@@ -6,6 +6,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/lib/token-rates.sh"
+. "$ROOT/scripts/lib/state-dir.sh"
 
 transcript=""; to_stdout=0; output_dir=""; descriptor=""; fmt="md"
 while [ $# -gt 0 ]; do case "$1" in
@@ -17,7 +18,8 @@ while [ $# -gt 0 ]; do case "$1" in
   *) shift;; esac; done
 [ -n "$transcript" ] || { echo "usage: read-session-journey.sh --transcript <file.jsonl> [--stdout] [--output-dir D] [--descriptor X] [--format md|json]" >&2; exit 2; }
 [ -f "$transcript" ] || { echo "read-session-journey.sh: transcript not found: $transcript" >&2; exit 2; }
-[ -n "$output_dir" ] || output_dir=".arboretum/token-journey"
+# Default base anchors at the main checkout, not the invoking worktree (#673).
+[ -n "$output_dir" ] || output_dir="$(arboretum_state_dir)/token-journey"
 
 # Descriptor cascade (local-first; session-id from the transcript filename always wins last).
 if [ -z "$descriptor" ]; then

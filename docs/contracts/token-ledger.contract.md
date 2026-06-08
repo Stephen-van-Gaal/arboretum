@@ -1,6 +1,6 @@
 ---
 seam: token-ledger
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes: []
@@ -31,7 +31,10 @@ billed reader) parse exactly these keys.
 A sourceable library defining `ledger_append <contributor> <source> <bytes>
 [model] [est_cost]`. Source ids are scrubbed of ASCII control characters
 (defense in depth — they are author-influenced). The ledger path resolves from
-`$ARBORETUM_TOKEN_LEDGER`, else `${ARBORETUM_STATE_DIR:-.arboretum}/token-ledger/<run>.jsonl`.
+`$ARBORETUM_TOKEN_LEDGER`, else `<state-dir>/token-ledger/<run>.jsonl` where
+`<state-dir>` is `scripts/lib/state-dir.sh`'s `arboretum_state_dir` — i.e.
+`$ARBORETUM_STATE_DIR` when set, else the **main checkout's** `.arboretum`
+(device-stable across worktrees, #673), else cwd-relative `.arboretum` outside a repo.
 When a model is given and no explicit cost, the writer sources
 `token-rates.sh` and computes `est_cost` from the input rate. Uses `jq` to
 serialize each row.
@@ -84,3 +87,5 @@ One JSON object appended per call, carrying the required keys `run_id`, `ts`,
 ## Versioning
 
 - **1.0** — initial contract: ledger row schema + writer (2026-06-06).
+- **1.1** — ledger path default now device-stable, anchored at the main checkout
+  via `scripts/lib/state-dir.sh` (#673) (2026-06-08).

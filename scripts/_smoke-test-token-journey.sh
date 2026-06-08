@@ -115,7 +115,9 @@ grep -qiE 'STAGE +design' <<<"$full_out" || fail "--stdout should include the fu
 cfg_absent="$work/absent.yml"; printf 'layer: 2\n' > "$cfg_absent"
 out="$(bash "$ROOT/scripts/read-token-journey-config.sh" "$cfg_absent")"
 grep -qx 'enabled=false' <<<"$out" || fail "absent token_journey should default enabled=false"
-grep -qx 'output_dir=.arboretum/token-journey' <<<"$out" || fail "absent should default output_dir"
+# #673/D27: the default output_dir is device-stable — anchored at the main
+# checkout (absolute), not the bare worktree-relative `.arboretum/token-journey`.
+grep -qE '^output_dir=/.*/\.arboretum/token-journey$' <<<"$out" || fail "absent should default to main-checkout-anchored output_dir (got: $(grep '^output_dir=' <<<"$out"))"
 grep -qx 'format=md' <<<"$out" || fail "absent should default format=md"
 cfg_set="$work/set.yml"
 printf 'token_journey:\n  enabled: true\n  output_dir: .arboretum/tj\n  format: json\n' > "$cfg_set"

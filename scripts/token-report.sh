@@ -2,10 +2,13 @@
 # owner: token-accounting
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT/scripts/lib/state-dir.sh"
 sub="${1:-diagnose}"; shift || true
 args=("$@")   # preserve sub-args for arms (compare/trend) that re-parse positionally
 ledger=""; while [ $# -gt 0 ]; do case "$1" in --ledger) ledger="$2"; shift 2;; *) shift;; esac; done
-[ -n "$ledger" ] || ledger="${ARBORETUM_TOKEN_LEDGER:-.arboretum/token-ledger/session.jsonl}"
+# Default reader path must match the writer's device-stable base (#673) so reports
+# find the rows ledger_append just wrote from any worktree/subdir.
+[ -n "$ledger" ] || ledger="${ARBORETUM_TOKEN_LEDGER:-$(arboretum_state_dir)/token-ledger/session.jsonl}"
 
 case "$sub" in
   diagnose)
@@ -150,7 +153,9 @@ PY
     fi
     cfg_dir="$(printf '%s\n' "$cfg" | sed -n 's/^output_dir=//p')"
     cfg_fmt="$(printf '%s\n' "$cfg" | sed -n 's/^format=//p')"
-    [ -n "$out_dir" ] || out_dir="${ARBORETUM_TOKEN_JOURNEY_DIR:-${cfg_dir:-.arboretum/token-journey}}"
+    # cfg_dir is always populated by the config reader (its default is the
+    # device-stable, main-checkout-anchored path, #673/D27).
+    [ -n "$out_dir" ] || out_dir="${ARBORETUM_TOKEN_JOURNEY_DIR:-$cfg_dir}"
     [ -n "$fmt" ] || fmt="${cfg_fmt:-md}"
     # bash 3.2 (macOS default) errors on empty "${arr[@]}" under set -u; guard it.
     bash "$ROOT/scripts/read-session-journey.sh" --transcript "$t" \

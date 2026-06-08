@@ -7,8 +7,11 @@ CONFIG="${1:-.arboretum.yml}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YAML_LITE="$SCRIPT_DIR/lib/yaml-lite.sh"
 [ -f "$YAML_LITE" ] || { echo "read-token-journey-config.sh: yaml-lite helper not found at $YAML_LITE" >&2; exit 1; }
+# Default output_dir is device-stable, anchored at the main checkout (#673, D27);
+# an explicit token_journey.output_dir in config still overrides it verbatim below.
+. "$SCRIPT_DIR/lib/state-dir.sh"
 
-enabled=false; output_dir=".arboretum/token-journey"; format=md
+enabled=false; output_dir="$(arboretum_state_dir)/token-journey"; format=md
 if [ -f "$CONFIG" ]; then
   if ! PARSED=$(bash "$YAML_LITE" file "$CONFIG" 2>&1); then
     echo "read-token-journey-config.sh: invalid YAML-lite in $CONFIG" >&2

@@ -1,6 +1,6 @@
 ---
 script: scripts/read-token-journey-config.sh
-version: 1.0
+version: 1.1
 invokers:
   - type: script
     name: scripts/token-report.sh
@@ -16,9 +16,11 @@ related-designs:
 
 Reads the `token_journey:` block from `.arboretum.yml` (via the shared
 `scripts/lib/yaml-lite.sh` parser) and emits `enabled`/`output_dir`/`format` as
-`key=value` lines on stdout. An absent block or absent keys yield inert built-in
-defaults (`enabled=false`, `output_dir=.arboretum/token-journey`, `format=md`) —
-never an error. `enabled` gates only *automatic* journey-report generation; the
+`key=value` lines on stdout. An absent block or absent keys yield built-in
+defaults (`enabled=false`, `format=md`, and a device-stable
+`output_dir=<state-dir>/token-journey` resolved via `scripts/lib/state-dir.sh`
+— the main checkout's `.arboretum`, not the invoking worktree's, #673/D27) —
+never an error. An explicit `token_journey.output_dir` overrides the default verbatim. `enabled` gates only *automatic* journey-report generation; the
 `token-report.sh journey` subcommand is always runnable by hand. Mirrors
 `scripts/read-patch-lane-config.sh`.
 
@@ -47,7 +49,9 @@ file. Writes nothing to disk and makes no network calls.
 ## Test surface
 
 - **CLI-1: defaults when key absent.** A config file without a `token_journey:`
-  block emits `enabled=false`, `output_dir=.arboretum/token-journey`, `format=md`.
+  block emits `enabled=false`, `format=md`, and a device-stable
+  `output_dir=<main-checkout>/.arboretum/token-journey` (absolute, resolved via
+  `state-dir.sh`), not the bare cwd-relative `.arboretum/token-journey`.
 - **CLI-2: values when present.** A config file with a populated `token_journey:`
   block emits the configured `enabled`/`output_dir`/`format`.
 
@@ -56,3 +60,5 @@ Covered by `scripts/_smoke-test-token-journey.sh`.
 ## Versioning
 
 - **1.0** — initial contract: token_journey config reader with inert defaults (2026-06-07).
+- **1.1** — default `output_dir` is now device-stable, anchored at the main
+  checkout via `state-dir.sh` (#673/D27); explicit config still overrides verbatim (2026-06-08).

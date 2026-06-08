@@ -1,6 +1,6 @@
 ---
 script: scripts/token-cleanup.sh
-version: 1.0
+version: 1.1
 invokers:
   - type: skill
     name: arboretum:/cleanup (Step 3.5)
@@ -25,10 +25,23 @@ it never blocks cleanup, and a missing ledger is reported and exits cleanly.
 
 ### Arguments
 
-No positional arguments. Behaviour is driven by environment variables:
+- `consolidate [--dry-run]` *(optional subcommand)* — one-shot migration of token
+  artifacts scattered across sibling git worktrees into the central
+  (main-checkout) store (#673, D28). Journey files move by their idempotent name
+  (an existing central copy wins, the duplicate is dropped); ledger files (live +
+  archived) are preserved into the central `token-ledger/archive/` under a
+  worktree-prefixed name. Worktree discovery is bounded to `git worktree list`
+  (never an unbounded filesystem walk). `--dry-run` lists planned moves and
+  mutates nothing. Prints a one-line `N journey + M ledger file(s)` summary
+  (no raw dumps, D5).
 
-- `ARBORETUM_STATE_DIR` *(default `.arboretum`)* — root of the state tree; the
-  ledger directory is `<state>/token-ledger`.
+With no subcommand, behaviour is driven by environment variables:
+
+- `ARBORETUM_STATE_DIR` *(optional override)* — root of the state tree; the
+  ledger directory is `<state>/token-ledger`. When unset it defaults to the
+  device-stable root from `scripts/lib/state-dir.sh` (the main checkout's
+  `.arboretum`, not the invoking worktree's, #673), not a bare cwd-relative
+  `.arboretum`.
 - `ARBORETUM_RUN_ID` *(default `session`)* — names the live ledger
   `<run>.jsonl` and the archive prefix.
 - `ARBORETUM_TRANSCRIPT` *(optional)* — when set to an existing file, the
@@ -56,7 +69,13 @@ network calls.
   path, and leaves a timestamped copy under `archive/`.
 - **CLI-2: missing ledger is a clean no-op.** With no ledger for the run, the
   helper reports nothing-to-do and exits `0` without creating an archive.
+- **CLI-3: consolidate migrates worktree artifacts.** Given a sibling worktree
+  with scattered journey/ledger artifacts, `consolidate --dry-run` lists planned
+  moves without mutating; `consolidate` moves them into the main checkout's store
+  and consumes the source.
 
 ## Versioning
 
 - **1.0** — initial contract: cleanup summary + ledger rotation (2026-06-06).
+- **1.1** — state-dir resolution now device-stable (main-checkout-anchored,
+  #673); add `consolidate [--dry-run]` migration subcommand (2026-06-08).
