@@ -59,6 +59,24 @@ out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$big" --stdout
 grep -qiE 'CONTEXT INTAKE' <<<"$out" || fail "intake diagnostic section missing"
 grep -qiE 'Bash cat huge.log' <<<"$out" || fail "Bash intake source not labelled"
 
+# --- #650 item 3: Bash intake label strips the `cd ... &&` navigation preamble ---
+# Governance commands are prefixed `cd "$ROOT" && <cmd>`; the operative command,
+# not the shared cd preamble, must be the grouping key.
+cdp="$work/sess-cdprefix.jsonl"
+cat > "$cdp" <<'JSONL'
+{"uuid":"p1","timestamp":"2026-06-07T10:00:00Z","message":{"id":"pm1","model":"claude-opus-4","content":[{"type":"tool_use","id":"pb","name":"Bash","input":{"command":"cd \"$ROOT\" && bash scripts/ci-checks.sh"}}],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}}}
+{"uuid":"p2","timestamp":"2026-06-07T10:01:00Z","message":{"id":"pm2","content":[{"type":"tool_result","tool_use_id":"pb","content":"YYYY"}]}}
+JSONL
+out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$cdp" --stdout)"
+grep -qiE 'Bash bash scripts/ci-checks.sh' <<<"$out" || fail "item3: cd preamble not stripped from Bash intake label"
+grep -qiE 'Bash cd ' <<<"$out" && fail "item3: cd preamble still dominates Bash intake label"
+
+# --- #650 items 1+2 (md): ctx$/turn skill column + a priced intake ctx$ column ---
+out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --stdout)"
+grep -qiE 'ctx\$/t' <<<"$out" || fail "item2: ctx\$/turn column missing from skill row"
+# intake header advertises an approximate dollar column priced at a model family (ctx$~<fam>)
+grep -qiE 'ctx\$~' <<<"$out" || fail "item1: intake ctx\$ (approx) column missing from CONTEXT INTAKE header"
+
 # --- persistence + idempotency: re-run same transcript = same path + same bytes ---
 outdir="$work/journeys"
 # Path is carried on the pointer line `token-journey report: <path>` (D8 inversion).
@@ -118,6 +136,21 @@ grep -qi 'Bash cat' <<<"$inj_out" || fail "scrub should strip control chars but 
 pj="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --output-dir "$work/j-json" --descriptor issue-627 --format json | sed -n 's/^token-journey report: //p')"
 case "$pj" in *.json) :;; *) fail "json format should produce a .json artifact: $pj";; esac
 python3 -m json.tool "$pj" >/dev/null 2>&1 || fail "--format json artifact is not valid JSON (hollow contract)"
+
+# --- #650 items 1+2 (json): skills carry context_per_turn; intake rows carry context_usd ---
+pjb="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$big" --output-dir "$work/j-json-b" --descriptor big --format json | sed -n 's/^token-journey report: //p')"
+python3 - "$pj" "$pjb" <<'PYCHK' || fail "json must carry context_per_turn (skills) and context_usd (intake)"
+import json, sys
+main = json.load(open(sys.argv[1]))
+sk = main["stages"][0]["skills"][0]
+assert "context_per_turn" in sk, "skill object missing context_per_turn"
+assert sk["context_per_turn"] == round(sk["context"] / (sk["turns"] or 1), 6), "context_per_turn math wrong"
+big = json.load(open(sys.argv[2]))
+assert big["intake"], "big fixture should produce a non-empty intake table"
+row = big["intake"][0]
+assert "context_usd" in row, "intake row missing context_usd"
+assert row["context_usd"] > 0, "context_usd should be a positive context-rent"
+PYCHK
 
 # --- config errors must surface, not silently default ---
 badcfgdir="$work/badcfg"; mkdir -p "$badcfgdir/out"

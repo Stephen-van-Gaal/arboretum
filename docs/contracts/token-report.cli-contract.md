@@ -33,7 +33,14 @@ avoidable cost; compaction-driven deficits are reported but excluded from waste.
 skill / subagent cost from a transcript (with depth-agnostic subagent
 attribution via a `parentUuid` fixpoint join), writes a bounded report artifact,
 and prints a ≤3-line pointer + headline to context; `--stdout` dumps the full
-body. Everything is advisory and opt-in; the reporter gates no workflow.
+body. Each skill row carries a `ctx$/t` (context-dollars per turn) column, and
+the CONTEXT INTAKE table carries an approximate `ctx$~<family>` column pricing
+each source's carry-burden at the session-dominant model family's `cache_read`
+rate (`--format json`: `context_per_turn` on each skill, `context_usd` on each
+intake row, `totals.intake_priced_at` naming the family). These dollar figures are
+approximate ranking aids (`bytes/4` token estimate); `billed` remains the
+real-cost authority. Everything is advisory and opt-in; the reporter gates no
+workflow.
 
 ## Protocol
 
@@ -107,9 +114,15 @@ offline/CI runs fall through to `$ISSUE`/branch/session deterministically.
   body; subagents (including grandchildren) roll up to their originating stage via
   the `parentUuid` fixpoint, broken chains warn without crashing; re-running the
   same transcript is idempotent (same path + bytes); a missing transcript exits
-  `2`. Covered by `scripts/_smoke-test-token-journey.sh`.
+  `2`. The skill rows expose `ctx$/t` and the CONTEXT INTAKE table a priced
+  `ctx$~<family>` column (md) / `context_per_turn` + `context_usd` fields (json), and
+  Bash intake labels group by the operative command with the `cd … &&` preamble
+  stripped. Covered by `scripts/_smoke-test-token-journey.sh`.
 
 ## Versioning
 
 - **1.0** — initial contract: diagnose / billed / compare / trend / busts subcommands (2026-06-06).
 - **1.1** — journey subcommand (2026-06-07).
+- **1.2** — journey report surfaces `ctx$/t` per skill and an approximate
+  `ctx$~<family>` (`context_usd`) intake column priced at the session-dominant
+  family rate; Bash intake labels strip the `cd … &&` navigation preamble (#650, items 1–3) (2026-06-08).
