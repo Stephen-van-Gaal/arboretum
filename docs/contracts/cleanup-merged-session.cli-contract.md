@@ -1,6 +1,6 @@
 ---
 script: scripts/cleanup-merged-session.sh
-version: 1.0
+version: 1.1
 invokers:
   - type: skill
     name: arboretum:/cleanup
@@ -30,9 +30,11 @@ bash scripts/cleanup-merged-session.sh [--branch <name>] [--worktree <path>] [--
 - `--branch <name>` - Optional. Local branch to consider for deletion. Defaults to the current branch in the session root. `main`, `master`, empty branch names, and detached `HEAD` are refused.
 - `--worktree <path>` - Optional. Exact worktree path to consider for removal. Defaults to the current repository root.
 - `--remove-active-worktree` - Optional. Allows the helper to remove the active session worktree only as its terminal action after all safety gates pass and removal succeeds.
+- `--plan` - Optional. Read-only. Runs every safety gate and emits a `plan=ready` or `plan=blocked` status line **without mutating** the repository. Mutually exclusive with `--execute`.
+- `--execute` - Optional. The default when no mode flag is given. Re-runs every gate and then performs branch/worktree cleanup. Mutually exclusive with `--plan`.
 - `--help` - Prints usage and exits 0.
 
-Unknown arguments exit 2.
+Unknown arguments exit 2. Supplying both `--plan` and `--execute` exits 2.
 
 ### Required gates
 
@@ -57,8 +59,10 @@ The script writes one token-oriented status line per decision:
 - `worktree=removed active=true|false`
 - `worktree=kept reason=<reason>`
 - `session=terminal reason=active-worktree-removed action=end-or-reopen-session`
+- `plan=ready branch=<name> worktree=<path> branch-mode=safe|force-squash remove-worktree=yes|no active=yes|no`
+- `plan=blocked reason=<reason>`
 
-Invocation and tool setup failures exit `2`. Safety refusals exit `1`. Successful cleanup exits `0`.
+Under `--plan`, gate failures (exit 1) emit `plan=blocked reason=<reason>` using the same reason vocabulary as `cleanup=skipped`, and no mutation occurs. Invocation and tool setup failures (exit 2 — `bad-arg`, `mode-conflict`, `missing-roadmap-lib`, `not-git-worktree`, `unsupported-backend`) always emit `cleanup=skipped reason=<reason>` regardless of mode — a setup error never masquerades as a `plan=blocked` safety refusal. `--plan` is read-only for **any** target, including the active worktree, so it never refuses with `active-worktree-needs-flag` (that gate is `--execute`-only). Safety refusals exit `1`. Successful cleanup (or a ready plan) exits `0`.
 
 ## Test surface
 
@@ -72,7 +76,13 @@ Invocation and tool setup failures exit `2`. Safety refusals exit `1`. Successfu
 - **CLI-8: Unproven local commits.** A branch whose local SHA is not contained by the provider PR head/source SHA emits `cleanup=skipped reason=unproven-local-commits` and exits 1.
 - **CLI-9: Active worktree terminal action.** When the exact active linked worktree is safely removed, the helper emits `worktree=removed active=true` and `session=terminal reason=active-worktree-removed action=end-or-reopen-session`.
 - **CLI-10: Active removal failure.** When active worktree removal fails, the helper emits `worktree=kept reason=remove-failed`, exits 1, and does not emit the terminal session token.
+- **CLI-11: Plan ready (safe).** `--plan` on a provider-merged merge-commit branch emits `plan=ready … branch-mode=safe` and mutates nothing.
+- **CLI-12: Plan ready (squash).** `--plan` on a squash-merged provider-proven branch emits `plan=ready … branch-mode=force-squash` and mutates nothing.
+- **CLI-13: Plan blocked.** `--plan` on a dirty or unproven target emits `plan=blocked reason=<reason>` (exit 1) and mutates nothing.
+- **CLI-14: Mode exclusion.** `--plan --execute` together exits 2.
+- **CLI-15: Execute default.** No mode flag behaves as `--execute` (existing CLI-5…CLI-10 cases).
 
 ## Versioning
 
 - **1.0** - initial provider-proven local branch and worktree cleanup helper contract for issue #490 (2026-06-03).
+- **1.1** - additive read-only `--plan` mode and `plan=ready`/`plan=blocked` tokens for driver dry-run; `--execute` default preserved (issue #644, 2026-06-07).

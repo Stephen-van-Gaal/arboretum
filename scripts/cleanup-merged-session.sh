@@ -6,11 +6,25 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 cleanup-merged-session
-Usage: bash scripts/cleanup-merged-session.sh [--branch <name>] [--worktree <path>] [--remove-active-worktree]
+Usage: bash scripts/cleanup-merged-session.sh [--branch <name>] [--worktree <path>] [--remove-active-worktree] [--plan | --execute]
+
+  --plan      Read-only: run every gate and emit plan=ready/plan=blocked; mutate nothing.
+  --execute   Default. Re-prove every gate, then perform cleanup. Mutually exclusive with --plan.
 USAGE
 }
 
+# Gate failures (exit 1) are mode-aware: plan=blocked under --plan, else cleanup=skipped.
 skip() {
+  if [ "${MODE:-execute}" = plan ]; then
+    echo "plan=blocked reason=$1"
+  else
+    echo "cleanup=skipped reason=$1"
+  fi
+}
+
+# Invocation / setup / tool errors (exit 2) are not gate blocks — always cleanup=skipped,
+# regardless of mode, so a usage error never masquerades as a plan=blocked safety refusal.
+arg_err() {
   echo "cleanup=skipped reason=$1"
 }
 
@@ -23,17 +37,19 @@ TARGET_BRANCH=""
 TARGET_WORKTREE=""
 BRANCH_EXPLICIT=false
 REMOVE_ACTIVE=false
+MODE=execute
+MODE_SET=false
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch)
-      [ -n "${2:-}" ] || { skip "bad-arg"; usage; exit 2; }
+      [ -n "${2:-}" ] || { arg_err "bad-arg"; usage; exit 2; }
       TARGET_BRANCH="$2"
       BRANCH_EXPLICIT=true
       shift 2
       ;;
     --worktree)
-      [ -n "${2:-}" ] || { skip "bad-arg"; usage; exit 2; }
+      [ -n "${2:-}" ] || { arg_err "bad-arg"; usage; exit 2; }
       TARGET_WORKTREE="$2"
       shift 2
       ;;
@@ -41,8 +57,20 @@ while [ "$#" -gt 0 ]; do
       REMOVE_ACTIVE=true
       shift
       ;;
+    --plan)
+      [ "$MODE_SET" = true ] && [ "$MODE" != plan ] && { arg_err "mode-conflict"; exit 2; }
+      MODE=plan
+      MODE_SET=true
+      shift
+      ;;
+    --execute)
+      [ "$MODE_SET" = true ] && [ "$MODE" != execute ] && { arg_err "mode-conflict"; exit 2; }
+      MODE=execute
+      MODE_SET=true
+      shift
+      ;;
     *)
-      skip "bad-arg"
+      arg_err "bad-arg"
       usage
       exit 2
       ;;
@@ -51,10 +79,10 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROADMAP_LIB="$SCRIPT_DIR/roadmap/lib.sh"
-[ -f "$ROADMAP_LIB" ] || { skip "missing-roadmap-lib"; exit 2; }
+[ -f "$ROADMAP_LIB" ] || { arg_err "missing-roadmap-lib"; exit 2; }
 
 SESSION_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-[ -n "$SESSION_ROOT" ] || { skip "not-git-worktree"; exit 2; }
+[ -n "$SESSION_ROOT" ] || { arg_err "not-git-worktree"; exit 2; }
 
 DEFAULT_BRANCH="$(git -C "$SESSION_ROOT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|^refs/remotes/origin/||' || true)"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
@@ -143,7 +171,10 @@ print(os.path.realpath(os.environ["ACTIVE_ROOT"]))
 PY
 )"
 fi
-if [ "$TARGET_WORKTREE" != "$CONTROL_WORKTREE" ] && [ "$TARGET_WORKTREE" = "$ACTIVE_ROOT" ] && [ "$REMOVE_ACTIVE" != true ]; then
+# --execute on the active worktree requires the explicit flag. --plan is read-only,
+# so it must reach the plan result and report active=yes regardless of the flag —
+# the main thread (not the driver) performs the terminal removal with the flag.
+if [ "$MODE" != plan ] && [ "$TARGET_WORKTREE" != "$CONTROL_WORKTREE" ] && [ "$TARGET_WORKTREE" = "$ACTIVE_ROOT" ] && [ "$REMOVE_ACTIVE" != true ]; then
   skip "active-worktree-needs-flag"
   exit 1
 fi
@@ -151,6 +182,12 @@ fi
 # shellcheck source=scripts/roadmap/lib.sh
 source "$ROADMAP_LIB"
 BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$SESSION_ROOT")}"
+# Emit the structured unsupported-backend token before roadmap_require_backend,
+# which would otherwise exit 2 with only raw stderr and no cleanup=skipped reason.
+case "$BACKEND" in
+  github|azure-devops) ;;
+  *) arg_err "unsupported-backend"; exit 2 ;;
+esac
 if [ "$BACKEND" = "github" ] && ! command -v gh >/dev/null 2>&1 && [ -x /opt/homebrew/bin/gh ]; then
   PATH="/opt/homebrew/bin:$PATH"
 fi
@@ -193,7 +230,7 @@ PY
 )"
     ;;
   *)
-    skip "unsupported-backend"
+    arg_err "unsupported-backend"
     exit 2
     ;;
 esac
@@ -207,6 +244,28 @@ fi
 if [ "$TARGET_WORKTREE" != "$CONTROL_WORKTREE" ] && [ -n "$(git -C "$CONTROL_WORKTREE" status --porcelain 2>/dev/null || true)" ]; then
   skip "control-worktree-dirty"
   exit 1
+fi
+
+if [ "$MODE" = plan ]; then
+  if [ "$TARGET_WORKTREE" = "$CONTROL_WORKTREE" ]; then
+    REMOVE_WT=no
+  else
+    REMOVE_WT=yes
+  fi
+  if [ "$TARGET_WORKTREE" = "$ACTIVE_ROOT" ]; then
+    ACTIVE_WT=yes
+  else
+    ACTIVE_WT=no
+  fi
+  DEFAULT_TIP="$(git -C "$SESSION_ROOT" rev-parse --verify "refs/remotes/origin/$DEFAULT_BRANCH^{commit}" 2>/dev/null \
+    || git -C "$SESSION_ROOT" rev-parse --verify "refs/heads/$DEFAULT_BRANCH^{commit}" 2>/dev/null || true)"
+  if [ -n "$DEFAULT_TIP" ] && git -C "$SESSION_ROOT" merge-base --is-ancestor "$LOCAL_SHA" "$DEFAULT_TIP" 2>/dev/null; then
+    BRANCH_MODE=safe
+  else
+    BRANCH_MODE=force-squash
+  fi
+  echo "plan=ready branch=$TARGET_BRANCH worktree=$TARGET_WORKTREE branch-mode=$BRANCH_MODE remove-worktree=$REMOVE_WT active=$ACTIVE_WT"
+  exit 0
 fi
 
 git -C "$CONTROL_WORKTREE" checkout "$DEFAULT_BRANCH" >/dev/null 2>&1 || { skip "checkout-default-failed"; exit 1; }

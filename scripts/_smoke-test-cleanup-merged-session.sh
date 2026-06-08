@@ -260,3 +260,100 @@ assert_not_contains "$out" 'worktree=removed active=true' "failed active removal
 assert_not_contains "$out" 'session=terminal reason=active-worktree-removed action=end-or-reopen-session' "failed active removal emitted terminal token"
 [ -d "$linked" ] || fail "failed active worktree directory was removed"
 pass "active session terminal tokens emit only after removal succeeds"
+
+# --- Task 1: mode parsing ---
+repo="$(setup_repo mode-exclusive)"
+commit_on_branch "$repo" mode-branch "mode"
+mode_sha="$(git -C "$repo" rev-parse mode-branch)"
+git -C "$repo" checkout -q main
+out="$(run_helper "$repo" "$mode_sha" --branch mode-branch --worktree "$repo" --plan --execute 2>&1)" && rc=0 || rc=$?
+[ "$rc" -eq 2 ] || fail "plan+execute together exited $rc (want 2)"
+assert_contains "$out" 'cleanup=skipped reason=mode-conflict' "mode-conflict should emit a setup-error token"
+assert_not_contains "$out" 'plan=blocked' "exit-2 setup error must not masquerade as plan=blocked"
+pass "--plan and --execute together are rejected"
+
+# --- Task 2: read-only --plan emission ---
+# --plan ready (safe, merge-commit) and proves no mutation
+repo="$(setup_repo plan-safe)"
+commit_on_branch "$repo" plan-safe-branch "plan safe"
+plan_safe_sha="$(git -C "$repo" rev-parse plan-safe-branch)"
+git -C "$repo" checkout -q main
+git -C "$repo" merge -q --no-ff plan-safe-branch -m "merge plan safe"
+git -C "$repo" push -q origin main
+linked="$TMP/plan-safe-linked"
+git -C "$repo" worktree add -q "$linked" plan-safe-branch
+out="$(run_helper "$repo" "$plan_safe_sha" --branch plan-safe-branch --worktree "$linked" --plan 2>&1)" || fail "plan-safe helper failed: $out"
+assert_contains "$out" 'plan=ready' "plan-safe ready token missing"
+assert_contains "$out" 'branch-mode=safe' "plan-safe branch-mode missing"
+assert_contains "$out" 'remove-worktree=yes' "plan-safe remove-worktree missing"
+git -C "$repo" rev-parse --verify plan-safe-branch >/dev/null 2>&1 || fail "plan mode deleted the branch"
+[ -d "$linked" ] || fail "plan mode removed the worktree"
+pass "--plan reports ready (safe) and mutates nothing"
+
+# --plan ready (force-squash)
+repo="$(setup_repo plan-squash)"
+commit_on_branch "$repo" plan-squash-branch "plan squash"
+plan_squash_sha="$(git -C "$repo" rev-parse plan-squash-branch)"
+git -C "$repo" checkout -q main
+git -C "$repo" merge -q --squash plan-squash-branch >/dev/null
+git -C "$repo" commit -q -m "squash plan branch"
+git -C "$repo" push -q origin main
+linked="$TMP/plan-squash-linked"
+git -C "$repo" worktree add -q "$linked" plan-squash-branch
+out="$(run_helper "$repo" "$plan_squash_sha" --branch plan-squash-branch --worktree "$linked" --plan 2>&1)" || fail "plan-squash helper failed: $out"
+assert_contains "$out" 'branch-mode=force-squash' "plan-squash branch-mode missing"
+git -C "$repo" rev-parse --verify plan-squash-branch >/dev/null 2>&1 || fail "plan mode deleted the squash branch"
+pass "--plan reports ready (force-squash) and mutates nothing"
+
+# --plan blocked (dirty)
+repo="$(setup_repo plan-dirty)"
+commit_on_branch "$repo" plan-dirty-branch "plan dirty"
+plan_dirty_sha="$(git -C "$repo" rev-parse plan-dirty-branch)"
+printf 'dirt\n' > "$repo/untracked.txt"
+out="$(run_helper "$repo" "$plan_dirty_sha" --branch plan-dirty-branch --worktree "$repo" --plan 2>&1)" && rc=0 || rc=$?
+[ "$rc" -eq 1 ] || fail "plan-dirty exited $rc (want 1)"
+assert_contains "$out" 'plan=blocked reason=dirty-worktree' "plan-dirty blocked token missing"
+assert_not_contains "$out" 'cleanup=skipped' "plan mode emitted execute-mode skip token"
+pass "--plan reports blocked (dirty) without mutating"
+
+# --plan blocked (unproven local commits)
+repo="$(setup_repo plan-unproven)"
+commit_on_branch "$repo" plan-unproven-branch "provider"
+plan_unproven_sha="$(git -C "$repo" rev-parse plan-unproven-branch)"
+printf 'local-only\n' > "$repo/local-only.txt"
+git -C "$repo" add local-only.txt
+git -C "$repo" commit -q -m "local only"
+git -C "$repo" checkout -q main
+linked="$TMP/plan-unproven-linked"
+git -C "$repo" worktree add -q "$linked" plan-unproven-branch
+out="$(run_helper "$repo" "$plan_unproven_sha" --branch plan-unproven-branch --worktree "$linked" --plan 2>&1)" && rc=0 || rc=$?
+[ "$rc" -eq 1 ] || fail "plan-unproven exited $rc (want 1)"
+assert_contains "$out" 'plan=blocked reason=unproven-local-commits' "plan-unproven blocked token missing"
+pass "--plan reports blocked (unproven) without mutating"
+
+# --plan on the ACTIVE worktree (cwd == target, no --remove-active-worktree flag):
+# read-only plan must reach plan=ready active=yes, not block on active-worktree-needs-flag.
+repo="$(setup_repo plan-active)"
+commit_on_branch "$repo" plan-active-branch "plan active"
+plan_active_sha="$(git -C "$repo" rev-parse plan-active-branch)"
+git -C "$repo" checkout -q main
+git -C "$repo" merge -q --no-ff plan-active-branch -m "merge plan active"
+git -C "$repo" push -q origin main
+linked="$TMP/plan-active-linked"
+git -C "$repo" worktree add -q "$linked" plan-active-branch
+out="$(run_helper "$linked" "$plan_active_sha" --branch plan-active-branch --worktree "$linked" --plan 2>&1)" || fail "plan-active helper failed: $out"
+assert_contains "$out" 'plan=ready' "plan-active ready token missing"
+assert_contains "$out" 'active=yes' "plan-active should report active=yes"
+assert_not_contains "$out" 'active-worktree-needs-flag' "read-only --plan must not block on the active flag"
+[ -d "$linked" ] || fail "plan mode removed the active worktree"
+pass "--plan on the active worktree reports ready (active=yes) without the flag"
+
+# Unsupported backend emits the structured setup-error token (exit 2), not raw stderr.
+# Keep the repo checked out on the target branch so the worktree gates pass and
+# execution reaches the backend guard.
+repo="$(setup_repo unsupported-backend)"
+commit_on_branch "$repo" ub-branch "ub"
+out="$( (cd "$repo"; PATH="$STUB_BIN:$PATH" ROADMAP_BACKEND=bogus bash "$HELPER" --branch ub-branch --worktree "$repo" 2>&1) )" && rc=0 || rc=$?
+[ "$rc" -eq 2 ] || fail "unsupported backend exited $rc (want 2): $out"
+assert_contains "$out" 'cleanup=skipped reason=unsupported-backend' "unsupported-backend token missing"
+pass "unsupported backend emits a structured token before requiring the backend"
