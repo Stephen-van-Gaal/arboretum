@@ -65,9 +65,12 @@ CONTRACTS="$PROJECT_DIR/contracts.yaml"
 DEFS_DIR="$PROJECT_DIR/docs/definitions"
 SPECS_DIR="$PROJECT_DIR/docs/specs"
 
-drift_found=false
+# Severity-tiered finding counters (S2 #641): warn() emits blocking ✗,
+# advise() emits advisory ⚠. The exit code summarizes the run:
+#   0 = clean · 1 = ≥1 blocking finding · 2 = advisory-only findings.
+blocking_count=0
+advisory_count=0
 check_count=0
-issue_count=0
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -83,8 +86,12 @@ ok() {
 
 warn() {
   echo "  ✗ $1"
-  drift_found=true
-  ((issue_count++)) || true
+  ((blocking_count++)) || true
+}
+
+advise() {
+  echo "  ⚠ $1"
+  ((advisory_count++)) || true
 }
 
 info() {
@@ -719,7 +726,7 @@ if [ ! -f "$REGISTER" ]; then
   echo ""
   echo "Register not found — skipping checks 2-5."
   echo ""
-  echo "Summary: $issue_count issues found across $check_count checks."
+  echo "Summary: $blocking_count blocking finding(s) across $check_count checks."
   exit 1
 fi
 
@@ -968,7 +975,7 @@ else
     [[ "$def_file_path" == *.md ]] || def_file_path="${def_file_path}.md"
     def_file="$PROJECT_DIR/docs/$def_file_path"
     if [ ! -f "$def_file" ]; then
-      warn "Definition not found: $def_path (pinned at $pinned_version in contracts.yaml)"
+      advise "Definition not found: $def_path (pinned at $pinned_version in contracts.yaml)"
       ((stale_count++)) || true
       continue
     fi
@@ -978,10 +985,10 @@ else
       | grep -oE 'v[0-9]+' | head -1 || true)
 
     if [ -z "$current_version" ]; then
-      warn "$def_path: no version found in file (pinned at $pinned_version)"
+      advise "$def_path: no version found in file (pinned at $pinned_version)"
       ((stale_count++)) || true
     elif [ "$current_version" != "$pinned_version" ]; then
-      warn "$def_path: pinned=$pinned_version, current=$current_version — STALE"
+      advise "$def_path: pinned=$pinned_version, current=$current_version — STALE"
       ((stale_count++)) || true
     else
       ok "$def_path: $current_version (current)"
@@ -1212,7 +1219,7 @@ while IFS='|' read -r _ spec status _ owns _; do
     # supported configuration for projects that want drift surfaced but
     # don't want auto-flips (e.g. they manage status manually).
     if [ -z "$STATUS_STALE_STATE" ]; then
-      warn "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — no stale_state configured, not flipping"
+      advise "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — no stale_state configured, not flipping"
       ((drift_flipped++)) || true
       continue
     fi
@@ -1241,9 +1248,9 @@ s/^${status}\$/${STATUS_STALE_STATE}/
       fi
       rm -f "$spec_file.bak"
 
-      warn "$spec: flipped ${status} → ${STATUS_STALE_STATE} (drift: $drift_file modified after spec's last commit $spec_last_commit)"
+      advise "$spec: flipped ${status} → ${STATUS_STALE_STATE} (drift: $drift_file modified after spec's last commit $spec_last_commit)"
     else
-      warn "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — run with --reconcile to update"
+      advise "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — run with --reconcile to update"
     fi
     ((drift_flipped++)) || true
   else
@@ -1308,7 +1315,7 @@ else
     if echo "$plan_content" | grep -qE '^## Tests?(\s|$)'; then
       ok "$plan_name has a Tests section"
     else
-      info "$plan_name: test-prudent plan without a ## Tests section"
+      advise "$plan_name: test-prudent plan without a ## Tests section"
       ((plans_warned++)) || true
     fi
   done
@@ -1442,7 +1449,7 @@ if [ -z "$anchor_output" ]; then
 else
   while IFS= read -r line; do
     if [[ "$line" == WARN* ]]; then
-      warn "${line#WARN }"
+      advise "${line#WARN }"
     elif [[ -n "$line" ]]; then
       info "$line"
     fi
@@ -1457,12 +1464,19 @@ fi
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ "$drift_found" = true ]; then
-  echo "DRIFT DETECTED: $issue_count issues found across $check_count checks."
+# Three-level severity exit (S2 #641): blocking wins over advisory.
+if [ "$blocking_count" -gt 0 ]; then
+  echo "DRIFT DETECTED: $blocking_count blocking finding(s) (✗) across $check_count checks."
+  [ "$advisory_count" -gt 0 ] && echo "                plus $advisory_count advisory finding(s) (⚠)."
   echo ""
   echo "Review the issues above and resolve before implementing."
   echo "Do not auto-fix — the architecture owner approves changes."
   exit 1
+elif [ "$advisory_count" -gt 0 ]; then
+  echo "ADVISORIES: $advisory_count advisory finding(s) (⚠) across $check_count checks; no blocking drift."
+  echo ""
+  echo "Advisory findings are nudges, not blockers — address when convenient."
+  exit 2
 else
   echo "HEALTHY: No drift detected across $check_count checks."
   exit 0

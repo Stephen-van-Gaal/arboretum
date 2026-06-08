@@ -275,6 +275,45 @@ else
   fail_case "HC-2: expected exit 0 after removing violator, got $exit_clean" "$CLEAN_OUT"
 fi
 
+# ── HC-2 (S2 #641): three-level severity exit code ───────────────────
+#
+# The fixture is now clean (violators removed → exit 0). Advisory checks
+# 5/7/9 cannot fire on it: contracts.yaml is empty (no pins → no Check 5
+# staleness), the fixture is not a git repo (Check 7 skips), and there is
+# no roadmap.config.yaml (Check 9 skips). So a single advisory finding can
+# be isolated via Check 8 (test-prudent plan without a ## Tests section).
+mkdir -p "$FIXTURE/docs/plans"
+cat > "$FIXTURE/docs/plans/advisory-only.md" <<'INNER'
+# Plan: advisory-only fixture
+
+This plan will implement and modify src/alpha.py. It deliberately omits a
+Tests section so Check 8 flags it as a test-prudent plan without ## Tests.
+INNER
+
+bash "$HC" "$FIXTURE" >/dev/null 2>&1
+exit_advisory=$?
+if [ "$exit_advisory" -eq 2 ]; then
+  pass "HC-2: advisory-only findings (Check 8) exit 2"
+else
+  ADV_OUT=$(bash "$HC" "$FIXTURE" 2>&1 || true)
+  fail_case "HC-2: expected exit 2 for advisory-only finding, got $exit_advisory" "$ADV_OUT"
+fi
+
+# Precedence: a blocking finding alongside the advisory one → exit 1 (blocking
+# wins). Remove a required governed document to trigger Check 1 (blocking).
+mv "$FIXTURE/workflows/README.md" "$FIXTURE/workflows/README.md.hidden"
+bash "$HC" "$FIXTURE" >/dev/null 2>&1
+exit_precedence=$?
+if [ "$exit_precedence" -eq 1 ]; then
+  pass "HC-2: blocking finding wins over advisory (exit 1)"
+else
+  PREC_OUT=$(bash "$HC" "$FIXTURE" 2>&1 || true)
+  fail_case "HC-2: expected exit 1 when blocking+advisory both present, got $exit_precedence" "$PREC_OUT"
+fi
+# Restore the clean fixture state for downstream assertions.
+mv "$FIXTURE/workflows/README.md.hidden" "$FIXTURE/workflows/README.md"
+rm -f "$FIXTURE/docs/plans/advisory-only.md"
+
 # ── HC-6: PROJECT_DIR-isolation ──────────────────────────────────────
 #
 # Caller's CWD differs from PROJECT_DIR. Three assertions per Codex
@@ -547,7 +586,8 @@ INNER
 PRE_SPEC=$(grep "^status:" "$DRIFT_FIXTURE/docs/specs/zeta.spec.md")
 PRE_REG=$(grep "zeta.spec.md" "$DRIFT_FIXTURE/docs/REGISTER.md")
 
-# Capture exit code on read-only run — drift exists, so exit must be 1.
+# Capture exit code on read-only run — advisory drift exists (Check 7 is
+# advisory, S2 #641), so exit must be 2.
 bash "$HC" "$DRIFT_FIXTURE" >/dev/null 2>&1
 readonly_exit=$?
 
@@ -559,18 +599,19 @@ if [ "$PRE_SPEC" = "$POST_SPEC" ] && [ "$PRE_REG" = "$POST_REG" ]; then
 else
   fail_case "HC-5: Check 7 mutated state without --reconcile" "spec: $PRE_SPEC -> $POST_SPEC | register: $PRE_REG -> $POST_REG"
 fi
-if [ "$readonly_exit" -eq 1 ]; then
-  pass "HC-5: Check 7 read-only run exits 1 (drift present)"
+if [ "$readonly_exit" -eq 2 ]; then
+  pass "HC-5: Check 7 read-only run exits 2 (advisory drift present)"
 else
-  fail_case "HC-5: Check 7 read-only run expected exit 1 (drift), got $readonly_exit"
+  fail_case "HC-5: Check 7 read-only run expected exit 2 (advisory drift), got $readonly_exit"
 fi
 
 # Capture exit code on --reconcile run. Per HC-2 contract:
-# "--reconcile does not change exit-code semantics." So even after the
-# auto-flip Check 7 still emits a ✗ drift line and exits 1 (the script
-# doesn't suppress findings just because it mutated). Codex round-3
-# caught the missing exit-code assertion (the original `|| true` masked
-# any regression where --reconcile dropped exit-1 along with the flip).
+# "--reconcile does not change exit-code semantics." Check 7 is an advisory
+# check (S2 #641), so even after the auto-flip it still emits a ⚠ drift line
+# and exits 2 (the script doesn't suppress findings just because it mutated).
+# Codex round-3 caught the missing exit-code assertion (the original `|| true`
+# masked any regression where --reconcile dropped the finding along with the
+# flip).
 bash "$HC" --reconcile "$DRIFT_FIXTURE" >/dev/null 2>&1
 reconcile_exit=$?
 
@@ -582,10 +623,10 @@ if echo "$RECONCILED_SPEC" | grep -qE "status:[[:space:]]+stale" && echo "$RECON
 else
   fail_case "HC-5: Check 7 --reconcile did not flip both surfaces" "spec: $RECONCILED_SPEC | register: $RECONCILED_REG"
 fi
-if [ "$reconcile_exit" -eq 1 ]; then
-  pass "HC-5: Check 7 --reconcile run still exits 1 (drift findings independent of mutation)"
+if [ "$reconcile_exit" -eq 2 ]; then
+  pass "HC-5: Check 7 --reconcile run still exits 2 (advisory drift findings independent of mutation)"
 else
-  fail_case "HC-5: Check 7 --reconcile expected exit 1 (per HC-2 contract: --reconcile doesn't change exit-code semantics), got $reconcile_exit"
+  fail_case "HC-5: Check 7 --reconcile expected exit 2 (per HC-2 contract: --reconcile doesn't change exit-code semantics), got $reconcile_exit"
 fi
 
 # ── HC-9: Check 7 content-aware — benign diff does NOT flag ───────────

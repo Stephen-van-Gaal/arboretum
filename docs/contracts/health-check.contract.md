@@ -1,6 +1,6 @@
 ---
 seam: health-check
-version: 1.0
+version: 1.3
 producer-type: script
 consumer-type: script
 consumes:
@@ -26,7 +26,7 @@ The seam between `scripts/health-check.sh` (the project's drift-finding producer
 
 `scripts/health-check.sh` — producer-type: `script`.
 
-Runs nine numbered checks against a project directory (defaults to `pwd`, overridable via positional arg). Each check emits a `━━━ Check N: <name> ━━━` header followed by zero or more finding lines prefixed by `✓` (ok), `·` (info), or `✗` (warn). The script's exit code is `0` if no `warn` line was emitted by any check, `1` otherwise (one or more drift findings). All path resolution uses `PROJECT_DIR` (the arg or default) — never `$(pwd)` directly, never `git rev-parse --show-toplevel` — so the script is safe to invoke against a remote project tree from any working directory.
+Runs nine numbered checks against a project directory (defaults to `pwd`, overridable via positional arg). Each check emits a `━━━ Check N: <name> ━━━` header followed by zero or more finding lines prefixed by `✓` (ok), `·` (info), `✗` (blocking warn), or `⚠` (advisory). The script's exit code is three-level (S2 #641): `0` when no finding was emitted, `1` when any blocking check (1/2/3/4/6) emitted a `✗` line, `2` when only advisory checks (5/7/8/9) emitted `⚠` lines (blocking wins on precedence). All path resolution uses `PROJECT_DIR` (the arg or default) — never `$(pwd)` directly, never `git rev-parse --show-toplevel` — so the script is safe to invoke against a remote project tree from any working directory.
 
 Check 7 is read-only by default; passing `--reconcile` is the only thing that mutates files (status flips from active → stale in spec frontmatter and REGISTER.md). All other checks are always read-only. Check 9 (Strategic Anchor) emits a single info line `· Skipped — roadmap.config.yaml not present` when `roadmap.config.yaml` is absent (from the wrapper at `scripts/health-check.sh:1190`), and no `✗` warn lines — so projects that haven't adopted the roadmap system see only the skipped-info line, not failures.
 
@@ -70,36 +70,39 @@ Output format: each check section starts with a header line `━━━ Check N: 
 
 - `  ✓ <message>` — ok (informational pass)
 - `  · <message>` — info (non-failing observation, e.g. extended-enum acknowledgement, governs-narrative citation)
-- `  ✗ <message>` — warn (drift finding; contributes to exit 1)
+- `  ✗ <message>` — warn (blocking drift finding; contributes to exit 1)
+- `  ⚠ <message>` — advise (advisory finding; contributes to exit 2)
 
-Exit code:
+Exit code (three-level, severity-tiered — S2 #641):
 
-- `0` if no `warn` line was emitted by any check (clean run)
-- `1` if any `warn` line was emitted (drift detected)
+- `0` if no finding line was emitted by any check (clean run)
+- `1` if any **blocking** check (1/2/3/4/6) emitted a `✗` line
+- `2` if only **advisory** checks (5/7/8/9) emitted `⚠` lines and no blocking finding is present (blocking wins on precedence)
 
-The `--reconcile` flag does NOT change exit-code semantics — Check 7's mutations don't suppress findings from other checks; they just clean up the active→stale drift in-place. Exit code still reflects whether any check (including the now-mutated Check 7) emitted a warn.
+The `--reconcile` flag does NOT change exit-code semantics — Check 7's mutations don't suppress findings from other checks; they just clean up the active→stale drift in-place. Exit code still reflects the highest-severity finding emitted (any blocking `✗` → `1`, else any advisory `⚠` → `2`, else `0`), including by the now-mutated Check 7 (itself an advisory check).
 
 ### Invariants
 
 - **Output-format stability.** Each check's section begins with the `━━━ Check N: <name> ━━━` header line. Consumers parse output by check-section boundaries; reordering or renaming check headers is a producer-side schema break.
-- **Exit-code contract.** Exit 0 iff no `warn` line was emitted; exit 1 otherwise. `--reconcile` does not change this — Check 7 mutations and drift findings are independent dimensions.
+- **Exit-code contract (three-level, severity-tiered — S2 #641).** Exit `0` when no finding was emitted; `1` when any blocking check (1/2/3/4/6) emitted a `✗` line; `2` when only advisory checks (5/7/8/9) emitted `⚠` lines (blocking precedence: any blocking finding yields `1`). `--reconcile` does not change this — Check 7 mutations and drift findings are independent dimensions. See the Severity classification invariant below and HC-2.
 - **Status-enum invariant (Check 6).** Status MUST be in the configured enum (default `{draft, active, stale}` per the plugin's canonical vocabulary; configurable per-project via `.arboretum.yml status_enum:`). Unknown values: in configured projects, per-spec `warn`; in default projects, aggregate into a single post-loop `info` line (`Project uses extended status enum...`) to avoid per-spec warning floods.
 - **Consumer-root framework owner applicability (Check 3 Half A).** In plugin roots, every owner marker on scanned shell/bin/SKILL surfaces must resolve to `docs/specs/<owner>.spec.md`. In consumer roots, a scanned file listed in `.arboretum/install-manifest.json` is framework-managed: if its owner marker is well-formed but the named Arboretum-internal spec is not installed locally, Check 3 emits an info line rather than a drift finding. This carve-out applies only to manifest-managed files; malformed markers and local non-managed files with missing owner specs remain `warn` findings.
 - **Active-empty-owns discipline (Check 6, post-#176).** When a spec has `status: active` AND `owns` resolves to empty (empty list, `(none)`, or `—`): if the spec's frontmatter declares a non-empty `governs-narrative:` value, Check 6 emits `info` with the narrative cited (existing carve-out preserved); if `governs-narrative:` is unset or empty, Check 6 emits `warn` (contributes to exit 1) — the `active + owns:[] + no governs-narrative` conjunction is a write-time contradiction.
-- **Check 7 read-only default.** Without `--reconcile`, Check 7 reports drift findings via `warn` lines but does NOT mutate any file. With `--reconcile`, Check 7 flips `active → stale` in BOTH the spec's frontmatter AND its REGISTER.md row (both surfaces must update atomically — the in-place sed editing is the implementation).
+- **Severity classification (S2 #641).** Every check is **blocking** or **advisory**. Blocking = {1, 2, 3, 4, 6} (a present, committed inconsistency between artifacts) → `warn()` emits `✗` and contributes to exit `1`. Advisory = {5, 7, 8, 9} (heuristic / proxy / nudge) → `advise()` emits `⚠` and contributes to exit `2`. Severity is a first-class producer signal (the consumer reads the exit code rather than reconstructing severity from output text). This split is fixed by the contract; reclassifying a check is a contract change.
+- **Check 7 read-only default.** Without `--reconcile`, Check 7 reports drift findings via `⚠` advisory lines (Check 7 is advisory per the severity classification above) but does NOT mutate any file. With `--reconcile`, Check 7 flips `active → stale` in BOTH the spec's frontmatter AND its REGISTER.md row (both surfaces must update atomically — the in-place sed editing is the implementation). The `--reconcile` flip does not change exit-code semantics: the advisory finding still yields exit `2`.
 - **PROJECT_DIR isolation.** All path resolution inside the script derives from the `PROJECT_DIR` variable (positional arg or `pwd` default). The script MUST NOT call `git rev-parse --show-toplevel` to discover paths — that would resolve relative to the caller's CWD instead of `PROJECT_DIR`, breaking invocations against a remote project tree. Strategic Anchor (Check 9) and all other path-derived state must be `PROJECT_DIR`-rooted.
 - **Check 9 roadmap-config gating.** `roadmap.config.yaml` absent → Check 9 emits exactly one info line `· Skipped — roadmap.config.yaml not present` (from the wrapper code at `scripts/health-check.sh:1190` when `strategic_anchor_check` returns empty) and no `✗` warn lines. Present → Check 9 runs normally (verifies `## Strategic Anchor` section in CLAUDE.md, in/out scope bullets exist, review-cadence date not overdue). The gate is on file presence, not content.
 
 ## Test surface
 
 - **HC-1: Output-format-stability.** Each invoked check's section begins with the `━━━ Check N: <name> ━━━` header. The smoke test asserts the headers for at least Checks 1, 6, 7, and 9 are present in a clean fixture run.
-- **HC-2: Exit-code contract.** `bash scripts/health-check.sh <fixture>` exits 0 when the fixture has no drift; exit 1 when at least one check emits a `warn` line. Adding `--reconcile` does not change these semantics. The smoke test asserts both branches (no-drift and drift fixtures) with and without `--reconcile`.
+- **HC-2: Exit-code contract (three-level, severity-tiered — S2 #641).** `bash scripts/health-check.sh <fixture>` exits `0` when the fixture has no findings; `1` when at least one **blocking** check (1, 2, 3, 4, 6) emits a `✗` line; `2` when only **advisory** checks (5, 7, 8, 9) emit `⚠` lines and no blocking finding is present. **Blocking precedence:** any blocking finding yields exit `1` even when advisory findings are also present. Adding `--reconcile` does not change these semantics. The smoke test asserts all branches: no-finding (`0`), advisory-only (`2`), blocking (`1`), and blocking-wins precedence (`1`), with and without `--reconcile`.
 - **HC-3: Status-enum-invariant.** A fixture spec at an unconfigured-extended-enum status (e.g. `ready`) triggers the post-loop info line `Project uses extended status enum (states observed: ...)` rather than per-spec warns. (The contract assertion covers the default-project extended-enum branch; the configured-project typo branch — `.arboretum.yml status_enum:` block present plus a typo-like status — is part of Check 6's behaviour but is not pinned by HC-3 in this contract. If a future regression of the configured-enum parser matters enough to pin, add it as a separate HC-3b assertion in a follow-up PR.)
 - **HC-4: Active-owns-discipline (closes #176).** Two fixture specs both at `status: active` + `owns: []`:
   - spec-with-narrative: declares `governs-narrative: <value>` → Check 6 emits `· <spec>: status=active but owns no files (governs narrative: <value>)` AND the script's exit code is unaffected.
   - spec-without-narrative: no `governs-narrative:` field → Check 6 emits `✗ <spec>: status=active but owns no files AND no governs-narrative declared — contradiction (...)` AND the script's exit code is 1.
   The smoke test asserts both output lines AND the exit-code transition between the two fixture sub-cases.
-- **HC-5: Check-7-read-only-default.** Fixture: one spec at `status: active` whose owned file has a **non-benign (behaviour) change** committed after the spec's last commit (a comment/whitespace/frontmatter-only change is benign under Check 7's content-aware classifier and would not flag — see HC-9). Without `--reconcile`: Check 7 emits a `✗` drift finding; spec frontmatter and REGISTER.md row are byte-identical to pre-run. With `--reconcile`: same spec at `status: stale` in both the spec frontmatter and REGISTER.md row after the run. Smoke test diffs pre-/post-run state for both flag-modes.
+- **HC-5: Check-7-read-only-default.** Fixture: one spec at `status: active` whose owned file has a **non-benign (behaviour) change** committed after the spec's last commit (a comment/whitespace/frontmatter-only change is benign under Check 7's content-aware classifier and would not flag — see HC-9). Without `--reconcile`: Check 7 emits a `⚠` advisory drift finding (exit `2`); spec frontmatter and REGISTER.md row are byte-identical to pre-run. With `--reconcile`: same spec at `status: stale` in both the spec frontmatter and REGISTER.md row after the run, and the run still exits `2` (the advisory finding is independent of the mutation). Smoke test diffs pre-/post-run state and asserts the exit code for both flag-modes.
 - **HC-6: PROJECT_DIR-isolation.** Run `cd $UNRELATED_DIR && bash $FIXTURE_DIR/scripts/health-check.sh $FIXTURE_DIR` (caller's CWD differs from PROJECT_DIR). The smoke test asserts: (a) no `$UNRELATED_DIR` path string appears anywhere in stdout; (b) `$FIXTURE_DIR` paths DO appear; (c) exit code matches a same-CWD baseline run. Pins against `git rev-parse --show-toplevel` regressions in any check function.
 - **HC-7: Check-9-roadmap-gating.** Two fixture projects:
   - Main fixture: no `roadmap.config.yaml` → Check 9 emits the single info line `· Skipped — roadmap.config.yaml not present` (from the wrapper at `scripts/health-check.sh:1190`) and zero `✗` warn lines. Assertion: zero `✗` lines inside the Check 9 section.
@@ -109,6 +112,7 @@ The `--reconcile` flag does NOT change exit-code semantics — Check 7's mutatio
 
 ## Versioning
 
+- **1.3** (2026-06-08) — Findings are severity-tiered (S2 #641). HC-2 becomes a three-level exit-code contract: `0` clean / `1` ≥1 blocking finding (`✗`; checks 1/2/3/4/6) / `2` advisory-only findings (`⚠`; checks 5/7/8/9), with blocking precedence (any blocking finding yields `1`). Adds a severity-classification property; the Check 7 read-only/`--reconcile` property and HC-5 now describe advisory (`⚠`, exit `2`) findings. The frontmatter `version:` is corrected to track the changelog head (was stale at `1.0`). Issue #641 / epic #640.
 - **1.2** (2026-06-07) — Check 7 is now content-aware (#238): a drift candidate (owned file committed after its spec) only flags when the net change is non-benign. HC-5's fixture change becomes a behaviour change (a comment-only edit is now benign); adds HC-9 (benign diff-classes do not flag). Issue #238 / epic #640.
 - **1.1** (2026-06-02) — Check 3 Half A now treats `.arboretum/install-manifest.json` as the consumer-root authority for vendored framework files whose Arboretum-internal owner specs are not installed locally. Adds HC-8. Issue #477.
 - **1.0** (2026-05-27) — initial contract. Producer + consumer shapes as of `scripts/health-check.sh` post-Task-0b on `main`. Closes #176 (active+empty-owns + no governs-narrative is a contradiction) as "non-recurrable by construction" — HC-4 asserts both branches in CI; any future regression that loses the governs-narrative escape or fails to fail on the no-narrative case will red-bar the smoke test.
