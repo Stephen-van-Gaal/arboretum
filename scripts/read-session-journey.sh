@@ -153,6 +153,7 @@ def add_children(session_path, tree, uuid_root, fam_ctx=None):
     sid=os.path.splitext(os.path.basename(session_path))[0]
     subdir=os.path.join(os.path.dirname(session_path), sid, 'subagents')
     agents={p: child_summary(p) for p in sorted(glob.glob(os.path.join(subdir,'agent-*.jsonl')))}
+    warnings=[]  # #655 item 5: collected for an in-file footer, not just stderr
     resolved={}
     # Fixpoint: resolve any agent whose parent is known, seeding its own uuids,
     # until no further progress. Depth-agnostic — grandchildren resolve once
@@ -170,8 +171,10 @@ def add_children(session_path, tree, uuid_root, fam_ctx=None):
     for p,s in agents.items():
         root=resolved.get(p)
         if root is None:
-            sys.stderr.write(f"warn: unresolved subagent parentUuid in {os.path.basename(p)} "
-                             f"(parent={s['parent']}); attributing to (pre-workflow)\n")
+            w=(f"unresolved subagent parentUuid in {os.path.basename(p)} "
+               f"(parent={s['parent']}); attributing to (pre-workflow)")
+            warnings.append(w)
+            sys.stderr.write(f"warn: {w}\n")
             root=('(pre-workflow)','(direct)')
         st,_=root
         key=f"⤷ Agent:{s['label']} [{fam(s['model'])}]"
@@ -179,8 +182,12 @@ def add_children(session_path, tree, uuid_root, fam_ctx=None):
         a['ctx']+=s['ctx']; a['op']+=s['op']; a['turns']+=s['turns']
         if fam_ctx is not None:
             fam_ctx[fam(s['model'])]=fam_ctx.get(fam(s['model']),0.0)+s['ctx']
+    # #655 item 4: subagent_count distinguishes "none ran" (no agent files) from a
+    # fixpoint join miss (files present but unresolved → still produce rows + warn).
+    return len(agents), warnings
 
-def render(tree, intakes, total_turns, lines, dom_fam='opus', dom_rate=0.0):
+def render(tree, intakes, total_turns, lines, dom_fam='opus', dom_rate=0.0,
+           subagent_count=0, warnings=None):
     g_ctx=sum(s['ctx'] for st in tree.values() for s in st.values())
     g_op =sum(s['op']  for st in tree.values() for s in st.values())
     lines.append(f"context$={g_ctx:.3f} operation$={g_op:.3f} total$={g_ctx+g_op:.3f} "
@@ -205,11 +212,32 @@ def render(tree, intakes, total_turns, lines, dom_fam='opus', dom_rate=0.0):
     # stage/skill half. Approximate (bytes/4 token estimate) — billed remains authoritative.
     lines.append("\n  CONTEXT INTAKE (burden = bytes × turns-resident):")
     lines.append(f"  {'source':<40}{'KB in':>8}{'reads':>7}{'burden(MB·turn)':>16}{'ctx$~'+dom_fam:>12}")
-    for src,b in sorted(by_src.items(), key=lambda kv:-kv[1]['burden'])[:12]:
+    ranked=sorted(by_src.items(), key=lambda kv:-kv[1]['burden'])
+    for src,b in ranked[:12]:
         context_usd=b['burden']/4*dom_rate/1e6
         lines.append(f"  {src[:40]:<40}{b['bytes']/1024:>8.1f}{b['n']:>7}{b['burden']/1e6:>16.1f}{context_usd:>12.4f}")
+    # #655 item 6: no silent [:12] cap — account for the dropped tail (CLAUDE.md
+    # "no silent caps"). Remainder $ sums the same approximate context-rent.
+    rest=ranked[12:]
+    if rest:
+        rem_usd=sum(b['burden']/4*dom_rate/1e6 for _,b in rest)
+        lines.append(f"  … +{len(rest)} more, ${rem_usd:.4f} remainder")
+    # #655 item 4: make subagent presence explicit so the reader can tell
+    # "none ran" from a fixpoint join miss.
+    if subagent_count==0:
+        lines.append("\n  subagents: none detected")
+    # #655 item 5: carry stderr warnings into the artifact (D8 output-inversion —
+    # the operator reads the file, not stderr) so a (pre-workflow) bucket from an
+    # unresolved chain is explained rather than reading as a bug.
+    if warnings:
+        lines.append("\n  NOTES:")
+        for w in warnings:
+            lines.append(f"    - warn: {w}")
+        lines.append("    (pre-workflow) above holds cost from subagents whose parent "
+                     "turn could not be resolved (see warnings).")
 
-def render_json(tree, intakes, total_turns, dom_fam='opus', dom_rate=0.0):
+def render_json(tree, intakes, total_turns, dom_fam='opus', dom_rate=0.0,
+                subagent_count=0, warnings=None):
     g_ctx=sum(s['ctx'] for st in tree.values() for s in st.values())
     g_op =sum(s['op']  for st in tree.values() for s in st.values())
     stages=[]
@@ -229,15 +257,31 @@ def render_json(tree, intakes, total_turns, dom_fam='opus', dom_rate=0.0):
         resident=max(0,total_turns-ti)
         b=by_src[src]; b['bytes']+=size; b['burden']+=size*resident; b['n']+=1
     # #650 item 1: context_usd ≈ approximate context-rent at the dominant family rate (D2).
+    ranked=sorted(by_src.items(), key=lambda kv:-kv[1]['burden'])
     intake=[{"source":src, "bytes":b['bytes'], "reads":b['n'], "burden":round(b['burden'],1),
              "context_usd":round(b['burden']/4*dom_rate/1e6,6)}
-            for src,b in sorted(by_src.items(), key=lambda kv:-kv[1]['burden'])[:12]]
-    return json.dumps({
+            for src,b in ranked[:12]]
+    out={
         "totals":{"context":round(g_ctx,6), "operation":round(g_op,6),
                   "total":round(g_ctx+g_op,6), "tax":round(g_ctx/(g_op or 1e-9),3),
                   "intake_priced_at":dom_fam},
+        # #655 item 4: explicit subagent presence (detected==0 ⟺ none ran).
+        "subagents":{"detected":subagent_count},
         "stages":stages, "intake":intake,
-    }, indent=2)
+    }
+    # #655 item 6: no silent [:12] cap — surface the dropped intake tail.
+    rest=ranked[12:]
+    if rest:
+        out["intake_remainder"]={
+            "more":len(rest),
+            "bytes":sum(b['bytes'] for _,b in rest),
+            "reads":sum(b['n'] for _,b in rest),
+            "context_usd":round(sum(b['burden']/4*dom_rate/1e6 for _,b in rest),6),
+        }
+    # #655 item 5: warnings carried into the artifact (see render() footer).
+    if warnings:
+        out["notes"]=list(warnings)
+    return json.dumps(out, indent=2)
 
 def last_ts(path):
     ts=None
@@ -248,15 +292,15 @@ def last_ts(path):
     return ts or '0000-00-00T000000Z'
 
 tree, uuid_root, intakes, total_turns, fam_ctx = process(transcript)
-add_children(transcript, tree, uuid_root, fam_ctx)
+subagent_count, warnings = add_children(transcript, tree, uuid_root, fam_ctx)
 # #650 item 1 / D2: intake rows aren't model-tagged, so price carry-burden in $
 # at the session-dominant model family's cache_read rate (fall back to opus when
 # no family carried context spend).
 dom_fam = max(fam_ctx, key=fam_ctx.get) if any(v>0 for v in fam_ctx.values()) else 'opus'
 dom_rate = FAM[dom_fam]['cache_read']
-lines=[]; render(tree, intakes, total_turns, lines, dom_fam, dom_rate)
+lines=[]; render(tree, intakes, total_turns, lines, dom_fam, dom_rate, subagent_count, warnings)
 # md → human-readable table; json → machine-consumable structure (real JSON, D10).
-report=render_json(tree, intakes, total_turns, dom_fam, dom_rate) if fmt=="json" else "\n".join(lines)
+report=render_json(tree, intakes, total_turns, dom_fam, dom_rate, subagent_count, warnings) if fmt=="json" else "\n".join(lines)
 # Deterministic, transcript-sourced filename — re-runs are idempotent.
 stamp=last_ts(transcript)
 safe=''.join(ch for ch in stamp if ch.isalnum() or ch=='-')  # 2026-06-07T10:01:00Z -> 2026-06-07T100100Z
@@ -281,6 +325,9 @@ if to_stdout:
     else: print(path)
 else:
     print(f"token-journey report: {path}")
-    print(f"  total$={g_ctx+g_op:.3f}  context-tax={g_ctx/(g_op or 1e-9):.1f}x"
-          + (f"  top-subagent={top_sub[0].split(':',1)[1]} ${top_sub[1]:.2f}" if top_sub else ""))
+    # #655 item 4: never silently drop subagent info — when none ran, say so
+    # explicitly instead of leaving the headline ambiguous.
+    sub_seg = (f"  top-subagent={top_sub[0].split(':',1)[1]} ${top_sub[1]:.2f}"
+               if top_sub else "  subagents: none detected")
+    print(f"  total$={g_ctx+g_op:.3f}  context-tax={g_ctx/(g_op or 1e-9):.1f}x" + sub_seg)
 PY

@@ -22,6 +22,9 @@ grep -qiE 'brainstorming' <<<"$out" || fail "brainstorming skill not attributed 
 #   m2 (brainstorming): ctx=10000*0.50/1e6=0.005  op=(200*5 + 100*25)/1e6 = 0.00350
 #   total = 0.005 + 0.00525 = 0.01025 -> renders 0.010 at 3dp
 grep -qiE 'total\$?=?0\.010' <<<"$out" || fail "total cost math wrong (expected 0.010)"
+# #655 item 4: no subagents have been spawned yet (no sess-abc/subagents dir) →
+# the artifact must say so explicitly, not silently omit the section.
+grep -qiE 'subagents: none detected' <<<"$out" || fail "item4: 'subagents: none detected' missing when no subagents ran"
 
 # --- subagent fixpoint: 2-level nesting (grandchild attributes to design) ---
 mkdir -p "$work/sess-abc/subagents"
@@ -35,6 +38,8 @@ cat > "$work/sess-abc/subagents/agent-grand.jsonl" <<'JSONL'
 JSONL
 out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --stdout)"
 grep -qiE 'Agent:general-purpose' <<<"$out" || fail "child subagent not joined"
+# #655 item 4: with subagents present, the "none detected" line must disappear.
+grep -qiE 'none detected' <<<"$out" && fail "item4: 'none detected' must not appear when subagents are present"
 grep -qiE 'Agent:Explore'         <<<"$out" || fail "grandchild subagent not joined (fixpoint failed)"
 # both subagents must land under the design stage block, not (pre-workflow)
 grep -qiE 'STAGE +design' <<<"$out" || fail "subagents not attributed to design stage"
@@ -47,6 +52,14 @@ cat > "$work/sess-broken/subagents/agent-orphan.jsonl" <<'JSONL'
 JSONL
 warn="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$work/sess-broken.jsonl" --stdout 2>&1 >/dev/null)"
 grep -qiE 'warn.*unresolved' <<<"$warn" || fail "broken parentUuid should warn on stderr"
+# #655 item 5: the same warning must be carried into the report BODY (footer),
+# since under output-inversion (D8) the operator reads the file, not stderr.
+broken_body="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$work/sess-broken.jsonl" --stdout 2>/dev/null)"
+grep -qiE 'NOTES:' <<<"$broken_body" || fail "item5: warnings footer (NOTES:) missing from report body"
+grep -qiE 'unresolved' <<<"$broken_body" || fail "item5: unresolved warning not carried into the in-file footer"
+grep -qiE 'pre-workflow.*could not be resolved' <<<"$broken_body" || fail "item5: (pre-workflow) bucket left unexplained in footer"
+# The broken fixture has an agent file present (just unresolved) → NOT "none detected".
+grep -qiE 'none detected' <<<"$broken_body" && fail "item4: join-miss (agent present) must not report 'none detected'"
 
 # --- intake diagnostic: a big early Bash read should top carry-burden ---
 big="$work/sess-intake.jsonl"
@@ -159,5 +172,37 @@ cp "$main" "$badcfgdir/t.jsonl"
 if ( cd "$badcfgdir" && ARBORETUM_TRANSCRIPT="t.jsonl" bash "$ROOT/scripts/token-report.sh" journey --output-dir out >/dev/null 2>&1 ); then
   fail "invalid .arboretum.yml should make journey arm exit non-zero (not silently default)"
 fi
+
+# --- #655 item 6: no silent [:12] intake cap — a >12-source session must emit a
+# "… +N more, $X remainder" line (md) and an intake_remainder object (json). ---
+many="$work/sess-many.jsonl"
+: > "$many"
+for i in $(seq 1 14); do
+  printf '{"uuid":"mu%s","timestamp":"2026-06-07T10:%02d:00Z","message":{"id":"mm%s","model":"claude-opus-4","content":[{"type":"tool_use","id":"mt%s","name":"Bash","input":{"command":"echo src%s"}}],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}}}\n' "$i" "$i" "$i" "$i" "$i" >> "$many"
+  printf '{"uuid":"mr%s","timestamp":"2026-06-07T10:%02d:30Z","message":{"id":"mmr%s","content":[{"type":"tool_result","tool_use_id":"mt%s","content":"DATADATADATADATA"}]}}\n' "$i" "$i" "$i" "$i" >> "$many"
+done
+many_out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$many" --stdout)"
+grep -qE '… \+2 more, \$[0-9.]+ remainder' <<<"$many_out" || fail "item6: intake remainder line missing for >12 sources"
+
+# --- #655 items 4+6 (json parity): subagents summary + intake_remainder + notes ---
+pjm="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$many" --output-dir "$work/j-many" --descriptor many --format json | sed -n 's/^token-journey report: //p')"
+pjs="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --output-dir "$work/j-main" --descriptor main --format json | sed -n 's/^token-journey report: //p')"
+pjbroken="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$work/sess-broken.jsonl" --output-dir "$work/j-broken" --descriptor broken --format json 2>/dev/null | sed -n 's/^token-journey report: //p')"
+python3 - "$pjm" "$pjs" "$pjbroken" "$pjb" <<'PYCHK' || fail "json parity for #655 items 4/5/6 failed"
+import json, sys
+many, mainj, broken, big = (json.load(open(p)) for p in sys.argv[1:5])
+# item 6: dropped intake tail surfaced, not silently capped
+assert len(many["intake"]) == 12, "intake list should still be capped at 12 rows"
+rem = many.get("intake_remainder")
+assert rem and rem["more"] == 2, "intake_remainder.more should account for the 2 dropped sources"
+assert rem["context_usd"] > 0, "intake_remainder.context_usd should be a positive remainder"
+assert "intake_remainder" not in big, "no remainder object when <=12 sources"
+# item 4: explicit subagent count (main has child+grandchild; big has none)
+assert mainj["subagents"]["detected"] == 2, "main should report 2 detected subagents"
+assert big["subagents"]["detected"] == 0, "big (no agent files) should report detected==0"
+# item 5: warnings carried into json notes for an unresolved chain
+assert broken.get("notes"), "broken-chain session should carry warnings in json notes"
+assert any("unresolved" in n for n in broken["notes"]), "notes should name the unresolved chain"
+PYCHK
 
 echo "PASS token-journey"

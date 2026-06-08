@@ -1,6 +1,6 @@
 ---
 script: scripts/token-report.sh
-version: 1.1
+version: 1.3
 invokers:
   - type: script
     name: scripts/token-cleanup.sh
@@ -39,8 +39,15 @@ each source's carry-burden at the session-dominant model family's `cache_read`
 rate (`--format json`: `context_per_turn` on each skill, `context_usd` on each
 intake row, `totals.intake_priced_at` naming the family). These dollar figures are
 approximate ranking aids (`bytes/4` token estimate); `billed` remains the
-real-cost authority. Everything is advisory and opt-in; the reporter gates no
-workflow.
+real-cost authority. The artifact is self-describing: subagent presence is stated
+explicitly (`subagents: none detected` when no subagent transcript ran, versus a
+fixpoint join miss which produces `⤷ Agent:` rows plus a warning); unresolved-chain
+warnings are carried into an in-file `NOTES:` footer (not only stderr) so an
+operator reading the artifact under output-inversion sees why a `(pre-workflow)`
+bucket exists; and the CONTEXT INTAKE table never silently caps — beyond the top 12
+sources it appends a `… +N more, $X remainder` line (`--format json`:
+`subagents.detected`, a top-level `notes` array, and an `intake_remainder` object).
+Everything is advisory and opt-in; the reporter gates no workflow.
 
 ## Protocol
 
@@ -117,7 +124,13 @@ offline/CI runs fall through to `$ISSUE`/branch/session deterministically.
   `2`. The skill rows expose `ctx$/t` and the CONTEXT INTAKE table a priced
   `ctx$~<family>` column (md) / `context_per_turn` + `context_usd` fields (json), and
   Bash intake labels group by the operative command with the `cd … &&` preamble
-  stripped. Covered by `scripts/_smoke-test-token-journey.sh`.
+  stripped. The artifact is self-describing: a session with no subagent transcripts
+  prints `subagents: none detected` (and the default-mode headline says so instead of
+  silently dropping `top-subagent`); an unresolved subagent chain warns on stderr AND
+  carries the warning into an in-file `NOTES:` footer that explains the `(pre-workflow)`
+  bucket; and an intake table with more than 12 sources appends a `… +N more, $X
+  remainder` line (json: `subagents.detected`, `notes`, `intake_remainder`) rather than
+  silently truncating. Covered by `scripts/_smoke-test-token-journey.sh`.
 
 ## Versioning
 
@@ -126,3 +139,8 @@ offline/CI runs fall through to `$ISSUE`/branch/session deterministically.
 - **1.2** — journey report surfaces `ctx$/t` per skill and an approximate
   `ctx$~<family>` (`context_usd`) intake column priced at the session-dominant
   family rate; Bash intake labels strip the `cd … &&` navigation preamble (#650, items 1–3) (2026-06-08).
+- **1.3** — journey artifact is self-describing: explicit `subagents: none detected`
+  line (md + default headline; json `subagents.detected`), unresolved-chain warnings
+  carried into an in-file `NOTES:` footer (json `notes`), and a `… +N more, $X
+  remainder` line replacing the silent intake `[:12]` cap (json `intake_remainder`)
+  (#655, items 4–6) (2026-06-08).
