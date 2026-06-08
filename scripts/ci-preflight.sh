@@ -8,9 +8,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APPLY_SAFE_REPAIRS=0
 CONTINUE_AFTER_REPAIR=0
 SCOPE="standard"
-BRANCH_CONTEXT="auto"
-DEFAULT_BRANCH="${CI_PREFLIGHT_DEFAULT_BRANCH:-main}"
-EFFECTIVE_CONTEXT="integration"
 REPAIR_COMMIT_MODE="none"
 REPAIR_BRANCH="${CI_PREFLIGHT_REPAIR_BRANCH:-}"
 PUSH_SAFE_REPAIRS=0
@@ -25,7 +22,7 @@ repair_branch_prepared=0
 declare -a blockers=()
 
 usage() {
-  echo "usage: ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [--branch-context auto|in-flight|integration] [--continue-after-repair] [--repair-commit-mode none|same-branch|repair-pr] [--repair-branch <branch>] [--push-safe-repairs] [--gh-cmd <cmd>] [--root <path>]" >&2
+  echo "usage: ci-preflight.sh [--apply-safe-repairs] [--scope standard|release] [--continue-after-repair] [--repair-commit-mode none|same-branch|repair-pr] [--repair-branch <branch>] [--push-safe-repairs] [--gh-cmd <cmd>] [--root <path>]" >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -41,11 +38,6 @@ while [ "$#" -gt 0 ]; do
     --scope)
       [ $# -ge 2 ] || { usage; exit 2; }
       SCOPE="$2"
-      shift 2
-      ;;
-    --branch-context)
-      [ $# -ge 2 ] || { usage; exit 2; }
-      BRANCH_CONTEXT="$2"
       shift 2
       ;;
     --repair-commit-mode)
@@ -92,14 +84,6 @@ case "$SCOPE" in
     ;;
 esac
 
-case "$BRANCH_CONTEXT" in
-  auto|in-flight|integration) ;;
-  *)
-    echo "ci-preflight: invalid branch context '$BRANCH_CONTEXT' (expected auto, in-flight, or integration)" >&2
-    exit 2
-    ;;
-esac
-
 case "$REPAIR_COMMIT_MODE" in
   none|same-branch|repair-pr) ;;
   *)
@@ -129,46 +113,8 @@ fi
 
 before_status="$(git -C "$ROOT" status --short 2>/dev/null || true)"
 
-# Resolve whether this run validates an in-flight feature branch or the
-# integration/default branch. Check-7 built-state drift is expected on a
-# feature branch (reconciled at /consolidate) and must not block there; it
-# stays blocking at integration and in release scope.
-#
-# Release scope is always integration. An explicit --branch-context wins over
-# auto-detection. Auto compares HEAD's commit to origin/<default>'s tip by SHA
-# (robust to detached-HEAD CI checkouts); if either ref is unresolvable
-# (e.g. no origin locally) it falls back to in-flight so local feature work is
-# never blocked — hosted CI always fetches the ref, so the real gate is intact.
-resolve_branch_context() {
-  if [ "$SCOPE" = "release" ]; then
-    echo "integration"
-    return
-  fi
-  case "$BRANCH_CONTEXT" in
-    in-flight|integration)
-      echo "$BRANCH_CONTEXT"
-      return
-      ;;
-  esac
-
-  local head_sha def_sha
-  head_sha="$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null)" || { echo "in-flight"; return; }
-  def_sha="$(git -C "$ROOT" rev-parse --verify "refs/remotes/origin/$DEFAULT_BRANCH" 2>/dev/null)" || { echo "in-flight"; return; }
-  if [ "$head_sha" = "$def_sha" ]; then
-    echo "integration"
-  else
-    echo "in-flight"
-  fi
-}
-
-EFFECTIVE_CONTEXT="$(resolve_branch_context)"
-
 add_blocker() {
   blockers+=("$1")
-}
-
-has_unrecorded_health_drift() {
-  grep -Fq 'run with --reconcile to update'
 }
 
 ensure_clean_for_auto_commit() {
@@ -201,62 +147,46 @@ prepare_repair_branch_if_needed() {
 
 run_health_preflight() {
   local health_script="$ROOT/scripts/health-check.sh"
-  local out rc reconcile_out
+  local out rc
 
   if [ ! -x "$health_script" ]; then
     echo "SKIP: scripts/health-check.sh not installed"
     return
   fi
 
+  # health-check.sh is the single severity authority (S2 #641): exit 0 = clean,
+  # 1 = at least one blocking finding, 2 = advisory-only findings. Read the exit
+  # code; never re-derive severity from the output text or the git branch — the
+  # content-aware classifier (S1/S2) already tagged each finding's severity.
   rc=0
   out="$(bash "$health_script" "$ROOT" 2>&1)" || rc=$?
   rc=${rc:-0}
 
-  if ! printf '%s\n' "$out" | has_unrecorded_health_drift; then
-    echo "PASS: no unrecorded health-check drift"
-    return
-  fi
-
-  if [ "$EFFECTIVE_CONTEXT" = "in-flight" ]; then
-    # The branch-context gate downgrades ONLY Check 7 built-state drift. If the
-    # health-check output also carries non-Check-7 failures (✗ lines that are
-    # not the Check 7 drift marker), those are out of this gate's scope and must
-    # still block — do not let the Check-7 warning path hide them.
-    other_failures="$(printf '%s\n' "$out" | grep -F '✗' | grep -Fv 'run with --reconcile to update' || true)"
-    if [ -z "$other_failures" ]; then
-      echo "WARNING: Check-7 built-state drift on in-flight branch — expected before /consolidate; reconcile before merge (not blocking here):"
-      printf '%s\n' "$out" | grep -F 'run with --reconcile to update' | sed 's/^/  /'
-      return
-    fi
-    echo "Non-Check-7 health failure present alongside Check-7 drift — blocking despite in-flight branch context."
-  fi
-
-  echo "BLOCKER: unrecorded health-check drift"
-  if [ "$APPLY_SAFE_REPAIRS" -ne 1 ]; then
-    add_blocker "unrecorded health-check drift"
-    return
-  fi
-
-  ensure_clean_for_auto_commit || return
-  prepare_repair_branch_if_needed || return
-  echo "REPAIR: bash scripts/health-check.sh --reconcile"
-  reconcile_out="$(mktemp "${TMPDIR:-/tmp}/ci-preflight-health-reconcile.XXXXXX")" || {
-    add_blocker "could not create health-check repair output file"
-    return
-  }
-  bash "$health_script" --reconcile "$ROOT" >"$reconcile_out" 2>&1 || true
-  rm -f "$reconcile_out"
-  repair_applied=1
-
-  rc=0
-  out="$(bash "$health_script" "$ROOT" 2>&1)" || rc=$?
-  rc=${rc:-0}
-  if printf '%s\n' "$out" | has_unrecorded_health_drift; then
-    add_blocker "unresolved unrecorded health-check drift after repair"
-    return
-  fi
-
-  echo "PASS: unrecorded health-check drift repaired or recorded"
+  case "$rc" in
+    0)
+      echo "PASS: no health-check drift"
+      ;;
+    2)
+      # Advisory-only findings (e.g. Check-7 built-state drift). Surface them so
+      # they stay visible, but never block and never reconcile — /consolidate is
+      # the reconciler. This holds on every branch; severity is intrinsic to the
+      # finding, so there is no in-flight vs. integration special case.
+      echo "ADVISORY: health-check reported advisory findings (non-blocking):"
+      printf '%s\n' "$out" | grep -F '⚠' | sed 's/^/  /'
+      ;;
+    1)
+      echo "BLOCKER: health-check reported blocking findings"
+      printf '%s\n' "$out" | grep -F '✗' | sed 's/^/  /'
+      add_blocker "blocking health-check findings"
+      ;;
+    *)
+      # Defensive: an unexpected exit code (crash, usage error) is treated as
+      # blocking — fail closed rather than waving an unknown state through.
+      echo "BLOCKER: health-check exited $rc (unexpected); treating as blocking"
+      printf '%s\n' "$out" | sed 's/^/  /'
+      add_blocker "health-check exited $rc (unexpected)"
+      ;;
+  esac
 }
 
 run_coverage_preflight() {
@@ -473,7 +403,6 @@ commit_repair_changes() {
 
 echo "=== CI preflight ==="
 echo "scope=$SCOPE"
-echo "branch-context=$EFFECTIVE_CONTEXT"
 
 run_health_preflight
 run_coverage_preflight

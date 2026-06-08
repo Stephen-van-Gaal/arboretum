@@ -76,6 +76,11 @@ GH
   chmod +x "$dir/gh"
 }
 
+# Fixture health-check.sh emits the three-level severity exit code S2 (#641)
+# introduced: 0 = clean, 1 = >=1 blocking finding, 2 = advisory-only findings.
+# Check-7 built-state drift is classified advisory (S1/S2), so the `drift` state
+# emits exit 2 while still printing the real `run with --reconcile to update`
+# marker text — proving the consumer reads the exit code, not the marker.
 make_fixture() {
   local name="$1" health_state="$2" coverage_state="$3" release_blocker="${4:-0}"
   local repo="$TMP/$name/repo"
@@ -110,45 +115,38 @@ REGISTER
   cat >"$repo/scripts/health-check.sh" <<'HEALTH'
 #!/usr/bin/env bash
 set -uo pipefail
-reconcile=0
+# Consumer no longer calls --reconcile for health drift; accept and ignore the
+# flag for robustness.
 if [ "${1:-}" = "--reconcile" ]; then
-  reconcile=1
   shift
 fi
 root="${1:-$(pwd)}"
-state_file="$root/health_state"
-state="$(cat "$state_file")"
+state="$(cat "$root/health_state")"
 case "$state" in
   clean)
     echo "HEALTHY: No drift detected across 9 checks."
     exit 0
     ;;
-  recorded)
-    echo "  ✗ example.spec.md: status=stale — drift recorded; run /consolidate to reconcile"
-    exit 1
-    ;;
   drift)
-    if [ "$reconcile" -eq 1 ]; then
-      printf '%s\n' recorded >"$state_file"
-      python3 - "$root/docs/specs/example.spec.md" "$root/docs/REGISTER.md" <<'PY'
-from pathlib import Path
-import sys
-for arg in sys.argv[1:]:
-    path = Path(arg)
-    path.write_text(path.read_text().replace("active", "stale"), encoding="utf-8")
-PY
-      echo "  ✗ example.spec.md: flipped active -> stale (drift: scripts/example.sh modified after spec)"
-      exit 1
-    fi
-    echo "  ✗ example.spec.md: drift detected (scripts/example.sh modified after spec's last commit abc123) — run with --reconcile to update"
+    # Advisory: Check-7 built-state drift. Real S2 advise() still prints the
+    # reconcile marker; severity is carried by the exit code, not the text.
+    echo "  ⚠ example.spec.md: drift detected (scripts/example.sh modified after spec's last commit abc123) — run with --reconcile to update"
+    echo "ADVISORIES: 1 advisory finding (⚠) across 9 checks; no blocking drift."
+    exit 2
+    ;;
+  recorded)
+    echo "  ⚠ example.spec.md: status=stale — drift recorded; run /consolidate to reconcile"
+    echo "ADVISORIES: 1 advisory finding (⚠) across 9 checks; no blocking drift."
+    exit 2
+    ;;
+  blocking)
+    echo "  ✗ Check 3: docs/specs/example.spec.md references missing file scripts/ghost.sh"
+    echo "DRIFT DETECTED: 1 blocking finding (✗) across 9 checks."
     exit 1
     ;;
-  drift-plus)
-    # Check-7 drift co-occurring with a non-Check-7 health failure (e.g. Check 2
-    # register-vs-disk). The branch-context gate must NOT hide the other failure.
-    echo "  ✗ example.spec.md: drift detected (scripts/example.sh modified after spec's last commit abc123) — run with --reconcile to update"
-    echo "  ✗ Check 2: register lists scripts/missing.sh but it does not exist on disk"
-    exit 1
+  crash)
+    echo "health-check: unexpected internal error" >&2
+    exit 3
     ;;
 esac
 echo "unexpected health state: $state" >&2
@@ -208,81 +206,119 @@ UPDATE
   printf '%s\n' "$repo"
 }
 
-# Move a fixture's HEAD onto a feature branch ahead of origin/main, so the
-# auto branch-context detection resolves to in-flight (HEAD != origin tip).
-# The health-check stub is state-driven, so commit content is irrelevant to
-# drift detection; only the branch position matters for context resolution.
-make_inflight() {
-  local repo="$1"
-  git -C "$repo" "${GIT_ID[@]}" checkout -q -b feature/inflight
-  printf '%s\n' "x" >"$repo/scripts/example.sh"
-  git -C "$repo" "${GIT_ID[@]}" add scripts/example.sh
-  git -C "$repo" "${GIT_ID[@]}" commit -q -m "feature change"
-}
-
 [ -f "$CONTRACT" ] || { echo "FAIL: contract missing: $CONTRACT" >&2; exit 1; }
 [ -f "$SCRIPT" ] || { echo "FAIL: script missing: $SCRIPT" >&2; exit 1; }
 
+# ── Contract shape (retained surfaces) ──────────────────────────────────
 contains "contract names safe repairs" "Safe repairs" "$CONTRACT"
 contains "contract names release scope" "Release scope" "$CONTRACT"
 contains "contract names automated commit modes" "Automated commit modes" "$CONTRACT"
 contains "contract names continue-after-repair" "continue-after-repair" "$CONTRACT"
 contains "contract includes manual PR diagram" "Manual PR automation" "$CONTRACT"
 contains "contract includes nightly diagram" "Nightly automation" "$CONTRACT"
+
+# ── Contract shape (new exit-code severity model) ───────────────────────
+contains "contract documents three-level exit codes" "Exit codes" "$CONTRACT"
+contains "contract documents health-check severity read" "Health-check severity" "$CONTRACT"
+contains "contract names advisory severity" "advisory" "$CONTRACT"
+# The Branch-context behaviour section is gone (history in the changelog and a
+# related-design filename legitimately survives, so assert on the section
+# heading, not the bare term).
+rejects "contract drops Branch context section" "### Branch context" "$CONTRACT"
+rejects "contract drops the Environment/default-branch section" "### Environment" "$CONTRACT"
+# The script carries no branch-context machinery and no drift-marker string-match.
+rejects "script drops branch-context machinery" "branch-context" "$SCRIPT"
+rejects "script no longer string-matches the drift marker" "run with --reconcile to update" "$SCRIPT"
 rejects "script does not use fixed /tmp reconcile output" "/tmp/ci-preflight-health-reconcile.out" "$SCRIPT"
 rejects "script avoids Bash-4-only mapfile" "mapfile" "$SCRIPT"
 
+# ── Health-check severity, read from the exit code ──────────────────────
+
+# clean → exit 0
 clean="$(make_fixture clean clean clean)"
 clean_out="$TMP/clean.out"
 rc="$(run_preflight "$clean_out" --root "$clean")"
 check "clean fixture exits 0" "0" "$rc"
 contains "clean fixture prints pass banner" "PREFLIGHT OK" "$clean_out"
 
+# advisory drift (exit 2) → surfaces, does NOT block, does NOT mutate the spec.
+# Runs on the default branch (no feature branch) to prove severity is intrinsic
+# to the finding, not derived from branch context.
+advisory="$(make_fixture advisory drift clean)"
+advisory_out="$TMP/advisory.out"
+rc="$(run_preflight "$advisory_out" --root "$advisory")"
+check "advisory drift exits 0 (non-blocking) on default branch" "0" "$rc"
+contains "advisory drift is surfaced" "ADVISORY" "$advisory_out"
+contains "advisory drift names the spec" "example.spec.md" "$advisory_out"
+contains "advisory drift leaves spec active" "status: active" "$advisory/docs/specs/example.spec.md"
+
+# blocking finding (exit 1) → blocks
+blocking="$(make_fixture blocking blocking clean)"
+blocking_out="$TMP/blocking.out"
+rc="$(run_preflight "$blocking_out" --root "$blocking")"
+check "blocking health finding exits 1" "1" "$rc"
+contains "blocking finding names blocker" "blocking health-check findings" "$blocking_out"
+
+# unexpected exit code (e.g. 3, a crash) → treated as blocking (fail closed)
+crash="$(make_fixture crash crash clean)"
+crash_out="$TMP/crash.out"
+rc="$(run_preflight "$crash_out" --root "$crash")"
+check "unexpected health-check exit code blocks (fail closed)" "1" "$rc"
+contains "unexpected exit code is reported" "exited 3" "$crash_out"
+
+# recorded stale (advisory exit 2) → does not block
 recorded="$(make_fixture recorded recorded clean)"
 recorded_out="$TMP/recorded.out"
 rc="$(run_preflight "$recorded_out" --root "$recorded")"
 check "recorded stale drift does not block" "0" "$rc"
 
+# relative --root still resolves the health script (advisory drift)
 relative_root="$(make_fixture relative-root drift clean)"
 relative_out="$TMP/relative-root.out"
 rc="$(run_preflight_from "$(dirname "$relative_root")" "$relative_out" --root "$(basename "$relative_root")")"
-check "relative --root detects health drift" "1" "$rc"
-contains "relative --root does not skip health script" "unrecorded health-check drift" "$relative_out"
+check "relative --root exits 0 on advisory drift" "0" "$rc"
+contains "relative --root does not skip health script" "ADVISORY" "$relative_out"
 
-drift_readonly="$(make_fixture drift-readonly drift clean)"
-readonly_out="$TMP/drift-readonly.out"
-rc="$(run_preflight "$readonly_out" --root "$drift_readonly")"
-check "drift read-only exits 1" "1" "$rc"
-contains "drift read-only names blocker" "unrecorded health-check drift" "$readonly_out"
-contains "drift read-only leaves spec active" "status: active" "$drift_readonly/docs/specs/example.spec.md"
+# ── Coverage-manifest drift: the retained safe-repair path ──────────────
 
-drift_repair="$(make_fixture drift-repair drift clean)"
-repair_out="$TMP/drift-repair.out"
-rc="$(run_preflight "$repair_out" --root "$drift_repair" --apply-safe-repairs)"
-check "drift repair exits 1 for reviewable diff" "1" "$rc"
-contains "drift repair flips spec stale" "status: stale" "$drift_repair/docs/specs/example.spec.md"
-contains "drift repair reports changed paths" "Repair changed paths" "$repair_out"
-if [ -n "$(git -C "$drift_repair" status --short)" ]; then
-  echo "PASS: drift repair leaves reviewable diff"
+# read-only (no --apply-safe-repairs) → blocks
+cov_readonly="$(make_fixture cov-readonly clean drift)"
+cov_readonly_out="$TMP/cov-readonly.out"
+rc="$(run_preflight "$cov_readonly_out" --root "$cov_readonly")"
+check "coverage drift read-only exits 1" "1" "$rc"
+contains "coverage drift read-only names blocker" "contract coverage manifest drift" "$cov_readonly_out"
+
+# --apply-safe-repairs (default commit mode none) → reviewable diff, exit 1
+cov_repair="$(make_fixture cov-repair clean drift)"
+cov_repair_out="$TMP/cov-repair.out"
+rc="$(run_preflight "$cov_repair_out" --root "$cov_repair" --apply-safe-repairs)"
+check "coverage repair exits 1 for reviewable diff" "1" "$rc"
+contains "coverage repair reports changed paths" "Repair changed paths" "$cov_repair_out"
+if [ -n "$(git -C "$cov_repair" status --short)" ]; then
+  echo "PASS: coverage repair leaves reviewable diff"
 else
-  echo "FAIL: drift repair should leave a reviewable diff" >&2
+  echo "FAIL: coverage repair should leave a reviewable diff" >&2
   fail=1
 fi
 
-drift_continue="$(make_fixture drift-continue drift clean)"
-continue_out="$TMP/drift-continue.out"
-rc="$(run_preflight "$continue_out" --root "$drift_continue" --apply-safe-repairs --continue-after-repair)"
-check "drift repair continue exits 0" "0" "$rc"
+# --apply-safe-repairs --continue-after-repair → exit 0, marks fresh
+cov_continue="$(make_fixture cov-continue clean drift)"
+cov_continue_out="$TMP/cov-continue.out"
+rc="$(run_preflight "$cov_continue_out" --root "$cov_continue" --apply-safe-repairs --continue-after-repair)"
+check "coverage repair continue exits 0" "0" "$rc"
+check "coverage repair marks fresh" "clean" "$(cat "$cov_continue/coverage_state")"
 
-drift_commit="$(make_fixture drift-commit drift clean)"
-commit_out="$TMP/drift-commit.out"
-rc="$(run_preflight "$commit_out" --root "$drift_commit" --apply-safe-repairs --repair-commit-mode same-branch)"
+# same-branch repair commit (via coverage drift)
+cov_commit="$(make_fixture cov-commit clean drift)"
+cov_commit_out="$TMP/cov-commit.out"
+rc="$(run_preflight "$cov_commit_out" --root "$cov_commit" --apply-safe-repairs --repair-commit-mode same-branch)"
 check "same-branch repair commit exits 1" "1" "$rc"
-check "same-branch repair commit message" "chore: repair CI preflight blockers" "$(git -C "$drift_commit" log -1 --format=%s)"
-check "same-branch repair leaves tree clean" "" "$(git -C "$drift_commit" status --short)"
-contains "same-branch repair reports commit" "PREFLIGHT REPAIR COMMITTED" "$commit_out"
+check "same-branch repair commit message" "chore: repair CI preflight blockers" "$(git -C "$cov_commit" log -1 --format=%s)"
+check "same-branch repair leaves tree clean" "" "$(git -C "$cov_commit" status --short)"
+contains "same-branch repair reports commit" "PREFLIGHT REPAIR COMMITTED" "$cov_commit_out"
 
-repair_pr="$(make_fixture repair-pr drift clean)"
+# repair-pr mode (via coverage drift)
+repair_pr="$(make_fixture repair-pr clean drift)"
 gh_dir="$TMP/gh"
 make_gh_stub "$gh_dir"
 repair_pr_out="$TMP/repair-pr.out"
@@ -296,7 +332,8 @@ else
 fi
 contains "repair-pr creates PR" "pr create" "$TMP/gh.log"
 
-human_repair_pr="$(make_fixture repair-pr-human drift clean)"
+# human-owned repair PR → ownership refusal (via coverage drift)
+human_repair_pr="$(make_fixture repair-pr-human clean drift)"
 git -C "$human_repair_pr" push -q origin HEAD:refs/heads/automation/ci-preflight-repair
 human_before="$(git -C "$human_repair_pr" ls-remote --heads origin automation/ci-preflight-repair | awk '{ print $1 }')"
 human_out="$TMP/repair-pr-human.out"
@@ -310,91 +347,11 @@ check "human-owned repair PR exits 1" "1" "$rc"
 check "human-owned repair PR leaves remote branch unchanged" "$human_before" "$human_after"
 contains "human-owned repair PR reports ownership refusal" "human-owned repair PR" "$human_out"
 
-coverage="$(make_fixture coverage clean drift)"
-coverage_out="$TMP/coverage.out"
-rc="$(run_preflight "$coverage_out" --root "$coverage" --apply-safe-repairs --continue-after-repair)"
-check "coverage repair exits 0 with continue" "0" "$rc"
-check "coverage repair marks fresh" "clean" "$(cat "$coverage/coverage_state")"
-
+# ── Release scope ───────────────────────────────────────────────────────
 release="$(make_fixture release clean clean 1)"
 release_out="$TMP/release.out"
 rc="$(run_preflight "$release_out" --root "$release" --scope release)"
 check "release-scope blocker exits 1" "1" "$rc"
 contains "release blocker reported" "Release blocker" "$release_out"
-
-# ── #612: branch-context-aware Check-7 drift ────────────────────────────
-# Check-7 built-state drift is expected on an in-flight feature branch
-# (reconciled at /consolidate) and must not block; it stays blocking on the
-# integration/default branch and in release scope.
-
-# in-flight branch + drift → non-blocking warning, exit 0, spec left active
-inflight="$(make_fixture inflight drift clean)"
-make_inflight "$inflight"
-inflight_out="$TMP/inflight.out"
-rc="$(run_preflight "$inflight_out" --root "$inflight")"
-check "in-flight drift exits 0 (non-blocking)" "0" "$rc"
-contains "in-flight drift prints warning" "WARNING" "$inflight_out"
-contains "in-flight drift warning mentions reconcile" "reconcile" "$inflight_out"
-contains "in-flight drift warning names drifted spec" "example.spec.md" "$inflight_out"
-contains "in-flight drift reports branch-context" "branch-context=in-flight" "$inflight_out"
-
-# in-flight + drift + --apply-safe-repairs → still non-blocking, no reconcile
-inflight_repair="$(make_fixture inflight-repair drift clean)"
-make_inflight "$inflight_repair"
-inflight_repair_out="$TMP/inflight-repair.out"
-rc="$(run_preflight "$inflight_repair_out" --root "$inflight_repair" --apply-safe-repairs)"
-check "in-flight drift with apply-safe-repairs exits 0" "0" "$rc"
-contains "in-flight drift leaves spec active" "status: active" "$inflight_repair/docs/specs/example.spec.md"
-
-# explicit --branch-context integration on a feature branch → blocks
-ctx_integration="$(make_fixture ctx-integration drift clean)"
-make_inflight "$ctx_integration"
-ctx_integration_out="$TMP/ctx-integration.out"
-rc="$(run_preflight "$ctx_integration_out" --root "$ctx_integration" --branch-context integration)"
-check "explicit integration context blocks on feature branch" "1" "$rc"
-contains "explicit integration names blocker" "unrecorded health-check drift" "$ctx_integration_out"
-
-# explicit --branch-context in-flight on main → non-blocking
-ctx_inflight="$(make_fixture ctx-inflight drift clean)"
-ctx_inflight_out="$TMP/ctx-inflight.out"
-rc="$(run_preflight "$ctx_inflight_out" --root "$ctx_inflight" --branch-context in-flight)"
-check "explicit in-flight context non-blocking on main" "0" "$rc"
-contains "explicit in-flight prints warning" "WARNING" "$ctx_inflight_out"
-
-# --scope release forces integration even on a feature branch → blocks drift
-release_drift="$(make_fixture release-drift drift clean)"
-make_inflight "$release_drift"
-release_drift_out="$TMP/release-drift.out"
-rc="$(run_preflight "$release_drift_out" --root "$release_drift" --scope release)"
-check "release scope forces integration (blocks drift on feature branch)" "1" "$rc"
-
-# auto with unresolvable origin/<default> → falls back to in-flight
-no_origin="$(make_fixture no-origin drift clean)"
-git -C "$no_origin" remote remove origin
-no_origin_out="$TMP/no-origin.out"
-rc="$(run_preflight "$no_origin_out" --root "$no_origin")"
-check "auto with unresolvable origin falls back to in-flight" "0" "$rc"
-contains "auto fallback prints warning" "WARNING" "$no_origin_out"
-
-# in-flight + Check-7 drift co-occurring with a non-Check-7 health failure → blocks
-# (the branch-context gate downgrades ONLY Check-7 drift; other findings still block)
-inflight_plus="$(make_fixture inflight-plus drift-plus clean)"
-make_inflight "$inflight_plus"
-inflight_plus_out="$TMP/inflight-plus.out"
-rc="$(run_preflight "$inflight_plus_out" --root "$inflight_plus")"
-check "in-flight non-Check-7 failure still blocks" "1" "$rc"
-contains "in-flight non-Check-7 failure names blocker" "unrecorded health-check drift" "$inflight_plus_out"
-
-# invalid --branch-context value → exit 2 with named diagnostic
-bad_ctx="$(make_fixture bad-ctx clean clean)"
-bad_ctx_out="$TMP/bad-ctx.out"
-rc="$(run_preflight "$bad_ctx_out" --root "$bad_ctx" --branch-context bogus)"
-check "invalid branch-context exits 2" "2" "$rc"
-contains "invalid branch-context names the error" "invalid branch context" "$bad_ctx_out"
-
-# CONTRACT: the new arg/env are documented
-contains "contract names branch-context arg" "branch-context" "$CONTRACT"
-contains "contract names default-branch env" "CI_PREFLIGHT_DEFAULT_BRANCH" "$CONTRACT"
-contains "contract names in-flight drift behaviour" "in-flight" "$CONTRACT"
 
 exit "$fail"
