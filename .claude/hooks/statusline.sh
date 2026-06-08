@@ -16,6 +16,8 @@
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/scrub-control-chars.sh"
 CACHE="$PROJECT_DIR/.arboretum/active-stage-cache.json"
 REFRESH="$PROJECT_DIR/scripts/refresh-stage-cache.sh"
 TTL=30  # seconds — D6/OQ3 chip cache TTL
@@ -56,7 +58,7 @@ import json, os, re, sys, time
 # string field surfaced to the statusline. Mirror of the regex in
 # scripts/refresh-stage-cache.sh and .claude/hooks/session-start.sh.
 # See docs/specs/pipeline-state-tracking.spec.md ## Defense in depth.
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 
 def scrub(s):
     if not isinstance(s, str):

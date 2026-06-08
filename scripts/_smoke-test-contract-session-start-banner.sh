@@ -32,6 +32,8 @@ new_fixture() {
   echo "# x" > "$fix/contracts.yaml"
   echo "layer: 0" > "$fix/.arboretum.yml"
   cp "$HOOK" "$fix/.claude/hooks/"
+  mkdir -p "$fix/scripts/lib"
+  cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
   # No-op refresh stubs so pre-seeded caches survive the boot refresh.
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-next-cache.sh"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-update-cache.sh"

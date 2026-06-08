@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/lib/token-rates.sh"
 . "$ROOT/scripts/lib/state-dir.sh"
+. "$ROOT/scripts/lib/scrub-control-chars.sh"
 
 transcript=""; to_stdout=0; output_dir=""; descriptor=""; fmt="md"
 while [ $# -gt 0 ]; do case "$1" in
@@ -51,7 +52,7 @@ from collections import OrderedDict
 # context"): transcript-derived strings (skill names, Bash command text, file
 # paths, attributionAgent labels) flow into the report artifact AND stdout.
 # Strip ASCII control characters at the source before any of them is rendered.
-_CTRL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub('', str(s))
 
 transcript, to_stdout = sys.argv[1], sys.argv[2] == "1"

@@ -29,6 +29,9 @@ if [ -z "${BASH_VERSION:-}" ]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/scrub-control-chars.sh"
+
 PROJECT_DIR="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CACHE_DIR="$PROJECT_DIR/.arboretum"
 CACHE_FILE="$CACHE_DIR/workspace-cache.json"
@@ -124,7 +127,7 @@ build_cache() {
   WORKTREES_RAW="$worktrees_raw" BRANCHES_RAW="$branches_raw" FETCHED_AT="$(now_iso)" \
   python3 - <<'PY'
 import json, os, re
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
 def intn(v):
     v = (v or "").strip()

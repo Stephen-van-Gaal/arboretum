@@ -64,6 +64,7 @@ EOF
   # Copy (not symlink) so a fixture remains stable if the working
   # tree is edited mid-test; rebuild the fixture to pick up changes.
   cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
+  mkdir -p "$fix/scripts/lib"; cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
   cp "$REFRESH" "$fix/scripts/refresh-next-cache.sh"
   cp "$REPO_ROOT/scripts/roadmap/lib.sh" "$fix/scripts/roadmap/lib.sh"
 
@@ -90,6 +91,7 @@ new_fixture_no_commit() {
 layer: 0
 EOF
   cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
+  mkdir -p "$fix/scripts/lib"; cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
   cp "$REFRESH" "$fix/scripts/refresh-next-cache.sh"
   cp "$REPO_ROOT/scripts/roadmap/lib.sh" "$fix/scripts/roadmap/lib.sh"
   git -C "$fix" init -q

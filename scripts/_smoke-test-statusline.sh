@@ -40,8 +40,9 @@ strip_ts() {
 new_fixture() {
   local name="$1" branch="${2:-main}"
   local fix="$ROOT_TMP/$name"
-  mkdir -p "$fix/.claude/hooks" "$fix/scripts" "$fix/.arboretum"
+  mkdir -p "$fix/.claude/hooks" "$fix/scripts/lib" "$fix/.arboretum"
   cp "$REPO_ROOT/.claude/hooks/statusline.sh" "$fix/.claude/hooks/"
+  cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-stage-cache.sh"
   chmod +x "$fix/scripts/refresh-stage-cache.sh"
   # `git init -b` is git 2.28+; use init + checkout for portability,

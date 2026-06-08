@@ -12,6 +12,8 @@
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/scrub-control-chars.sh"
 REGISTER="$PROJECT_DIR/docs/REGISTER.md"
 CONTRACTS="$PROJECT_DIR/contracts.yaml"
 DEFS_DIR="$PROJECT_DIR/docs/definitions"
@@ -126,7 +128,7 @@ except Exception:
 # lines), but if the cache was hand-edited or written by an older
 # version of the script, scrub again here so the boot banner
 # can never render terminal-escape sequences from remote input.
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 
@@ -295,8 +297,8 @@ if [ -f "$WORKSPACE_REFRESH" ]; then
     # $NEXT_CACHE may not exist (its refresh is TTL-gated above); the renderer
     # reads it inside a try/except and degrades to no mode-B correlation.
     ws_block=$(python3 - "$WORKSPACE_CACHE" "$NEXT_CACHE" <<'PY'
-import json, re, sys
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+import json, os, re, sys
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
 try:
     ws = json.load(open(sys.argv[1]))
@@ -418,7 +420,7 @@ import json, os, re, sys
 # sequences from remote input. Same pattern as session-start.sh's
 # next-up block (which scrubs next-cache.json's content for the same
 # reason).
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 try:
@@ -537,13 +539,13 @@ if [ -f "$UPDATE_REFRESH" ]; then
   if [ -f "$UPDATE_CACHE" ]; then
     if command -v python3 >/dev/null 2>&1; then
       update_block=$(python3 - "$UPDATE_CACHE" <<'PY'
-import json, re, sys
+import json, os, re, sys
 try:
     with open(sys.argv[1]) as f:
         cache = json.load(f)
 except Exception:
     sys.exit(0)
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 if cache.get("update_available"):
     iv = _CTRL.sub("", cache.get("installed_version") or "?")
     lv = _CTRL.sub("", cache.get("latest_version") or "?")
@@ -558,7 +560,7 @@ elif cache.get("error") in ("gh-call-failed", "no-release"):
 PY
 ) || true
     else
-      _scrub_ctrl() { printf '%s' "${1:-}" | LC_ALL=C tr -d '\000-\037\177-\237'; }
+      _scrub_ctrl() { printf '%s' "${1:-}" | scrub_control_chars_oneline; }
       if grep -q '"update_available"[[:space:]]*:[[:space:]]*true' "$UPDATE_CACHE" 2>/dev/null; then
         _iv=$(sed -n 's/.*"installed_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UPDATE_CACHE" | head -1)
         _lv=$(sed -n 's/.*"latest_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UPDATE_CACHE" | head -1)
@@ -601,8 +603,8 @@ if [ -f "$INSTALL_MANIFEST" ] && command -v jq >/dev/null 2>&1; then
   # strings originate from the installed plugin's plugin.json — remote-sourced for
   # adopters — and flow into the boot banner (Claude's context). Strip ASCII control
   # chars before rendering, matching the next-up / stage-cache blocks' scrub convention.
-  _mfv=$(printf '%s' "$_mfv" | LC_ALL=C tr -d '\000-\037\177-\237')
-  _instv=$(printf '%s' "$_instv" | LC_ALL=C tr -d '\000-\037\177-\237')
+  _mfv=$(printf '%s' "$_mfv" | scrub_control_chars_oneline)
+  _instv=$(printf '%s' "$_instv" | scrub_control_chars_oneline)
   if [ -n "$_mfv" ] && [ -n "$_instv" ] && [ "$_mfv" != "$_instv" ]; then
     # Fire only when manifest version sorts strictly older than installed.
     _newer=$(printf '%s\n%s\n' "$_mfv" "$_instv" | sort -V | tail -1)

@@ -25,6 +25,7 @@ CACHE_FILE="$CACHE_DIR/active-stage-cache.json"
 mkdir -p "$CACHE_DIR"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/scrub-control-chars.sh"
 # shellcheck source=roadmap/lib.sh
 source "$SCRIPT_DIR/roadmap/lib.sh"
 export ROADMAP_BACKEND="${ROADMAP_BACKEND:-$(roadmap_backend "$PROJECT_DIR")}"
@@ -94,7 +95,7 @@ fi
 labels_out=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue" --json labels --jq '.labels[].name' 2>/dev/null || true )
 stage=$(LABELS="$labels_out" python3 -c '
 import re, os
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub("", s)
 stage = ""
 for line in os.environ.get("LABELS", "").splitlines():
@@ -123,11 +124,11 @@ write_cache "$cache_json"
 LOG_CACHE_FILE="$CACHE_DIR/log-comments-cache.json"
 comments_raw=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_comments "$issue" --paginate 2>/dev/null || echo "[]" )
 filtered=$(python3 -c '
-import json, re, sys
+import json, os, re, sys
 # Same defense-in-depth scrub as Step 3: comment bodies are author-
 # controlled and feed the boot banner — strip ASCII control chars to
 # block ANSI-escape injection from the source.
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 

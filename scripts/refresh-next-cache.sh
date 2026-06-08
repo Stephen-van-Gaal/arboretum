@@ -74,6 +74,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/scrub-control-chars.sh"
 # shellcheck source=scripts/roadmap/lib.sh
 . "$SCRIPT_DIR/roadmap/lib.sh"
 
@@ -158,7 +159,7 @@ run_epic_walk_and_cache_if_advance() {
     printf '%s' "$_epic_json" > "$_blocked_epic_file"
     _blocked_cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$_blocked_epic_file" 2>/dev/null <<'PY'
 import json, os, re, sys
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
 def scrub_epic(e):
     out = dict(e)
@@ -203,7 +204,7 @@ PY
   printf '%s' "$_epic_json" > "$_epic_file"
   _cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$_epic_file" 2>/dev/null <<'PY'
 import json, os, re, sys
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
 def scrub_epic(e):
     out = dict(e)
@@ -517,7 +518,7 @@ issue = data[0] if data else None
 # session-start banner pipes them straight to a terminal — without
 # this scrub, a malicious issue could inject ANSI escapes that
 # manipulate display/logs.
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 

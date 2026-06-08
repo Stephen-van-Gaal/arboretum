@@ -21,6 +21,8 @@ new_fixture() {
   echo "# x" > "$fix/contracts.yaml"
   echo "layer: 0" > "$fix/.arboretum.yml"
   cp "$REPO_ROOT/.claude/hooks/session-start.sh" "$fix/.claude/hooks/"
+  mkdir -p "$fix/scripts/lib"
+  cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
   # Stub refresh-next-cache.sh + refresh-stage-cache.sh to no-ops.
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-next-cache.sh"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-stage-cache.sh"

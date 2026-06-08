@@ -128,6 +128,8 @@ echo "# fixture" > "$c3/docs/REGISTER.md"
 echo "# fixture" > "$c3/contracts.yaml"
 echo "layer: 0" > "$c3/.arboretum.yml"
 cp "$REPO_ROOT/.claude/hooks/session-start.sh" "$c3/.claude/hooks/"
+mkdir -p "$c3/scripts/lib"
+cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$c3/scripts/lib/"
 git -C "$c3" init -q
 git -C "$c3" config user.email f@e.com; git -C "$c3" config user.name f
 git -C "$c3" config commit.gpgsign false
@@ -236,6 +238,8 @@ echo "# fixture" > "$c6/docs/REGISTER.md"
 echo "# fixture" > "$c6/contracts.yaml"
 echo "layer: 0" > "$c6/.arboretum.yml"
 cp "$REPO_ROOT/.claude/hooks/session-start.sh" "$c6/.claude/hooks/"
+mkdir -p "$c6/scripts/lib"
+cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$c6/scripts/lib/"
 git -C "$c6" init -q
 git -C "$c6" config user.email f@e.com; git -C "$c6" config user.name f
 git -C "$c6" config commit.gpgsign false

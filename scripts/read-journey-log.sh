@@ -48,6 +48,7 @@ done
 command -v gh >/dev/null 2>&1 || { echo "read-journey-log.sh requires the gh CLI" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/scrub-control-chars.sh"
 
 # Resolve the journey-log author allowlist (#249). TRUST_CONFIG_OVERRIDE lets
 # tests point at a fixture config; production resolves .arboretum.yml at the
@@ -114,7 +115,7 @@ _trust_present = os.environ.get("RJL_TRUST_PRESENT", "no") == "yes"
 
 # Read-side control-char scrub at the consumer boundary (pipeline-state-tracking
 # spec § Defense in depth). Same regex as scripts/refresh-next-cache.sh.
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 

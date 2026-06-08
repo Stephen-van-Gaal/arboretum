@@ -27,6 +27,8 @@ new_fixture() {
   local fix="$ROOT_TMP/$1"
   mkdir -p "$fix/.claude/hooks" "$fix/scripts" "$fix/.arboretum"
   cp "$HOOK" "$fix/.claude/hooks/"
+  mkdir -p "$fix/scripts/lib"
+  cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fix/scripts/refresh-stage-cache.sh"
   chmod +x "$fix/scripts/refresh-stage-cache.sh"
   git -C "$fix" init -q

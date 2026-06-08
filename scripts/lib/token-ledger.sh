@@ -14,8 +14,18 @@ _token_ledger_path() {
   printf '%s/%s.jsonl' "$dir" "${ARBORETUM_RUN_ID:-session}"
 }
 
-# scrub ASCII control chars (defense in depth — source ids are author-influenced)
-_token_scrub() { printf '%s' "$1" | tr -d '\000-\010\013\014\016-\037\177'; }
+# scrub ASCII control chars (defense in depth — source ids are author-influenced).
+# Delegates to the shared primitive; converges up to canonical and now also
+# strips 0x80-0x9f, which the prior inline set missed (#634).
+# Resolve via BASH_SOURCE/$0, falling back to the git toplevel if that path
+# doesn't exist (robust when sourced under zsh, where $0 varies across modes).
+if [ -n "${BASH_SOURCE:-}" ]; then _arbo_self="${BASH_SOURCE[0]}"; else _arbo_self="$0"; fi
+_arbo_scrub="$(dirname "$_arbo_self")/scrub-control-chars.sh"
+[ -f "$_arbo_scrub" ] || _arbo_scrub="$(git rev-parse --show-toplevel 2>/dev/null)/scripts/lib/scrub-control-chars.sh"
+# shellcheck source=/dev/null
+. "$_arbo_scrub"
+unset _arbo_self _arbo_scrub
+_token_scrub() { printf '%s' "$1" | scrub_control_chars; }
 
 # ledger_append <contributor> <source> <bytes> [model] [est_cost]
 ledger_append() {

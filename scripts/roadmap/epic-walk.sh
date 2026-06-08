@@ -12,6 +12,8 @@
 #     "auto_advance": null | {from,to,epic} }
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../lib/scrub-control-chars.sh"
 
 GRAPH_FILE=""
 NEXT_UP_ARG=""
@@ -46,13 +48,13 @@ command -v python3 >/dev/null 2>&1 || { echo "epic-walk: python3 required" >&2; 
 
 # Run the python core; in live mode any failure degrades to empty result (exit 0).
 _py_out=$(python3 - "$GRAPH_FILE" <<'PY'
-import json, re, sys
+import json, os, re, sys
 
 STAGE_RANK = {"/start":1, "/design":2, "/build":3, "/finish":4, "/pr":5, "/land":6, "/cleanup":7, "/reflect":8}
 ACTIVE_MIN = STAGE_RANK["/design"]
 DEPTH_CAP = 5
 
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
 
 with open(sys.argv[1], encoding="utf-8") as fh:

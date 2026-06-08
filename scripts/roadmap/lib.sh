@@ -3,6 +3,17 @@
 # Shared helpers for /roadmap and /idea skills. Source from other scripts; do
 # not execute directly.
 
+# Locate the sibling scrub lib. This file is sourced by skills under the Bash
+# tool's zsh, where BASH_SOURCE is unset and $0 is unreliable across zsh modes;
+# so resolve via BASH_SOURCE/$0, then fall back to the git toplevel if that path
+# doesn't exist (every real consumer is inside the repo).
+if [ -n "${BASH_SOURCE:-}" ]; then _arbo_self="${BASH_SOURCE[0]}"; else _arbo_self="$0"; fi
+_arbo_scrub="$(dirname "$_arbo_self")/../lib/scrub-control-chars.sh"
+[ -f "$_arbo_scrub" ] || _arbo_scrub="$(git rev-parse --show-toplevel 2>/dev/null)/scripts/lib/scrub-control-chars.sh"
+# shellcheck source=/dev/null
+source "$_arbo_scrub"
+unset _arbo_self _arbo_scrub
+
 
 # Resolve project root. Prefers the git toplevel of the CWD (so worktrees
 # resolve to their own root). Falls back to $CLAUDE_PROJECT_DIR (primary
@@ -1493,7 +1504,7 @@ roadmap_github_epic_graph() {
   NEXT_UP="$next_up" python3 - "$raw_file" <<'PY'
 import json, os, re, sys
 
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 

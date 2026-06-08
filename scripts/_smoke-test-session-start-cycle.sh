@@ -56,6 +56,8 @@ new_fixture() {
 layer: 0
 EOF
   cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
+  mkdir -p "$fix/scripts/lib"
+  cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
 
   # git init + check out the requested branch.
   # Avoid `git init -b <name>` (Git 2.28+) for broader compatibility with

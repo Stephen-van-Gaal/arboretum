@@ -37,6 +37,8 @@ case "$PR" in *[!0-9]*) echo "collect-review.sh: PR must be a positive integer (
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/roadmap/lib.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib/scrub-control-chars.sh"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "${CLAUDE_PROJECT_DIR:-$PWD}")"
 BACKEND="$(roadmap_backend "$ROOT")"
 
@@ -110,7 +112,7 @@ import json, os, re, sys
 
 inline_p, reviews_p, conv_p, threads_p, backend, outdir, unanswered = sys.argv[1:8]
 
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 

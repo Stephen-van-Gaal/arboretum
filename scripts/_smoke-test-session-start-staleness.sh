@@ -60,6 +60,7 @@ new_fixture() {
 layer: 0
 EOF
   cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
+  mkdir -p "$fix/scripts/lib"; cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
 
   # Minimal git repo so hook's git calls don't error under set -e.
   git -C "$fix" init -q

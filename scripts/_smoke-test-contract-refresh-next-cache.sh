@@ -608,6 +608,8 @@ echo "layer: 2" > "$G_FIXTURE/.arboretum.yml"
 # next to a copy of refresh-next-cache.sh:
 G_BIN=$(mktemp -d)
 cp "$SCRIPT_DIR/refresh-next-cache.sh" "$G_BIN/"
+mkdir -p "$G_BIN/lib"
+cp "$SCRIPT_DIR/lib/scrub-control-chars.sh" "$G_BIN/lib/"
 mkdir -p "$G_BIN/roadmap"
 cp "$SCRIPT_DIR/roadmap/lib.sh" "$G_BIN/roadmap/"
 cp "$G_ROADMAP_STUB_DIR/epic-walk.sh" "$G_BIN/roadmap/"
@@ -683,6 +685,8 @@ H_SENTINEL=$(mktemp)
 : > "$H_SENTINEL"
 
 cp "$SCRIPT_DIR/refresh-next-cache.sh" "$H_BIN/"
+mkdir -p "$H_BIN/lib"
+cp "$SCRIPT_DIR/lib/scrub-control-chars.sh" "$H_BIN/lib/"
 mkdir -p "$H_BIN/roadmap"
 cp "$SCRIPT_DIR/roadmap/lib.sh" "$H_BIN/roadmap/"
 
@@ -765,6 +769,8 @@ H2_FIXTURE=$(mktemp -d)
 H2_BIN=$(mktemp -d)
 
 cp "$SCRIPT_DIR/refresh-next-cache.sh" "$H2_BIN/"
+mkdir -p "$H2_BIN/lib"
+cp "$SCRIPT_DIR/lib/scrub-control-chars.sh" "$H2_BIN/lib/"
 mkdir -p "$H2_BIN/roadmap"
 cp "$SCRIPT_DIR/roadmap/lib.sh" "$H2_BIN/roadmap/"
 cat > "$H2_BIN/roadmap/epic-walk.sh" <<H2WSTUB
@@ -855,6 +861,8 @@ I_BIN=$(mktemp -d)
 I_FIXTURE=$(mktemp -d)
 
 cp "$SCRIPT_DIR/refresh-next-cache.sh" "$I_BIN/"
+mkdir -p "$I_BIN/lib"
+cp "$SCRIPT_DIR/lib/scrub-control-chars.sh" "$I_BIN/lib/"
 mkdir -p "$I_BIN/roadmap"
 cp "$SCRIPT_DIR/roadmap/lib.sh" "$I_BIN/roadmap/"
 

@@ -78,6 +78,7 @@ new_fixture() {
 
   # Copy the real hook so we exercise the current repository code.
   cp "$HOOK" "$fix/.claude/hooks/session-start.sh"
+  mkdir -p "$fix/scripts/lib"; cp "$REPO_ROOT/scripts/lib/scrub-control-chars.sh" "$fix/scripts/lib/"
 
   # NO-OP workspace-refresh stub: makes the guard `[ -f "$WORKSPACE_REFRESH" ]`
   # true so the render block executes, but does NOT overwrite the pre-seeded
