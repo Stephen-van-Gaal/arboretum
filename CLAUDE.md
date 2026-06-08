@@ -69,7 +69,7 @@ Five workflows cover the full development lifecycle. See `workflows/README.md` f
 
 ```
 new-project      /arboretum:init → /architect → [spike → /consolidate]* → build
-build            /start → [/design] → /build → /finish → /security-review → /pr → /land → /cleanup → /reflect
+build            /start → [/design] → /build → /finish → review (B4) → /pr → /land → /cleanup → /reflect
 explore          /start → spike → document → decide (→ build or → another spike)
 publish          /publish (review → strip → sync)
 retrofit         assess → bootstrap → triage → govern-one → [expand]*
@@ -85,7 +85,7 @@ retrofit         assess → bootstrap → triage → govern-one → [expand]*
 
 **Diagnostics:** `/health-check`
 
-**Layer 2:** `/security-review`
+**Layer 2:** `/ai-surface-review`
 
 ### Capability slots (external skills)
 

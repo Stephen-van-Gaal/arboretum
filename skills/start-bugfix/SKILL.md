@@ -141,7 +141,7 @@ Then hand off to:
 /build .arboretum/patch-briefs/<issue>.md
 ```
 
-The existing tail continues through `/finish`, `/security-review`, `/pr`,
+The existing tail continues through `/finish`, the B4 review stage, `/pr`,
 `/land`, `/cleanup`, and `/reflect`. The patch-lane endpoint is a
 ready-for-review PR. `/land` collects configured or observable AI reviewer feedback. The patch lane does not merge; merge remains human-owned.
 
@@ -165,7 +165,7 @@ automatically; the improved issue is the handoff artifact.
 ### 8. Handoff Boundaries
 
 This front half reuses existing terminal flows. Do not modify `/build`,
-`/finish`, `/security-review`, `/pr`, `/land`, `/cleanup`, or `/reflect` while
+`/finish`, the B4 review stage, `/pr`, `/land`, `/cleanup`, or `/reflect` while
 running the skill.
 
 Return to normal `/start` or `/design` when implementation would require:

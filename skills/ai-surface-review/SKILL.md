@@ -1,18 +1,22 @@
 ---
-name: security-review
-owner: git-workflow-tooling
-description: Analyze AI-facing code for prompt injection and instruction hijacking risks. Use before PRs that modify hooks, skills, scripts, or agent instruction files.
+name: ai-surface-review
+owner: review-stage
+description: Analyze AI-facing surfaces (skills, hooks, scripts, agent instruction files) for prompt-injection, instruction-hijacking, and untrusted-data-flow risk. Runs as a fresh-context driver. The AI-surface lane of the B4 review stage.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob
 argument-hint: [--full]
 layer: 2
 ---
 
-# Security Review — Prompt Injection Analysis
+# AI-Surface Review — Injection & Data-Flow Risk
 
 Analyze AI-facing code for prompt injection, instruction hijacking, and permission escalation risks.
 
 This skill focuses on risks that require reasoning about intent and context — not mechanical pattern matching (secrets are handled by the pre-commit hook).
+
+## Dispatch (fresh-context driver)
+
+This is the `ai-surface` lane of the B4 review stage (`docs/specs/review-stage.spec.md`). Mirroring the `/cleanup` driver pattern, the read-heavy full-file analysis runs in a **fresh subagent**; the main thread receives only the returned coverage manifest, never the driver's transcript. This is what keeps the stage's context cost bounded. The brief carries `diff_scope`, `lane`, the matched `surface`, the `invariants_to_preserve` (the CLAUDE.md scrub rule), and the risk `categories` — consume them; do not re-derive the diff.
 
 ## Scope
 
@@ -81,6 +85,21 @@ For each file, check for these risk categories:
 - Instructions to disable or bypass safety hooks
 - `--no-verify`, `--force`, or similar flags in automated scripts
 
+**Untrusted-data → output sinks:**
+- Attacker-controlled input (transcript text, issue/PR bodies, file contents) rendered into a terminal, log, statusline, or Claude context without scrubbing
+- New external-content sinks that bypass the scrub-at-source-and-consumer rule
+
+**Resource exhaustion:**
+- New regexes applied to attacker-controlled strings without bounded backtracking (ReDoS)
+- Unbounded reads/loops over external input
+
+**Sanitization-invariant preservation (refactors):**
+- A refactor that drops or weakens an existing scrub/escape/validation step
+
+### 3b. Scrub-invariant check
+
+For each changed AI-facing file that introduces an external-content sink, grep for the canonical scrub regex from CLAUDE.md § "Defense in depth" (`\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f`). Flag any new sink missing the source-side or consumer-side scrub layer. The invariant is supplied in the brief — do not re-derive it.
+
 ### 4. Present summary report
 
 Format findings as:
@@ -107,7 +126,21 @@ Format findings as:
 [repeat for each finding]
 ```
 
-If no findings: "No prompt injection or instruction hijacking risks detected in N files reviewed."
+### 4b. Coverage manifest (required structured output)
+
+Always emit a structured manifest (validated by `scripts/validate-review-manifest.sh`):
+
+```json
+{
+  "lane": "ai-surface",
+  "files_reviewed": ["<path>", "..."],
+  "surface_identified": "<the injection/data-flow surface found>",
+  "coverage": [ {"category": "<risk category>", "status": "evaluated|cleared", "why": "<one line>"} ],
+  "findings": [ {"severity": "critical|warning|info", "location": "<file:line>", "recommendation": "<action>"} ]
+}
+```
+
+A clean result is `findings: []` **with a full `coverage[]`** — every risk category evaluated or cleared, each with a one-line reason. Never report a bare "no findings": that makes "checked the scrub invariant + ReDoS, both safe" indistinguishable from "didn't look."
 
 ## Important
 

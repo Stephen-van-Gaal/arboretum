@@ -163,7 +163,7 @@ Check if any changed files match these paths:
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`
 
 If any match, suggest:
-> "This PR modifies agent-facing code. Consider running `/security-review` before creating the PR. Proceed without review?"
+> "This PR modifies agent-facing code. Consider running `/ai-surface-review` before creating the PR. Proceed without review?"
 
 This is a suggestion, not a gate. If the user declines, proceed.
 

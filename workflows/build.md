@@ -46,7 +46,7 @@ The other workflows are reserved for shapes the build workflow does not cover:
                        /finish (verify → /consolidate)
                                              │
                                              ▼
-                              /security-review (B4, MANDATORY)
+                              review dispatch (B4, MANDATORY)
                                              │
                                              ▼
                                   /pr → /land → /cleanup → /reflect
@@ -64,7 +64,7 @@ Patch-lane exception: verified patch-lane briefs produced by `/start-bugfix` may
 | 2. `/design` (everything-else only) | issue, principles, architecture | design spec + plan | `docs/superpowers/specs/` + `docs/plans/` | ephemeral |
 | 3. `/build` | design spec OR agent brief | code + tests; pipeline-state log entries | source dirs, `tests/`, GitHub issue body | source |
 | 4. `/finish` | code + tests + design spec | reconciled governed spec via `/consolidate` | `docs/specs/` | owning |
-| 5. `/security-review` (B4, mandatory) | diff | review report (often "no surface, self-gate") | (report) | — |
+| 5. review dispatch (B4, mandatory) | diff | per-lane coverage manifests (`/ai-surface-review`, general-security, correctness) | (report) | — |
 | 6. `/pr` → `/land` | branch state, review threads | merged PR | git, GitHub | — |
 | 7. `/cleanup` → `/reflect` | branch state, session memory | clean main; lessons | git, memory | — |
 
@@ -139,11 +139,15 @@ For coverage-baseline refactors, the wrap adapts: characterization-tests-first, 
 
 For docs-only changes, `/consolidate` has nothing to reconcile (no governed source changed); the effective tail is verify → `/pr`.
 
-### 5. Security review — `/security-review` (B4, MANDATORY)
+### 5. Review dispatch (B4, MANDATORY)
 
-`/security-review` is **always** invoked in the current general-release pipeline (per design D7 / B4). It self-gates: when the diff presents no injection surface (no hook, skill, script, or agent instruction file changed), it exits fast with "no surface, self-gate". When surface exists, it runs the full analysis and may block the PR.
+B4 is a review **dispatch** run inside `/finish`: `scripts/review-dispatch.sh` computes the lane plan from the diff, and each planned lane runs as a fresh-context driver, in order:
 
-The mandatory invocation is now part of the unified workflow. This catches injection surfaces in changes that would otherwise have skipped review.
+- `/ai-surface-review` — first, when AI-facing surface changed (homegrown injection + data-flow driver);
+- general-security — always (safe default; default backend: the built-in `/security-review`);
+- correctness — on code diffs (default backend: `/code-review`).
+
+Each lane returns a coverage manifest (validated by `scripts/validate-review-manifest.sh`); a missing backend degrades to the `/land` reviewers rather than silently skipping. The mandatory invocation catches injection and correctness issues before the PR opens. Owned by `docs/specs/review-stage.spec.md` (first Slipstream per-segment spec).
 
 ### 6. Ship — `/pr` → `/land`
 

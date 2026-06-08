@@ -48,6 +48,7 @@
 | scripts/refresh-workspace-cache.sh | docs/contracts/refresh-workspace-cache.contract.md | full |
 | scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
 | scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
+| scripts/review-dispatch.sh | docs/contracts/review-dispatch.cli-contract.md | cli |
 | scripts/roadmap/audit-board.sh | docs/contracts/roadmap-audit-board.cli-contract.md | cli |
 | scripts/roadmap/epic-walk.sh | docs/contracts/epic-walk.contract.md | full |
 | scripts/roadmap/install-labels.sh | docs/contracts/roadmap-install-labels.cli-contract.md | cli |
@@ -69,6 +70,7 @@
 | scripts/validate-cross-refs.sh | docs/contracts/validate-cross-refs.contract.md | full |
 | scripts/validate-design-spec.sh | docs/contracts/validate-design-spec.contract.md | full |
 | scripts/validate-review-dispositions.sh | docs/contracts/review-dispositions.contract.md | full |
+| scripts/validate-review-manifest.sh | docs/contracts/validate-review-manifest.cli-contract.md | cli |
 | scripts/validate-stage-log-line.sh | docs/contracts/validate-stage-log-line.contract.md | full |
 | scripts/validate-template-taxonomy.sh | docs/contracts/validate-template-taxonomy.cli-contract.md | cli |
 | scripts/validate-test-surface.sh | docs/contracts/validate-test-surface.contract.md | full |

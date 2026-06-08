@@ -209,10 +209,11 @@ grep -q "^### Step 0: Read the pipeline\.workflow flag" "$FINISH" \
   || fail "case 12 — /finish Step 0 (flag read) missing"
 ok "case 12 — /finish Step 0 present"
 
-# Case 13: /finish states mandatory security review in the unified ship tail
-grep -q "/security-review\` is \*\*mandatory\*\*" "$FINISH" \
-  || fail "case 13 — /finish does not state mandatory security review"
-ok "case 13 — /finish mandatory security-review rule present"
+# Case 13: /finish states the mandatory B4 review dispatch in the unified ship tail
+grep -q "Review dispatch (B4)" "$FINISH" \
+  && grep -qi "mandatory" "$FINISH" \
+  || fail "case 13 — /finish does not state the mandatory B4 review dispatch"
+ok "case 13 — /finish mandatory B4 review-dispatch rule present"
 
 # Case 13a: /finish Step 1 offers an in-flow commit checkpoint instead of only hard-pausing
 grep -Fq "stage named files + commit checkpoint" "$FINISH" \
@@ -304,8 +305,8 @@ grep -q "^### 1\. Triage" workflows/build.md \
   || fail "case 24 — workflows/build.md missing triage section"
 grep -q "^### 2\. Design" workflows/build.md \
   || fail "case 24 — workflows/build.md missing design section"
-grep -q "^### 5\. Security review" workflows/build.md \
-  || fail "case 24 — workflows/build.md missing security-review section"
+grep -q "^### 5\. Review dispatch" workflows/build.md \
+  || fail "case 24 — workflows/build.md missing review-dispatch section"
 ok "case 24 — workflows/build.md has unified stage sequence"
 
 # Case 25: the 4 legacy workflow docs are absent

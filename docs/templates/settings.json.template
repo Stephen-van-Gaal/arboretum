@@ -3,6 +3,8 @@
     "allow": [
       "Bash(bash scripts/health-check.sh *)",
       "Bash(bash scripts/generate-register.sh *)",
+      "Bash(bash scripts/review-dispatch.sh *)",
+      "Bash(bash scripts/validate-review-manifest.sh *)",
       "Bash(bash scripts/validate-cross-refs.sh *)",
       "Bash(bash scripts/log-stage.sh *)",
       "Bash(bash scripts/read-journey-log.sh *)",

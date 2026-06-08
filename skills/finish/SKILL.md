@@ -43,14 +43,14 @@ export SHIP_BACKEND
 ```
 
 The reader must succeed before the ship tail continues. The current
-general-release pipeline follows the sequence below; `/security-review` is
-mandatory and self-gates when no injection surface is present.
+general-release pipeline follows the sequence below; the B4 review dispatch
+(Step 5) is mandatory.
 
 ### Step 1: Verify implementation state
 
 **Routing on `/build`'s exit-status (S3-8).** Before any other verification, read the most recent `/build exited` journey-log entry on the active issue and route on its `exit-status:` value. Until `scripts/get-latest-stage-log.sh` ships (WS9 follow-up), this is a descriptive routing — the operator confirms which path `/build` exited on:
 
-When `exit-status: success` is the most recent `/build exited` value, continue the ship tail below (verify → consolidate → security-review → ship → PR).
+When `exit-status: success` is the most recent `/build exited` value, continue the ship tail below (verify → consolidate → review dispatch (B4) → ship → PR).
 
 When `exit-status: escape-hatch` is the most recent `/build exited` value, return to `/design` with the design spec as the in-flight authority. Halt — do not invoke `/pr` or any later stage. The escape-hatch outcome means the build surfaced a design decision that requires returning to `/design`.
 
@@ -138,16 +138,33 @@ If all affected specs are already at `active`, this step is a no-op (skip silent
 
 Skip this step entirely for documentation-only changes (no source files in the diff).
 
-### Step 5: Security review
+### Step 5: Review dispatch (B4)
 
-Check if any changed files are agent-facing:
-- `.claude/hooks/**`, `.claude/skills/**`, `skills/**`, `.githooks/**`, `scripts/**`
-- `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`
+The B4 review stage is a **dispatch** over replaceable, fresh-context lanes
+(`docs/specs/review-stage.spec.md`). It is **mandatory**.
 
-`/security-review` is **mandatory** in the current general-release pipeline.
-Always invoke it, regardless of whether agent-facing files appear in the diff.
-The skill self-gates and exits fast when no injection surface is present, so the
-cost is near zero on changes that genuinely need nothing.
+1. Compute the lane plan deterministically:
+
+   ```bash
+   BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||'); BASE="${BASE:-main}"
+   bash scripts/review-dispatch.sh "$BASE"
+   ```
+
+2. For each planned lane, in the printed order, dispatch a fresh subagent driver
+   with a brief carrying `diff_scope` (the `git diff $BASE...HEAD --name-only`
+   output, regenerated **now** — not carried from an earlier stage), the `lane`,
+   and (for `ai-surface`) the matched `surface`, the CLAUDE.md scrub invariant,
+   and the risk categories:
+   - `ai-surface` → `/ai-surface-review` driver (homegrown injection + data-flow).
+   - `general-security` → the configured general backend (default: the built-in `/security-review`).
+   - `correctness` → the configured correctness backend (default: `/code-review`).
+
+   Validate each returned manifest with `scripts/validate-review-manifest.sh`; relay it.
+
+3. **Degradation:** if a lane's backend is unavailable in this environment, emit
+   "&lt;lane&gt; deferred to /land reviewers (Copilot/Codex)" — never a silent skip.
+
+4. A Critical finding is surfaced for the user to act on (no auto-halt this slice).
 
 ### Step 5.4: Template taxonomy advisory gate
 
@@ -305,7 +322,7 @@ fi
 ## Unified ship tail
 
 The ship tail sequence is: verify → identify affected specs → health-check →
-`/consolidate` → `/security-review` → template taxonomy advisory gate →
+`/consolidate` → review dispatch (B4) → template taxonomy advisory gate →
 local CI gate → backend-aware `/pr` → backend-aware `/land`.
 
 The model-level differences that matter to `/finish` are upstream:
@@ -316,18 +333,18 @@ orchestrates:
 
 - Step 2's "specs affected by this branch" list will, for everything-else changes, always include the design spec at `docs/superpowers/specs/`; that spec drives `/consolidate`'s behaviour but is not itself a governed spec.
 - Step 4's `/consolidate` invocation is the reconciler for generated/evidence sections and built-state updates. The "If any affected spec is at `draft` or `stale`" check still applies — `/consolidate` flips `draft → active` when reconciliation succeeds.
-- Step 5's security review is mandatory — invoke `/security-review` rather than offering it optionally. The skill self-gates and exits fast when no injection surface is present.
+- Step 5's review dispatch is mandatory — run `scripts/review-dispatch.sh` and dispatch each planned lane (`/ai-surface-review`, general-security, correctness) rather than offering review optionally. Lanes degrade to the `/land` reviewers when a backend is absent.
 
 These notes explain the current release pipeline; the procedure steps above
 remain authoritative.
 
 ## Important
 
-- This skill orchestrates existing skills (`/consolidate`, `/security-review`, `/pr`, `/land`). It doesn't duplicate their internals — it calls them in the right order.
+- This skill orchestrates existing skills (`/consolidate`, the B4 review dispatch, `/pr`, `/land`). It doesn't duplicate their internals — it calls them in the right order.
 - **`/handoff` is no longer invoked here** (WS1 D8). The pre-merge handoff in the prior Step 6.5 queued `next-up` against the issue the PR was about to close — a race that resolved incoherently. Handoff now fires post-merge from `/reflect` Q5, which is the single canonical handoff invocation in the ship tail.
 - **`/land` is merge-readiness-only.** It does not close tracker items; post-merge tracker verification and any safe fallback close belong to `/cleanup`.
 - Steps are sequential and each depends on the previous one. Don't skip ahead.
 - If the user wants to create a PR without reconciling spec status via `/consolidate` or running health checks, let them — this is guidance, not a gate. But note what was skipped.
-- For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; `/security-review` still runs and self-gates when no injection surface is present.
+- For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; the B4 review dispatch still runs — `general-security` always fires, `ai-surface` fires when an AI-facing instruction file changed, and `correctness` is skipped (the diff has no code).
 
 $ARGUMENTS

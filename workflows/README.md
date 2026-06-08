@@ -27,7 +27,7 @@ What are you doing?
 
 ```
 new-project      /arboretum:init → /architect → [spike → /consolidate]* → build
-build            /start → [/design] → /build → /finish → /security-review → /pr → /land → /cleanup → /reflect
+build            /start → [/design] → /build → /finish → review (B4) → /pr → /land → /cleanup → /reflect
 explore          /start → spike → document → decide (→ build or → another spike)
 publish          /publish (review → strip → sync)
 retrofit         assess → bootstrap → triage → govern-one → [expand]*
