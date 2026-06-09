@@ -45,6 +45,8 @@ venv/
 .arboretum/log-comments-cache.json
 .arboretum/workspace-cache.json
 .arboretum/workspace-cache.json.*
+.arboretum/pipeline-context-cache.json
+.arboretum/pipeline-context-cache.json.*
 .arboretum/ci-checks-last.log
 
 # Per-PR /land run-state (comments ledger, fix ledger) — regenerable, gitignored

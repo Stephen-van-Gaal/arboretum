@@ -121,7 +121,7 @@ born from built state, behaviour supersession is surfaced explicitly, and
    precondition.
 
 2. Check `docs/REGISTER.md`:
-   - If yes: read it. Build a map of file → owning spec from the "Spec Index" table's "Owns" column.
+   - If yes: read its Spec Index — prefer the pipeline-context ledger (`bash scripts/read-pipeline-context.sh spec_index 2>/dev/null`, keyed on this HEAD and seeded at `/finish`), falling back to `bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"` on a miss. If that bounded section read also fails (malformed or duplicated `Spec Index` heading), fall back to reading `docs/REGISTER.md` as a whole file — the same final fallback `/finish` documents — so a malformed register never blocks building the owner map. Build a map of file → owning spec from the Spec Index table's "Owns" column.
    - If no: bootstrap from `docs/templates/register.md`.
 
 3. Check `docs/specs/`:

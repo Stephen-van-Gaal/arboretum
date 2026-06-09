@@ -62,6 +62,20 @@ if [ -n "${ISSUE:-}" ]; then
 fi
 ```
 
+Seed the pipeline-context ledger so the pre-merge ship-tail stages
+(`/consolidate`, `/pr`) share the REGISTER spec-index for this HEAD instead of
+each re-resolving it. (`/cleanup` and `/reflect` run post-merge, where the
+advanced HEAD makes the SHA-keyed cache cold, so they are not wired in slice 1 —
+design D2.) Best-effort — a failure never blocks `/finish`; the cache is purely
+additive and self-invalidates on the next push (see
+`docs/specs/pipeline-context-ledger.spec.md`):
+
+```bash
+if [ -n "${ISSUE:-}" ]; then
+  bash scripts/refresh-pipeline-context.sh "$ISSUE" 2>/dev/null || true
+fi
+```
+
 Check the current state:
 
 ```bash
@@ -97,9 +111,10 @@ If `docs/REGISTER.md` exists:
    git diff "$BASE"...HEAD --name-only
    ```
 
-2. Read the register's Spec Index with a bounded section read — it carries both the file→spec mapping and each spec's status, so no per-spec read is needed:
+2. Read the register's Spec Index with a bounded section read — it carries both the file→spec mapping and each spec's status, so no per-spec read is needed. Prefer the pipeline-context ledger (seeded above, keyed on this HEAD); fall back to the live section read on a miss:
    ```bash
-   bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"
+   bash scripts/read-pipeline-context.sh spec_index 2>/dev/null \
+     || bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"
    ```
    The Spec Index table (`| Spec | Status | Owner | Owns (files/directories) |`) maps changed files to owning specs via the `Owns` column and gives each spec's state via the `Status` column. If the `Spec Index` heading is missing (malformed register), fall back to a whole-file read of `docs/REGISTER.md`.
 

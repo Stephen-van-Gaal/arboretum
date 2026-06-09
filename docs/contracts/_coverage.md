@@ -36,6 +36,7 @@
 | scripts/read-doc-sections.sh | docs/contracts/read-doc-sections.cli-contract.md | cli |
 | scripts/read-journey-log.sh | docs/contracts/read-journey-log.contract.md | full |
 | scripts/read-patch-lane-config.sh | docs/contracts/read-patch-lane-config.contract.md | full |
+| scripts/read-pipeline-context.sh | docs/contracts/read-pipeline-context.contract.md | full |
 | scripts/read-pipeline-flag.sh | docs/contracts/read-pipeline-flag.contract.md | full |
 | scripts/read-review-config.sh | docs/contracts/read-review-config.cli-contract.md | cli |
 | scripts/read-s2-frontmatter.sh | docs/contracts/read-s2-frontmatter.contract.md | full |
@@ -45,6 +46,7 @@
 | scripts/read-token-journey-config.sh | docs/contracts/read-token-journey-config.cli-contract.md | cli |
 | scripts/read-trust-config.sh | docs/contracts/trust-config.contract.md | full |
 | scripts/refresh-next-cache.sh | docs/contracts/refresh-next-cache.contract.md | full |
+| scripts/refresh-pipeline-context.sh | docs/contracts/refresh-pipeline-context.contract.md | full |
 | scripts/refresh-stage-cache.sh | docs/contracts/refresh-stage-cache.contract.md | full |
 | scripts/refresh-update-cache.sh | docs/contracts/refresh-update-cache.contract.md | full |
 | scripts/refresh-workspace-cache.sh | docs/contracts/refresh-workspace-cache.contract.md | full |

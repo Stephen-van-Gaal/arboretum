@@ -37,6 +37,8 @@
       "Bash(git diff *)",
       "Bash(git symbolic-ref refs/remotes/origin/HEAD)",
       "Bash(bash scripts/refresh-workspace-cache.sh *)",
+      "Bash(bash scripts/refresh-pipeline-context.sh *)",
+      "Bash(bash scripts/read-pipeline-context.sh *)",
       "Bash(git fetch *)",
       "Bash(git for-each-ref *)",
       "Bash(git worktree list *)",

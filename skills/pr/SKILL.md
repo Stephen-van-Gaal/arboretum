@@ -102,6 +102,8 @@ If `scripts/health-check.sh` exists and is executable, run it:
 bash scripts/health-check.sh "$(git rev-parse --show-toplevel)" 2>&1
 ```
 
+Health-check is deliberately **not** read from the pipeline-context ledger — `/pr` re-runs it fresh to catch drift introduced between `/consolidate` and `/pr` (pipeline-context-ledger design D3). Only the spec-index is served from the ledger here.
+
 Capture the output. If it reports issues, present them and ask:
 > "Health check found issues (see above). Proceed anyway, or fix first?"
 
@@ -109,9 +111,10 @@ Capture the output. If it reports issues, present them and ask:
 
 If `docs/REGISTER.md` exists:
 
-1. Read the register's Spec Index with a bounded section read (it carries both ownership and status, so no per-spec read is needed):
+1. Read the register's Spec Index with a bounded section read (it carries both ownership and status, so no per-spec read is needed). Prefer the pipeline-context ledger (keyed on this HEAD, seeded at `/finish`); fall back to the live section read on a miss:
    ```bash
-   bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"
+   bash scripts/read-pipeline-context.sh spec_index 2>/dev/null \
+     || bash scripts/read-doc-section.sh docs/REGISTER.md "Spec Index"
    ```
 2. For each changed file, find which spec owns it (match against the Spec Index table's `Owns` column)
 3. Read each owning spec's status from the same Spec Index `Status` column
