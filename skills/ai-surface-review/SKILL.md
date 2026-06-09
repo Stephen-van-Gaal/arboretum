@@ -36,13 +36,13 @@ Parse `$ARGUMENTS` for `--full`. If present, scan all AI-facing files in the pro
 
 Detect the base branch:
 ```bash
-BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-BASE="${BASE:-main}"
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+BASE="$(workspace_base_ref)"   # high-frequency consumer -> no --fetch
 ```
 
 **Default mode:** Get changed files and filter to AI-facing paths:
 ```bash
-git diff $BASE...HEAD --name-only
+git diff "$BASE"...HEAD --name-only
 ```
 
 Filter to files matching the scope paths above. If no AI-facing files were changed, report "No AI-facing files in diff" and exit.

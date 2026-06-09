@@ -35,12 +35,13 @@ def before(text, a, b):
 
 check(
     "/finish local readiness before local CI",
-    before(finish, 'bash scripts/pr-readiness.sh local "origin/$BASE"', 'eval "$TEST_CMD"'),
+    before(finish, 'bash scripts/pr-readiness.sh local "$BASE_REF"', 'eval "$TEST_CMD"'),
 )
 check(
     "/finish refreshes base before local readiness",
-    finish.count('git fetch origin "$BASE"') >= 2
-    and before(finish, 'git fetch origin "$BASE"', 'bash scripts/pr-readiness.sh local "origin/$BASE"'),
+    # base refresh is now the workspace-context helper's bounded --fetch (#623)
+    finish.count('workspace_base_ref --fetch') >= 2
+    and before(finish, 'workspace_base_ref --fetch', 'bash scripts/pr-readiness.sh local "$BASE_REF"'),
 )
 check(
     "/finish invokes /pr --draft for GitHub ship tail",

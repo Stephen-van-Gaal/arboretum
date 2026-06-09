@@ -44,22 +44,28 @@ born from built state, behaviour supersession is surfaced explicitly, and
 
 ### Step 1: Detect base branch and gather changes
 
-1. Determine the base branch:
+1. Determine the base ref. Source the workspace-context helper and read
+   `$ARBO_BASE_REF` — a worktree-correct `<remote>/<default>` remote-tracking ref,
+   never a stale local `main` (#381). `/consolidate` is a high-frequency consumer,
+   so do **not** pass `--fetch`:
 
    ```bash
-   git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo "main"
+   source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+   workspace_context || { echo "Not inside a git work tree — cannot consolidate." >&2; exit 1; }
    ```
 
-2. Find the merge base:
+2. (Optional — for reference only.) The explicit merge-base commit. You do **not**
+   need to capture it: the `...` form in the next step already diffs from the merge
+   base. Compute it only if a later step wants the bare commit:
 
    ```bash
-   git merge-base <base-branch> HEAD
+   git merge-base "$ARBO_BASE_REF" HEAD
    ```
 
-3. List all changed files on this branch:
+3. List all changed files on this branch (the `...` form diffs from the merge base):
 
    ```bash
-   git diff --name-only <merge-base>...HEAD
+   git diff --name-only "$ARBO_BASE_REF"...HEAD
    ```
 
 4. If no changed files are found, exit early: "No changes to consolidate on this branch."
@@ -292,7 +298,8 @@ Skip this substep unless the user passed `--audit-comments` as an argument to `/
 When enabled, scan the diff for comments touching changed lines:
 
 ```bash
-git diff <merge-base>...HEAD -- <source-file>
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+git diff "$(workspace_base_ref)"...HEAD -- <source-file>
 ```
 
 Apply heuristics to flag likely-stale comments:
@@ -379,7 +386,7 @@ behaviour. `/consolidate` must surface that, not silently overwrite Behaviour.
 Use this hybrid procedure:
 
 1. **Heuristic flag (auto):** mark the governed spec as a supersession candidate when **all four** hold:
-   - **Scope-narrowed harvest set:** the design specs being evaluated for this governed spec are restricted to the union of (a) any design spec passed explicitly as `$ARGUMENTS`, (b) design specs already cited in this governed spec's existing `### Design record` subsection (per Step 2 item 3), and (c) design specs **added, modified, or renamed on the current branch** (detected via `git diff --diff-filter=AMR <merge-base>...HEAD --name-only | grep '^docs/superpowers/specs/.*\.md$'` — the `--diff-filter=AMR` is required: a bare `--name-only` also returns deleted paths, which the heuristic would then try to read behaviour-shaped content from, causing false prompts or read failures; including `R` keeps renamed-with-edit specs in scope since they are part of the current consolidation changes). Set (c) is critical: `/finish` auto-invokes `/consolidate` without an explicit `$ARGUMENTS` argument, and a brand-new design spec for the current branch is not yet cited in the governed spec's Design record (the citation gets added during *this* consolidation pass) — without (c), exactly the design spec that motivated this consolidation would fall out of scope. Step 2's default "scan all `docs/superpowers/specs/*.md`" pool is **not** used for the supersession heuristic — that pool exists for the unrelated APPEND-AUTO Decisions harvest. This 3-source union stops historical design specs unrelated to the current consolidation from flagging false-positive supersessions while still catching the live design spec on this branch.
+   - **Scope-narrowed harvest set:** the design specs being evaluated for this governed spec are restricted to the union of (a) any design spec passed explicitly as `$ARGUMENTS`, (b) design specs already cited in this governed spec's existing `### Design record` subsection (per Step 2 item 3), and (c) design specs **added, modified, or renamed on the current branch** (detected via `git diff --diff-filter=AMR "$ARBO_BASE_REF"...HEAD --name-only | grep '^docs/superpowers/specs/.*\.md$'` — the `--diff-filter=AMR` is required: a bare `--name-only` also returns deleted paths, which the heuristic would then try to read behaviour-shaped content from, causing false prompts or read failures; including `R` keeps renamed-with-edit specs in scope since they are part of the current consolidation changes). Set (c) is critical: `/finish` auto-invokes `/consolidate` without an explicit `$ARGUMENTS` argument, and a brand-new design spec for the current branch is not yet cited in the governed spec's Design record (the citation gets added during *this* consolidation pass) — without (c), exactly the design spec that motivated this consolidation would fall out of scope. Step 2's default "scan all `docs/superpowers/specs/*.md`" pool is **not** used for the supersession heuristic — that pool exists for the unrelated APPEND-AUTO Decisions harvest. This 3-source union stops historical design specs unrelated to the current consolidation from flagging false-positive supersessions while still catching the live design spec on this branch.
    - That scope-narrowed set contains at least one design spec with Behaviour-shaped content (a `## Behaviour`, `## Deliverable spec`, or `## Procedure` heading with body text; or, for design specs written against the unified template, an `## Intended behaviour` section).
    - The governed spec already has a non-stub Behaviour section (not just `<!-- HUMAN — What should the system do? -->`).
    - The governed spec's Decisions table contains **no existing row** with `Source = "<design-spec-path>@<git-blob-sha> (no-change classification, unified)"` where `<git-blob-sha>` matches the design spec's **current** blob SHA (`git ls-tree HEAD -- <design-spec-path>` → blob hash). A prior consolidation that classified the design spec as a no-change restatement persists that decision keyed by content hash; the heuristic skips re-prompting only when the stored hash still matches current content. If the design spec has since been modified, its blob SHA differs from any stored marker → the no-change classification is **automatically invalidated** and the heuristic re-prompts. This stops a stale marker from suppressing supersession detection when a previously-no-change design spec later gains real behaviour changes.

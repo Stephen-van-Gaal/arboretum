@@ -74,8 +74,8 @@ Verify you are NOT on `main` or `master`. If on a protected branch, stop and tel
 ### 2. Detect base branch
 
 ```bash
-BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-BASE="${BASE:-main}"
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+BASE="$(workspace_base_ref --fetch)"   # pr is ship-tail pre-PR -> --fetch for a fresh base
 ```
 
 Use `$BASE` for all subsequent diff/log commands.
@@ -84,8 +84,8 @@ Use `$BASE` for all subsequent diff/log commands.
 
 Run these in parallel:
 
-- `git log $BASE..HEAD --oneline` — commits on this branch
-- `git diff $BASE...HEAD --name-only` — all changed files
+- `git log "$BASE"..HEAD --oneline` — commits on this branch
+- `git diff "$BASE"...HEAD --name-only` — all changed files
 - `git status --short` — any uncommitted work
 - `git rev-parse --abbrev-ref @{upstream} 2>/dev/null` — remote tracking status
 

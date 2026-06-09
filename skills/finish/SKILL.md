@@ -66,7 +66,8 @@ Check the current state:
 
 ```bash
 git status --short
-git log $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)..HEAD --oneline
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+git log "$(workspace_base_ref)"..HEAD --oneline
 ```
 
 Report:
@@ -91,8 +92,9 @@ If `docs/REGISTER.md` exists:
 
 1. Get all changed files on this branch:
    ```bash
-   BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)
-   git diff $BASE...HEAD --name-only
+   source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+   BASE="$(workspace_base_ref)"
+   git diff "$BASE"...HEAD --name-only
    ```
 
 2. Read the register's Spec Index with a bounded section read — it carries both the file→spec mapping and each spec's status, so no per-spec read is needed:
@@ -146,7 +148,8 @@ The B4 review stage is a **dispatch** over replaceable, fresh-context lanes
 1. Compute the lane plan deterministically:
 
    ```bash
-   BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||'); BASE="${BASE:-main}"
+   source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+   BASE="$(workspace_base_ref)"
    bash scripts/review-dispatch.sh "$BASE"
    ```
 
@@ -172,7 +175,8 @@ If `scripts/validate-template-taxonomy.sh` exists, inspect changed paths against
 the default branch:
 
 ```bash
-BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+BASE="$(workspace_base_ref)"
 CHANGED=$(git diff "$BASE"...HEAD --name-only)
 ```
 
@@ -196,9 +200,9 @@ cheap mergeability gate that prevents running expensive tests on a branch that
 already cannot proceed:
 
 ```bash
-BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)
-git fetch origin "$BASE"
-LOCAL_READINESS="$(bash scripts/pr-readiness.sh local "origin/$BASE")"
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+BASE_REF="$(workspace_base_ref --fetch)"   # ship-tail pre-PR: --fetch for a fresh base (helper does the bounded fetch)
+LOCAL_READINESS="$(bash scripts/pr-readiness.sh local "$BASE_REF")"
 printf '%s\n' "$LOCAL_READINESS"
 case "$LOCAL_READINESS" in
   readiness=ready\ *) ;;
@@ -246,8 +250,9 @@ After local CI passes, run the same readiness check again. If the branch moved
 or the test run generated unexpected files, stop before invoking `/pr`:
 
 ```bash
-git fetch origin "$BASE"
-LOCAL_READINESS="$(bash scripts/pr-readiness.sh local "origin/$BASE")"
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+BASE_REF="$(workspace_base_ref --fetch)"
+LOCAL_READINESS="$(bash scripts/pr-readiness.sh local "$BASE_REF")"
 printf '%s\n' "$LOCAL_READINESS"
 case "$LOCAL_READINESS" in
   readiness=ready\ *) ;;

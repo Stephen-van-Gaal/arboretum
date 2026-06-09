@@ -61,8 +61,8 @@ echo "Current branch: $BRANCH"
 
 If on `main` or `master`, check for stale local branches:
 ```bash
-DEFAULT_BRANCH="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
-DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+DEFAULT_BRANCH="$(workspace_default_branch)"   # short name (D6: --merged needs the local branch name, not a remote ref)
 git branch --merged "$DEFAULT_BRANCH" | grep -v '^\*\|main\|master'
 ```
 
