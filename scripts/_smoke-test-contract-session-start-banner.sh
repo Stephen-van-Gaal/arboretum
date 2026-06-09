@@ -217,4 +217,20 @@ else
   fail_case "SSB-6b" "missing roadmap-render-failed diagnostic" "$out"
 fi
 
+# ── SSB-7: [Register] mtime-staleness emission removed (#643) ───────────
+# The old mtime check emitted "[Register] … may be stale" whenever a spec
+# file was newer than REGISTER.md — a false positive on any git checkout /
+# stash that bumps mtimes. It was removed in #643. Even under that exact
+# triggering condition the banner must NOT emit a [Register] line.
+fix=$(new_fixture ssb7)
+mkdir -p "$fix/docs/specs"
+echo "# spec" > "$fix/docs/specs/x.spec.md"
+touch -t 200001010000 "$fix/docs/REGISTER.md"   # force REGISTER older than the spec
+out=$(run_hook "$fix")
+if echo "$out" | grep -q '\[Register\]'; then
+  fail_case SSB-7 "[Register] staleness line emitted — the mtime check should be removed (#643)" "$out"
+else
+  pass SSB-7
+fi
+
 [ "$fail" = 0 ] && echo "session-start-banner contract: ALL PASS" || exit 1

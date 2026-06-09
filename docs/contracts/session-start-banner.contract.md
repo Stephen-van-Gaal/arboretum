@@ -1,6 +1,6 @@
 ---
 seam: session-start-banner
-version: 1.2
+version: 1.3
 producer-type: hook
 consumer-type: skill
 consumes:
@@ -32,7 +32,7 @@ Blocks rendered (in output order):
 - **`Stage:` / `Last action:` / `Last session:`** — the WS9 pipeline-state block, read from `.arboretum/active-stage-cache.json` + `.arboretum/log-comments-cache.json` (refresh-stage-cache seam). Scrubbed.
 - **`[Arboretum] Update available: …`** / **`[Arboretum] Plugin not found …`** / **`[Arboretum] Could not check latest release …`** / **`[Arboretum] Project tree is behind …`** — read from `.arboretum/update-cache.json` (refresh-update-cache seam) and `.arboretum/install-manifest.json`. Scrubbed.
 - **`[Build cycle]`** — shell-only branch/spec/plan detection (no cache).
-- **`[Spec Status]` / `[Stale]` / `[Draft]` / `[Register]` / `[Stale Version Pins]` / `[Layer Suggestion]` / `[Active Skills]`** — parsed from `docs/REGISTER.md`, `contracts.yaml`, `docs/definitions/`, `.claude/skills/`.
+- **`[Spec Status]` / `[Stale]` / `[Draft]` / `[Stale Version Pins]` / `[Layer Suggestion]` / `[Active Skills]`** — parsed from `docs/REGISTER.md`, `contracts.yaml`, `docs/definitions/`, `.claude/skills/`.
 - **roadmap orientation / diagnostics** — `scripts/roadmap/view.sh --format condensed --quiet` stdout captured into `orientation_text` and appended verbatim. When `roadmap.config.yaml` exists but the renderer is missing or exits non-zero with no stdout, the hook renders a single `[roadmap]` diagnostic. Captured renderer output is **NOT scrubbed** (see the scrub gap in Invariants; producer-side gap recorded in `docs/contracts/roadmap-view.contract.md`).
 
 The hook **always exits 0**.
@@ -44,7 +44,7 @@ Consumer-type: `skill` — the rendered banner flows to Claude as SessionStart `
 - **`scripts/_smoke-test-pipeline-state-banner.sh`** — asserts the `Stage:` / `Last action:` / `Last session:` pipeline-state lines (and their absence when the stage cache is absent).
 - **`scripts/_smoke-test-workspace-banner.sh`** — asserts the `[Workspace]` block: routing precedence, the silence rule, and consumer re-scrub of author-controlled fields (RWC-8).
 - **`scripts/_smoke-test-session-start-next.sh`** — asserts the `[Next-up]` block.
-- **`scripts/_smoke-test-session-start-staleness.sh`**, **`scripts/_smoke-test-session-start-cycle.sh`** — assert the register-staleness and build-cycle blocks.
+- **`scripts/_smoke-test-session-start-staleness.sh`**, **`scripts/_smoke-test-session-start-cycle.sh`** — assert the project-tree-staleness (`[Arboretum] Project tree is behind`) and build-cycle blocks.
 - **`scripts/_smoke-test-contract-session-start-banner.sh`** (this contract's test) — asserts a representative rendered block marker and the scrub behaviour (scrubbed next-up block vs. unscrubbed roadmap passthrough).
 
 **Consumer obligations:**
@@ -99,9 +99,11 @@ stdout (echoed once at end): a newline-separated multi-block banner, or empty st
 - **SSB-4:** Always-exits-0 + empty-on-no-signal — on a clean fixture with no signal-bearing caches the hook exits 0 (banner may be empty or carry only non-cache blocks); no input degradation aborts it.
 - **SSB-5:** Update-cache diagnostics — `manifest-not-found` renders a plugin-install hint; `gh-call-failed` / `no-release` render a latest-release lookup failure line including the installed version when known; the no-`python3` shell fallback strips control chars before rendering that version.
 - **SSB-6:** Roadmap diagnostics — with `roadmap.config.yaml` present, a missing renderer produces a `/upgrade` hint and a renderer that exits non-zero with no stdout produces a `/roadmap run` diagnostic.
+- **SSB-7:** No mtime register-staleness emission — even when a `docs/specs/*.spec.md` file is newer than `REGISTER.md` (the condition the removed mtime check fired on), the banner emits no `[Register]` line (#643).
 
 ## Versioning
 
+- **1.3** (2026-06-08) — removed the mtime-based `[Register] … may be stale` emission (#643, epic #640); `[Register]` dropped from the parsed-tags list; SSB-7 asserts its absence.
 - **1.2** (2026-06-07) — roadmap orientation producer changed from `render-run.sh --condensed` to `view.sh --format condensed --quiet` (the shared view core; #621). The scrub-gap cross-reference moves to `roadmap-view.contract.md`.
 - **1.1** (2026-06-03) — configured startup failures produce concise diagnostics: update-cache closed-error states and configured roadmap renderer failures.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `.claude/hooks/session-start.sh` on `feat/ws5-pr7a-full-shape-sweep`. Issue #303 (WS5 PR 7a). Documents the known roadmap-passthrough scrub gap.

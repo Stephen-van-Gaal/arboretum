@@ -753,24 +753,6 @@ if [ -f "$REGISTER" ]; then
   fi
 fi
 
-# ── Check register staleness ─────────────────────────────────────────
-
-if [ -f "$REGISTER" ] && [ -d "$PROJECT_DIR/docs/specs" ]; then
-  register_stale=false
-  for spec_file in "$PROJECT_DIR"/docs/specs/*.spec.md; do
-    [ -f "$spec_file" ] || continue
-    if [ "$spec_file" -nt "$REGISTER" ]; then
-      register_stale=true
-      break
-    fi
-  done
-  if [ "$register_stale" = true ]; then
-    output+=$'\n'"[Register] REGISTER.md may be stale — spec files are newer than the register."
-    output+=$'\n'"  → Why: Stale register data causes incorrect staleness checks and ownership lookups."
-    output+=$'\n'"    Run scripts/generate-register.sh to resync."
-  fi
-fi
-
 # ── Check version pin staleness ──────────────────────────────────────
 
 if [ -f "$CONTRACTS" ] && [ -d "$DEFS_DIR" ]; then
