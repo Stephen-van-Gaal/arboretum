@@ -7,36 +7,54 @@ document_shapes:
         heading: Purpose
         content: Why the governed component exists and what problem it solves.
         required: yes
+        authorship: human
       - key: boundaries
         heading: Boundaries (non-goals)
         content: What this component deliberately does not own.
         required: yes
+        authorship: human
         aliases:
           - Non-goals
       - key: behaviour
         heading: Behaviour
-        content: Current system promise the implementation must satisfy.
+        content: Current system promise the implementation must satisfy; self-contained, provenance-only links.
         required: yes
+        authorship: human
+      - key: quality-attributes
+        heading: Quality Attributes
+        content: Component NFRs as testable scenarios; declare N/A when none.
+        required: no
+        authorship: human
+      - key: customer-experience
+        heading: Customer Experience
+        content: User/operator-facing behaviour; required when interactive, else N/A.
+        required: no
+        authorship: human
       - key: requires
         heading: Requires
-        content: Inbound dependencies, shared definitions, contracts, specs, or external systems.
+        content: Inbound seam (= a contract's consumes); dependencies, definitions, contracts, specs, external systems.
         required: yes
+        authorship: human
       - key: provides
         heading: Provides
-        content: Public surfaces, exports, contracts, commands, files, schemas, or behaviours.
+        content: Outbound seam (= a contract's produces); exports, contracts, commands, files, schemas, behaviours.
         required: yes
+        authorship: human
       - key: tests
         heading: Tests
         content: Verification surfaces by tier.
         required: yes
+        authorship: auto
       - key: implementation-notes
         heading: Implementation Notes
-        content: Implementation guidance and design-record citations.
+        content: Implementation guidance plus the Design record provenance changelog.
         required: yes
+        authorship: human
       - key: decisions
         heading: Decisions
-        content: Durable decisions harvested or authored for this component.
+        content: Durable decisions (Alternatives + Rationale) harvested or authored for this component.
         required: yes
+        authorship: append-auto
   design-spec:
     template: docs/templates/design-spec.md
     description: Pre-build authority for non-trivial everything-else work.

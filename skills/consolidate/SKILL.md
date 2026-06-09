@@ -210,10 +210,10 @@ For each new spec in the approved plan:
    - If no owned files exist yet, flag the create as premature and defer it until the build lands. If the user declines to defer, stop this consolidation pass; do not write a governed spec for an unbuilt surface.
 
 3. Populate sections:
-   - **Purpose** — if a design spec is provided, harvest from its problem statement. Otherwise stub: `<!-- HUMAN — Why does this exist? -->`
-   - **Behaviour** — if a design spec is provided, harvest from its deliverable spec / procedure. Otherwise stub: `<!-- HUMAN — What should the system do? -->` Per the collaborative authoring model, do NOT generate Behaviour from code in code-analysis-only mode.
+   - **Purpose** — if a design spec is provided, harvest from its problem statement. Otherwise stub: `<!-- Why does this exist? -->` (authorship is declared in `document-shapes.yaml`, not inline).
+   - **Behaviour** — if a design spec is provided, harvest from its deliverable spec / procedure. Otherwise stub: `<!-- What should the system do? -->` Per the collaborative authoring model, do NOT generate Behaviour from code in code-analysis-only mode. Promote per the `docs/contracts/promotion.contract.md` seam: Behaviour must be self-contained (provenance-only links, never substitution).
    - **Tests** (AUTO) — list each test file under owns by name with tier; declare "N/A — [reason]" for inapplicable tiers.
-   - **Implementation Notes → Design record** (AUTO) — citation list of design specs and plans referenced by this spec.
+   - **Implementation Notes → Design record** (AUTO) — dated provenance changelog, one row per referenced design spec / plan: `| Date | Artifact | Sections changed | Summary |`. Idempotency key: Artifact. Provenance only — no embedded design content; distinct from Decisions.
    - **Decisions** (APPEND-AUTO) — initial row(s) harvested from referenced design specs / plans (see Decision harvest below).
 
 4. Present the drafted spec to the user. Wait for approval before writing.
@@ -230,7 +230,7 @@ For each existing spec touched by this branch:
    - Frontmatter (name, owner, owns) — recompute from REGISTER and current code.
    - Status — see Step 5e (auto-flip rules below).
    - Tests — re-derive from current test files.
-   - Implementation Notes → Design record — rebuild citation list from referenced design specs and plans.
+   - Implementation Notes → Design record — rebuild the dated provenance changelog (`| Date | Artifact | Sections changed | Summary |`) from referenced design specs and plans; append a row per artifact not already present (idempotency key: Artifact).
 
 3. **Scan HUMAN sections** (Purpose, Behaviour, free-text Implementation Notes) for stale references. See "Stale reference detection" below. For each section that has stale flags, prompt the user.
 
@@ -388,7 +388,7 @@ Use this hybrid procedure:
 1. **Heuristic flag (auto):** mark the governed spec as a supersession candidate when **all four** hold:
    - **Scope-narrowed harvest set:** the design specs being evaluated for this governed spec are restricted to the union of (a) any design spec passed explicitly as `$ARGUMENTS`, (b) design specs already cited in this governed spec's existing `### Design record` subsection (per Step 2 item 3), and (c) design specs **added, modified, or renamed on the current branch** (detected via `git diff --diff-filter=AMR "$ARBO_BASE_REF"...HEAD --name-only | grep '^docs/superpowers/specs/.*\.md$'` — the `--diff-filter=AMR` is required: a bare `--name-only` also returns deleted paths, which the heuristic would then try to read behaviour-shaped content from, causing false prompts or read failures; including `R` keeps renamed-with-edit specs in scope since they are part of the current consolidation changes). Set (c) is critical: `/finish` auto-invokes `/consolidate` without an explicit `$ARGUMENTS` argument, and a brand-new design spec for the current branch is not yet cited in the governed spec's Design record (the citation gets added during *this* consolidation pass) — without (c), exactly the design spec that motivated this consolidation would fall out of scope. Step 2's default "scan all `docs/superpowers/specs/*.md`" pool is **not** used for the supersession heuristic — that pool exists for the unrelated APPEND-AUTO Decisions harvest. This 3-source union stops historical design specs unrelated to the current consolidation from flagging false-positive supersessions while still catching the live design spec on this branch.
    - That scope-narrowed set contains at least one design spec with Behaviour-shaped content (a `## Behaviour`, `## Deliverable spec`, or `## Procedure` heading with body text; or, for design specs written against the unified template, an `## Intended behaviour` section).
-   - The governed spec already has a non-stub Behaviour section (not just `<!-- HUMAN — What should the system do? -->`).
+   - The governed spec already has a non-stub Behaviour section (not just the placeholder stub `<!-- What should the system do? -->`, nor the legacy `<!-- HUMAN — What should the system do? -->` that older specs may still carry).
    - The governed spec's Decisions table contains **no existing row** with `Source = "<design-spec-path>@<git-blob-sha> (no-change classification, unified)"` where `<git-blob-sha>` matches the design spec's **current** blob SHA (`git ls-tree HEAD -- <design-spec-path>` → blob hash). A prior consolidation that classified the design spec as a no-change restatement persists that decision keyed by content hash; the heuristic skips re-prompting only when the stored hash still matches current content. If the design spec has since been modified, its blob SHA differs from any stored marker → the no-change classification is **automatically invalidated** and the heuristic re-prompts. This stops a stale marker from suppressing supersession detection when a previously-no-change design spec later gains real behaviour changes.
 
 2. **Human confirm (interactive):** present the existing governed Behaviour and the design spec's behaviour-shaped content side by side, then prompt:
@@ -413,7 +413,7 @@ A `coverage-baseline` refactor design spec preserves behaviour by definition
 the design spec as **structure-only**:
 
 1. **Skip Behaviour reconciliation entirely.** Do not prompt for the supersession edit. The governed Behaviour section is correct as-is (behaviour did not change).
-2. **Regenerate the AUTO sections only:** frontmatter (Owns may shift if files moved or split), Tests (characterization-test rows update), Implementation Notes → Design record (the refactor design spec is added to the citation list).
+2. **Regenerate the AUTO sections only:** frontmatter (Owns may shift if files moved or split), Tests (characterization-test rows update), Implementation Notes → Design record (the refactor design spec is appended as a row to the dated provenance changelog, keyed by Artifact).
 3. **APPEND-AUTO Decisions** still accrues new rows harvested from the refactor design spec — D5 specs document the target structure and characterization-test baseline; those decisions are worth preserving.
 
 If a refactor design spec inadvertently asks for a Behaviour edit, that signals the work is no longer behaviour-preserving and should reclassify as everything-else with a `brainstorm` or `investigate` Branch 1 (per D6's reclassification rule). Surface this and ask the user to either reclassify or correct the design spec.

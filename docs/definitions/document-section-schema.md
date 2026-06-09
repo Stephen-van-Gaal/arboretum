@@ -36,6 +36,14 @@ Each section record contains:
 - `heading` - canonical Markdown heading text.
 - `content` - short description of what belongs in the section.
 - `required` - `yes` or `no`.
+- `authorship` - optional; one of `human` | `auto` | `append-auto`. The
+  source of truth for how `/consolidate` treats the section (preserve /
+  regenerate / append). Replaces the former inline `<!-- HUMAN/AUTO -->` markers;
+  when absent, consumers fall back to `human` (preserve). Granularity is
+  **section-level**: a `human` section may contain an `auto` subsection — e.g.
+  `implementation-notes` is `human`, but its `### Design record` subsection is
+  regenerated. Consumers must key such exceptions on **subsection identity**, not
+  invert the parent's section-level value.
 - `aliases[]` - optional alternate heading text accepted for retrieval.
 
 ## Constraints
