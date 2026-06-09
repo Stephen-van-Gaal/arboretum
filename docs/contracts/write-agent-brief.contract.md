@@ -1,6 +1,6 @@
 ---
 seam: write-agent-brief
-version: 1.0
+version: 1.1
 producer-type: script
 consumer-type: script
 consumes:
@@ -58,9 +58,9 @@ triage: agent-target
 implementation-mode: direct
 plan: null
 test-tiers:
-  unit: n/a — agent-target work; tests added inline if surface warrants
-  contract: n/a — no shared definitions touched
-  integration: n/a — no cross-spec dependencies
+  unit: yes
+  contract: yes
+  integration: yes
 ---
 
 # Agent-target task brief — #<issue>
@@ -78,7 +78,7 @@ stdout: the written brief path. Exit codes: `0` — brief written; `1` — missi
 
 - **Frontmatter S2-schema completeness.** The brief frontmatter carries exactly the five required S2 fields plus `date`: `date`, `related-issue`, `triage`, `implementation-mode`, `plan`, `test-tiers`. The five S2 fields are exactly what `read-s2-frontmatter.sh` requires. Removing or renaming any is a contract change requiring a coordinated reader update.
 - **Fixed S2 values.** The producer always emits `triage: agent-target`, `implementation-mode: direct`, `plan: null`. These are the defining values of an agent-target brief — not configurable.
-- **test-tiers is an object.** `test-tiers` is always a YAML mapping with `unit`, `contract`, and `integration` sub-keys (each an `n/a — …` declaration). It is never a scalar — `read-s2-frontmatter.sh` rejects a scalar test-tiers.
+- **test-tiers is an object, defaulting to applicable.** `test-tiers` is always a YAML mapping with `unit`, `contract`, and `integration` sub-keys. The producer emits each as `yes` (all tiers applicable) — never `n/a` by default (#695). `n/a` is an enforced claim ("no test of this tier belongs here") that `/build`'s exit guard invalidates the moment the build touches a test of that tier, so an `n/a` default under-declares and trips the guard; `yes` is permissive scope with no converse penalty, leaving real tier applicability to the build-time TDD cycle (`workflow-unification` D6: all-tiers-N/A is a rare logged skip, never the default). It is never a scalar — `read-s2-frontmatter.sh` rejects a scalar test-tiers.
 - **related-issue echoes the validated issue.** `related-issue` is the `<issue>` argument verbatim — a strictly positive integer, so the reader's `related-issue > 0` gate always passes.
 - **Strict issue validation.** `<issue>` matching `''|*[!0-9]*|0|0[0-9]*` (empty, non-digit, zero, or leading-zero) exits 1 and writes nothing.
 - **Empty-stdin rejection.** An empty task statement exits 1 and writes nothing.
@@ -96,4 +96,5 @@ stdout: the written brief path. Exit codes: `0` — brief written; `1` — missi
 
 ## Versioning
 
+- **1.1** (2026-06-09) — `test-tiers` default flipped from all-`n/a` to all-`yes` (#695). No schema change — `test-tiers` is still an object with `unit`/`contract`/`integration` sub-keys, each `yes` or `n/a — …`; only the producer's emitted default values changed. Restores `workflow-unification` D6 ("never the default").
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/write-agent-brief.sh` and consumer `scripts/read-s2-frontmatter.sh` on `main`. Issue #303 (WS5 PR 7a).

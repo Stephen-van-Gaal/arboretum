@@ -46,6 +46,15 @@ BRIEF="$BRIEFS_DIR/${ISSUE}.md"
 # $(date) is local). printf writes the task statement literally (no
 # expansion of $VAR or $() inside the value). The footer uses a quoted
 # heredoc since it contains no variables.
+#
+# test-tiers default to `yes` (all three), not `n/a` (#695). `n/a` is an
+# enforced positive claim ("no test of this tier belongs here") that /build's
+# exit guard invalidates the moment the build touches a test of that tier —
+# so an `n/a` default under-declares and trips the guard on common slices
+# (deletions, contract tweaks). `yes` is permissive scope ("the TDD cycle will
+# assess this tier") and carries no converse penalty, so it is the only safe
+# default. The build-time TDD cycle establishes real applicability.
+# workflow-unification D6: all-tiers-N/A is a rare logged skip, never the default.
 
 cat > "$BRIEF" <<EOF
 ---
@@ -55,9 +64,9 @@ triage: agent-target
 implementation-mode: direct
 plan: null
 test-tiers:
-  unit: n/a — agent-target work; tests added inline if surface warrants
-  contract: n/a — no shared definitions touched
-  integration: n/a — no cross-spec dependencies
+  unit: yes
+  contract: yes
+  integration: yes
 ---
 
 # Agent-target task brief — #$ISSUE

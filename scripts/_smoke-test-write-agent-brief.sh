@@ -31,6 +31,16 @@ grep -q "^plan: null$" "$BRIEF" || fail "case 2 — missing/wrong plan"
 grep -q "^test-tiers:" "$BRIEF" || fail "case 2 — missing test-tiers block"
 ok "case 2 — frontmatter has all five S2 fields with agent-target defaults"
 
+# Case 2b: tiers default to `yes`, not `n/a` (#695). Asserting `n/a` by default
+# under-declares and trips /build's N/A-mutation guard the moment an agent-target
+# slice touches a test of that tier. `yes` is the only unconditionally safe
+# default (no converse guard); workflow-unification D6 forbids all-tiers-N/A as
+# the default.
+grep -q "^  unit: yes$" "$BRIEF" || fail "case 2b — unit tier is not 'yes'" "$(cat "$BRIEF")"
+grep -q "^  contract: yes$" "$BRIEF" || fail "case 2b — contract tier is not 'yes'" "$(cat "$BRIEF")"
+grep -q "^  integration: yes$" "$BRIEF" || fail "case 2b — integration tier is not 'yes'" "$(cat "$BRIEF")"
+ok "case 2b — test-tiers default to 'yes' (D6 / #695)"
+
 # Case 3: read-s2-frontmatter.sh accepts the brief
 out=$(bash "$READ_S2" "$BRIEF")
 echo "$out" | grep -q "^related-issue=299" || fail "case 3 — S2 reader rejected brief" "$out"
