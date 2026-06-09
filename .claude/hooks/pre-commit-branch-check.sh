@@ -113,4 +113,33 @@ for protected in "${PROTECTED_BRANCHES[@]}"; do
   fi
 done
 
+# ── Collision read-back (epic #622 L1, #624) ────────────────────────
+# Narrow, local-only verdict on the commit target. A `warn-reattach` verdict
+# is ADVISORY: emit a non-blocking [Collision] note and still exit 0. The sole
+# blocking case stays the protected-branch guard above (D6). The verdict script
+# ships alongside this hook, so resolve it relative to the hook (works for
+# cross-repo commits too — the framework copy runs against the target's branches).
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COLLISION="$HOOK_DIR/../../scripts/workspace-collision-check.sh"
+if [ -f "$COLLISION" ]; then
+  # `|| true` keeps a failing probe (e.g. target not a git repo) from aborting
+  # under set -euo pipefail; stderr is dropped so workspace-context diagnostics
+  # never leak into the advisory.
+  verdict=$( cd "$COMMIT_CWD" 2>/dev/null && bash "$COLLISION" --pre-commit 2>/dev/null || true )
+  if [ "${verdict#VERDICT=}" = "warn-reattach" ]; then
+    # Scrub the author-influenced branch name before it enters Claude's context
+    # (CLAUDE.md defense-in-depth; same shared primitive sibling hooks use). The
+    # script's own reason is already scrubbed but discarded above, so re-scrub here.
+    safe_branch="$BRANCH"
+    SCRUB_LIB="$HOOK_DIR/../../scripts/lib/scrub-control-chars.sh"
+    # shellcheck source=/dev/null
+    if [ -f "$SCRUB_LIB" ] && . "$SCRUB_LIB" 2>/dev/null \
+       && command -v scrub_control_chars_oneline >/dev/null 2>&1; then
+      safe_branch="$(printf '%s' "$BRANCH" | scrub_control_chars_oneline)"
+    fi
+    echo "[Collision] Branch '$safe_branch' may be a second branch for an issue that already has another local branch." >&2
+    echo "  → Advisory only; commit allowed. Reattach to the existing branch if this fork was accidental." >&2
+  fi
+fi
+
 exit 0

@@ -7,6 +7,7 @@
       "Bash(bash scripts/validate-review-manifest.sh *)",
       "Bash(bash scripts/validate-cross-refs.sh *)",
       "Bash(bash scripts/log-stage.sh *)",
+      "Bash(bash scripts/workspace-collision-check.sh *)",
       "Bash(bash scripts/read-journey-log.sh *)",
       "Bash(bash scripts/read-trust-config.sh *)",
       "Bash(bash scripts/manage-trust.sh *)",

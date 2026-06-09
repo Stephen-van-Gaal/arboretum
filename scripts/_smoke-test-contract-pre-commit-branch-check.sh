@@ -214,6 +214,31 @@ mv "$HOST/.arboretum.yml.bak" "$HOST/.arboretum.yml"
 run_blocked "M: trigger boundary — git commit; echo done" \
   '{"tool_input":{"command":"git commit; echo done"}}'
 
+# Scenario N — #624 collision advisory: a second local branch for the same
+# issue yields a NON-BLOCKING [Collision] advisory (exit 0 + stderr), never a
+# block. The hook resolves workspace-collision-check.sh relative to itself, so
+# the real framework script runs against this fixture's branches. Asserts the
+# new CLI clause: warn-reattach -> exit 0 + advisory; the sole exit-2 block
+# stays the protected-branch guard (D6).
+WARN=$(mktemp -d)
+( cd "$WARN" && git "${GIT_ID[@]}" init -q && git "${GIT_ID[@]}" commit -q --allow-empty -m init
+  git branch -M main 2>/dev/null || true
+  echo "layer: 2" > .arboretum.yml
+  git "${GIT_ID[@]}" branch feat/777-a
+  git "${GIT_ID[@]}" branch feat/777-b
+  git "${GIT_ID[@]}" checkout -q feat/777-a )
+n_out=$(mktemp); n_err=$(mktemp)
+( cd "$WARN" && printf '%s' '{"tool_input":{"command":"git commit -am x"}}' \
+    | CLAUDE_PROJECT_DIR="$WARN" bash "$HOOK" ) >"$n_out" 2>"$n_err"
+n_rc=$?
+if [ "$n_rc" -eq 0 ] && [ ! -s "$n_out" ] && grep -qi 'collision' "$n_err"; then
+  echo "PASS: N collision advisory non-blocking (exit 0, [Collision] on stderr)"
+else
+  echo "FAIL: N — expected exit 0 + [Collision] stderr; rc=$n_rc stdout=$(cat "$n_out") stderr=$(cat "$n_err")" >&2
+  fail=1
+fi
+rm -f "$n_out" "$n_err"; rm -rf "$WARN"
+
 if [ "$fail" -ne 0 ]; then
   echo "SMOKE TEST FAILED" >&2
   exit 1

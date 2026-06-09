@@ -79,6 +79,7 @@
 | scripts/validate-template-taxonomy.sh | docs/contracts/validate-template-taxonomy.cli-contract.md | cli |
 | scripts/validate-test-surface.sh | docs/contracts/validate-test-surface.contract.md | full |
 | scripts/verify-agent-ready.sh | docs/contracts/verify-agent-ready.contract.md | full |
+| scripts/workspace-collision-check.sh | docs/contracts/workspace-collision-check.contract.md | full |
 | scripts/workspace-context.sh | docs/contracts/workspace-context.contract.md | full |
 | scripts/write-agent-brief.sh | docs/contracts/write-agent-brief.contract.md | full |
 | scripts/write-escape-hatch.sh | docs/contracts/write-escape-hatch.contract.md | full |
