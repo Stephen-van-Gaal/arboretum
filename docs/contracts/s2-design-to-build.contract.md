@@ -1,6 +1,6 @@
 ---
 seam: s2-design-to-build
-version: 1.0
+version: 1.1
 producer-type: skill
 consumer-type: skill
 consumes:
@@ -47,6 +47,10 @@ Required frontmatter fields on the spec file at that path:
 - **`triage`** — closed enum: `agent-target` | `everything-else`. The value comes from the design spec's frontmatter, **not** from the GitHub issue label or body — `/design` is responsible for transcribing the triage decision into the frontmatter at exit.
 - **`plan`** — string (relative file path) or the literal `null`. When a path, the file must exist at `/design`'s exit time. When `null`, declares pure-TDD mode (Branch 3 = `executing-plans` is invalid against `plan: null`; `direct` or `subagent-driven-development` is the only valid mode).
 
+Optional field:
+
+- **`kind`** — closed enum `{buildable, shaping}`; **absent ⇒ `buildable`** (the default — no migration for existing docs). `kind: shaping` marks a non-buildable design artifact (an epic/shaping doc that stops after human review; its children build individually). On a shaping doc the five build-targeted fields above are **not required** and are ignored if present — the producer validator (`validate-design-spec.sh`) requires only `related-issue`, and the consumer gate (`read-s2-frontmatter.sh`) refuses the doc with a distinct exit code so `/build` never runs it. Any `kind` value outside the enum is a validation error naming the field. (#692)
+
 ### Outputs
 
 `/build`'s normal execution proceeds when all five fields are present and valid:
@@ -63,16 +67,21 @@ When any one required field is missing or violates its constraint, `/build` writ
 - **Deterministic `plan:` derivation owned by `/design`.** The derivation rule (strip `-design` from the design-spec basename; resolve `docs/plans/<basename-minus-design>.md`; write the path if it exists, else write `null`) is enforced at `/design`'s exit. `/build` does not re-derive; it reads the field literally.
 - **`triage:` is frontmatter-sourced, not label-sourced.** The triage value on the GitHub issue label is a hint to `/start`, not an authority for `/build`. `/build` reads from the frontmatter; if the label and frontmatter disagree, the frontmatter is authoritative.
 - **`plan: null` constrains `implementation-mode:`.** When `plan: null`, the only valid `implementation-mode:` values are `direct` and `subagent-driven-development` — `executing-plans` requires a plan file to execute against. This invariant is checked at `/build`'s entry alongside the missing-field check; failure produces an S2-contract-drift error naming the conflict.
+- **`kind: shaping` short-circuits both ends.** Producer side: `validate-design-spec.sh` validates only `related-issue` and skips the build-targeted schema (so a shaping doc passes `/design`'s self-check without masquerading as a `/build` input). Consumer side: `read-s2-frontmatter.sh` detects `kind: shaping` **before** the missing-field gate and exits **3** (distinct from the exit-2 drift code) with a specific non-buildable message; `/build` maps exit 3 to a clean refusal and does not run. The strict five-field gate is otherwise unchanged for buildable docs (`kind` absent/`buildable`). (#692)
+- **`kind` is a closed enum on both ends (self-contained gates).** An out-of-enum `kind` is malformed drift, rejected independently by each gate without relying on the other having run first: `validate-design-spec.sh` exits 1 naming `kind`; `read-s2-frontmatter.sh` exits **2** (drift) — it does **not** fall through to exit 0 even when the five build fields are otherwise complete. (#692)
 
 ## Test surface
 
-- **S2-1: Producer-completeness.** `/design`'s unified exit produces a design spec with all five required frontmatter fields (`related-issue`, `test-tiers`, `implementation-mode`, `triage`, `plan`).
+- **S2-1: Producer-completeness (buildable docs).** For a buildable design doc (`kind` absent or `buildable`), `/design`'s unified exit produces a spec with all five required frontmatter fields (`related-issue`, `test-tiers`, `implementation-mode`, `triage`, `plan`). A `kind: shaping` doc is exempt — it carries only `related-issue` (the build-targeted fields are omitted; see S2-8).
 - **S2-2: Consumer-strict-gate.** `/build` refuses to run if any required S2 field is missing, naming which field(s) are absent.
 - **S2-3: Consumer-no-self-heal.** `/build` does not prompt for or backfill missing fields; the exit on missing-field is non-zero and the user is redirected to `/design`.
 - **S2-4: Enum-validity.** `/build` rejects `implementation-mode:` values outside the closed enum `{direct, executing-plans, subagent-driven-development}` and `triage:` values outside `{agent-target, everything-else}`.
 - **S2-5: Deterministic plan-path derivation.** `/design`'s `plan:` field is either the exact path produced by the documented derivation rule (basename-minus-`-design` resolved against `docs/plans/`) or the literal `null`.
 - **S2-6: Plan-path existence.** When `/design` writes `plan: <path>`, the path resolves to an existing file at the time `/design` exits.
+- **S2-7: Binding — producer/consumer skills invoke the validator.** The `/design` and `/build` skills actually call `validate-design-spec.sh` (the gate is wired, not just documented). Test: `tests/contracts/s2/s2-7-binding-skills-invoke-validator.sh`.
+- **S2-8: Shaping-doc accept-and-refuse.** A `kind: shaping` doc with only `related-issue` passes `validate-design-spec.sh` (exit 0); `read-s2-frontmatter.sh` refuses it with exit 3 and a non-buildable message. An out-of-enum `kind` value is rejected independently by both gates — `validate-design-spec.sh` exit 1 naming the field, and `read-s2-frontmatter.sh` exit 2 (drift) even with otherwise-complete fields. Buildable-path behaviour (`kind` absent/`buildable`) is unchanged. (#692)
 
 ## Versioning
 
+- **1.1** (2026-06-08) — additive: optional `kind: {buildable, shaping}` field (absent ⇒ buildable). `kind: shaping` lets a non-buildable epic/shaping design doc pass producer validation without the build-targeted fields and be refused by `/build` (read-s2 exit 3). Backward-compatible — existing docs unchanged. Adds invariant + S2-8; also backfills the previously-undocumented S2-7 binding bullet (its test shipped in WS4 but was never listed here) (#692).
 - **1.0** (2026-05-24) — initial contract; producer + consumer shapes per WS1 §D3, with the producer side reflecting the unified `/design` behaviour from PR #329 and the consumer side reflecting `/build` from PR #321 (WS1 build).

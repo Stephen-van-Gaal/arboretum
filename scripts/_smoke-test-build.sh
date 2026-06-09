@@ -262,6 +262,29 @@ if out=$(bash "$WRITE" "$f" 2>&1); then
 fi
 ok "escape-hatch case 4 — missing args rejected"
 
+# Shaping case: kind: shaping — /build's gate sequence accepts at validate time
+# and refuses at read time with exit 3 (#692). Mirrors /build Step 1: validator
+# passes, then read-s2-frontmatter short-circuits before the missing-field gate.
+VALIDATE="$REPO_ROOT/scripts/validate-design-spec.sh"
+f="$ROOT_TMP/shaping.md"
+cat > "$f" <<'MD'
+---
+date: 2026-06-08
+topic: shaping-example
+status: design
+related-issue: 680
+kind: shaping
+---
+
+# Shaping doc — non-buildable
+MD
+bash "$VALIDATE" "$f" >/dev/null 2>&1 || fail "shaping case — validator should accept kind: shaping"
+# `|| rc=$?` captures the non-zero exit without tripping `set -e`.
+out=$(bash "$READ" "$f" 2>&1) && rc=0 || rc=$?
+[ "$rc" = 3 ] || fail "shaping case — read-s2 should exit 3 on kind: shaping" "rc=$rc out=$out"
+echo "$out" | grep -qi "shaping" || fail "shaping case — refusal should name shaping" "$out"
+ok "shaping case — kind: shaping accepted by validator, refused (exit 3) at read"
+
 echo
 echo "build helper smoke tests passed."
 exit 0

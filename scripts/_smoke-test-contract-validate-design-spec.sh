@@ -47,4 +47,25 @@ bash "$MISSING_HELPER/scripts/validate-design-spec.sh" "$FIX/design-good.md" 2>"
 rm -rf "$MISSING_HELPER"
 if [ "$rc" = 2 ] && grep -q "yaml-lite helper not found" "$ERR" && ! grep -q "S2-DRIFT:" "$ERR"; then pass VDS-6; else fail_case VDS-6 "rc=$rc err=$(cat "$ERR")"; fi
 
+# VDS-7 — kind: shaping with only related-issue → exit 0, no S2-DRIFT (#692)
+bash "$VALIDATOR" "$FIX/design-shaping-good.md" >/dev/null 2>"$ERR"; rc=$?
+if [ "$rc" = 0 ] && ! grep -q "S2-DRIFT:" "$ERR"; then pass VDS-7; else fail_case VDS-7 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-8 — kind: shaping missing related-issue → exit 1, 'related-issue: missing' (#692)
+bash "$VALIDATOR" "$FIX/design-shaping-missing-related-issue.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "S2-DRIFT:" "$ERR" && grep -q "related-issue: missing" "$ERR"; then pass VDS-8; else fail_case VDS-8 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-9 — kind: shaping ignores stray build fields → exit 0 (#692)
+bash "$VALIDATOR" "$FIX/design-shaping-with-build-fields.md" >/dev/null 2>"$ERR"; rc=$?
+if [ "$rc" = 0 ] && ! grep -q "S2-DRIFT:" "$ERR"; then pass VDS-9; else fail_case VDS-9 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-10 — kind out of enum → exit 1, 'kind: not in' (#692)
+bash "$VALIDATOR" "$FIX/design-bad-kind.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "kind: not in" "$ERR"; then pass VDS-10; else fail_case VDS-10 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-11 — mapping-valued kind → exit 1, rejected as non-scalar (fail-safe, not
+# read as absent ⇒ buildable). (#692, Codex review)
+bash "$VALIDATOR" "$FIX/design-mapping-kind.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "kind: must be a scalar" "$ERR"; then pass VDS-11; else fail_case VDS-11 "rc=$rc err=$(cat "$ERR")"; fi
+
 [ "$fail" = 0 ] && echo "validate-design-spec contract: ALL PASS" || exit 1

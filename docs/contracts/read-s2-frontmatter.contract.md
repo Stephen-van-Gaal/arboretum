@@ -1,6 +1,6 @@
 ---
 seam: read-s2-frontmatter
-version: 1.1
+version: 1.2
 producer-type: script
 consumer-type: skill
 consumes:
@@ -24,6 +24,8 @@ The seam between `scripts/read-s2-frontmatter.sh` (the strict whole-schema gate 
 `scripts/read-s2-frontmatter.sh` — producer-type: `script`.
 
 Takes exactly one positional argument: the path to a design spec. Reads the leading `---`-delimited YAML frontmatter block through `scripts/lib/yaml-lite.sh` (no PyYAML, yq, jq, or package install), then validates the whole schema strictly (per WS1 D5): every required field must be present, and each must satisfy its type/enum rule. On success it prints one `key=value` line per required field to stdout and exits `0`; the nested `test-tiers` object is flattened to `test-tiers.<sub-key>=<value>` lines. On any missing field, bad enum, or malformed input it writes a `read-s2-frontmatter: …` diagnostic to stderr and exits `2`. Usage errors (wrong arg count, missing file, missing helper) exit `1`.
+
+**`kind` short-circuit (S2 v1.1, #692).** Before the whole-schema gate the reader inspects the optional `kind` field (closed enum `{buildable, shaping}`; absent ⇒ buildable). A `kind: shaping` doc is non-buildable: the reader writes a "non-buildable shaping document" diagnostic to stderr and exits **`3`** — a distinct code so `/build` surfaces a clean refusal instead of a generic missing-field error. An out-of-enum **or mapping-valued** `kind` is malformed drift and exits **`2`**; it is never read as absent, so a malformed shaping marker with otherwise-complete fields cannot fall through to a buildable exit-`0` (fail-safe, self-contained — independent of whether `validate-design-spec.sh` ran first). Both checks run ahead of the five-field gate.
 
 Required fields and their rules:
 
@@ -55,11 +57,12 @@ Consumer-type: `skill`. One downstream consumer:
 
 - stdout (exit 0 only): one `key=value` line per required field, in the fixed order `related-issue`, `test-tiers`, `implementation-mode`, `triage`, `plan`. The `test-tiers` object expands to one `test-tiers.<sub-key>=<value>` line per sub-key.
 - stderr (exit 1 or 2 only): a `read-s2-frontmatter: …` (or `Usage:`/not-found) diagnostic.
-- Exit codes: `0` — all fields valid, key=value printed; `1` — usage error (wrong arg count or file not found); `2` — strict-gate failure (missing field, bad enum, malformed/absent frontmatter, scalar `test-tiers`, non-int `related-issue`, absolute/empty `plan`).
+- Exit codes: `0` — all fields valid, key=value printed; `1` — usage error (wrong arg count or file not found); `2` — strict-gate failure (missing field, bad enum, malformed/absent frontmatter, scalar `test-tiers`, non-int `related-issue`, absolute/empty `plan`, **out-of-enum or mapping-valued `kind`**); `3` — **non-buildable `kind: shaping` doc** (stderr diagnostic, no stdout).
 
 ### Invariants
 
 - **Whole-schema strict gate.** stdout on exit 0 always contains every required field — partial-schema acceptance is impossible; any missing-or-invalid field is exit 2 with nothing on stdout.
+- **`kind` is checked before the gate, fail-safe.** A `kind: shaping` doc exits 3 (non-buildable) and an out-of-enum/mapping `kind` exits 2 (drift), both before the five-field gate and both with empty stdout. Absence of `kind` ⇒ buildable. A malformed `kind` is never silently treated as buildable.
 - **Flattened nested object.** The `test-tiers` object is emitted as dot-notation `test-tiers.<sub-key>=<value>` lines — never as a single opaque `test-tiers=…` scalar line.
 - **Plan normalization.** A quoted `plan` value has its surrounding quotes stripped before being printed; `plan=null` is printed verbatim when the field is `null`.
 - **No mutation.** Read-only — the script never writes the spec or any file.
@@ -75,8 +78,13 @@ Consumer-type: `skill`. One downstream consumer:
 - **RS2-6:** Missing file → exit 1; no frontmatter at all → exit 2.
 - **RS2-7:** `plan: null` → stdout `plan=null`; a quoted relative `plan` value → printed unquoted.
 - **RS2-8:** Read-only — the spec file's content is unchanged after invocation.
+- **RS2-9:** `kind: shaping` → exit 3, no stdout, "non-buildable shaping" stderr diagnostic. (#692)
+- **RS2-10:** `kind: buildable` → unchanged five-field gate (regression). (#692)
+- **RS2-11:** Out-of-enum `kind` (e.g. `epic`) with otherwise-complete fields → exit 2, no stdout — not read as buildable. (#692)
+- **RS2-12:** Mapping-valued `kind` (e.g. `kind: {value: shaping}`) with complete fields → exit 2, no stdout — not read as absent/buildable. (#692)
 
 ## Versioning
 
+- **1.2** (2026-06-08) — S2 v1.1 `kind` support (#692): `kind: shaping` → exit 3 (non-buildable refusal); out-of-enum or mapping-valued `kind` → exit 2 (drift), checked before the five-field gate; absent ⇒ buildable. Adds RS2-9..12.
 - **1.1** (2026-06-01) - parser moved onto shared `yaml-lite.sh` helper for Issue #437.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/read-s2-frontmatter.sh` on this branch. Issue #303 (WS5 PR 7a).

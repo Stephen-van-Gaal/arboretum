@@ -78,6 +78,31 @@ if ri is None:
 elif not (str(ri).isdigit() and int(str(ri)) > 0):
     issues.append(f"related-issue: not a positive integer (got {ri!r})")
 
+# kind: optional closed enum; absent ⇒ buildable. A shaping doc is a
+# non-buildable design artifact (epic/shaping) — it needs only the identity
+# field (related-issue, checked above) and skips the build-targeted schema so
+# it does not have to masquerade as a /build input. (#692)
+KIND_ENUM = {"buildable", "shaping"}
+# A mapping-valued kind (e.g. `kind: {value: shaping}`) flattens to `kind.<sub>`
+# lines with no literal `kind=` key, which would read as absent ⇒ buildable —
+# a fail-open for a malformed shaping marker with complete build fields. Reject
+# it as invalid (fail-safe). (#692, Codex review)
+if any(k.startswith("kind.") for k in fm) and "kind" not in fm:
+    issues.append("kind: must be a scalar enum value (buildable|shaping), not a mapping")
+    kind = "__invalid__"
+else:
+    kind = fm.get("kind", "buildable")
+    if kind not in KIND_ENUM:
+        issues.append(f"kind: not in {sorted(KIND_ENUM)} (got {kind!r})")
+if kind != "buildable":
+    # Non-buildable (or invalid kind): stop after the identity check. The
+    # build-only fields are neither required nor validated here; /build
+    # refuses the doc at consume time via read-s2-frontmatter.sh (exit 3).
+    with open(issues_path, "w", encoding="utf-8") as out:
+        for issue in issues:
+            out.write(issue + "\n")
+    sys.exit(1 if issues else 0)
+
 # triage: closed enum
 TRIAGE_ENUM = {"agent-target", "everything-else"}
 tr = fm.get("triage")

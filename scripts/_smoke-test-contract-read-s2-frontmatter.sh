@@ -126,4 +126,63 @@ before=$(shasum "$SPEC" | cut -d' ' -f1); bash "$PROBE" "$SPEC" >/dev/null 2>&1
 after=$(shasum "$SPEC" | cut -d' ' -f1)
 [ "$before" = "$after" ] && pass RS2-8 || fail_case RS2-8 "spec mutated"
 
+# RS2-9 — kind: shaping → exit 3, no stdout, specific non-buildable message (#692)
+cat > "$SPEC" <<'EOF'
+---
+related-issue: 680
+kind: shaping
+---
+# shaping doc
+EOF
+out=$(bash "$PROBE" "$SPEC" 2>"$FIX/.err"); rc=$?
+if [ "$rc" = 3 ] && [ -z "$out" ] && grep -qi "shaping" "$FIX/.err"; then pass RS2-9; else fail_case RS2-9 "rc=$rc out=$out err=$(cat "$FIX/.err")"; fi
+
+# RS2-10 — kind: buildable behaves as normal (regression) → exit 0, full schema (#692)
+cat > "$SPEC" <<'EOF'
+---
+related-issue: 303
+kind: buildable
+test-tiers:
+  unit: required
+implementation-mode: direct
+triage: agent-target
+plan: null
+---
+EOF
+out=$(bash "$PROBE" "$SPEC" 2>"$FIX/.err"); rc=$?
+if [ "$rc" = 0 ] && printf '%s\n' "$out" | grep -qx 'related-issue=303'; then pass RS2-10; else fail_case RS2-10 "rc=$rc out=$out err=$(cat "$FIX/.err")"; fi
+
+# RS2-11 — invalid kind + otherwise-complete five fields → exit 2 (self-contained
+# consumer gate; must not fall through to exit 0 / treated-as-buildable). (#692)
+cat > "$SPEC" <<'EOF'
+---
+related-issue: 303
+kind: epic
+test-tiers:
+  unit: required
+implementation-mode: direct
+triage: agent-target
+plan: null
+---
+EOF
+out=$(bash "$PROBE" "$SPEC" 2>"$FIX/.err"); rc=$?
+if [ "$rc" = 2 ] && [ -z "$out" ] && grep -qi "invalid kind" "$FIX/.err"; then pass RS2-11; else fail_case RS2-11 "rc=$rc out=$out err=$(cat "$FIX/.err")"; fi
+
+# RS2-12 — mapping-valued kind + complete fields → exit 2 (must not read as
+# absent ⇒ buildable). (#692, Codex review)
+cat > "$SPEC" <<'EOF'
+---
+related-issue: 303
+kind:
+  value: shaping
+test-tiers:
+  unit: required
+implementation-mode: direct
+triage: agent-target
+plan: null
+---
+EOF
+out=$(bash "$PROBE" "$SPEC" 2>"$FIX/.err"); rc=$?
+if [ "$rc" = 2 ] && [ -z "$out" ] && grep -qi "mapping" "$FIX/.err"; then pass RS2-12; else fail_case RS2-12 "rc=$rc out=$out err=$(cat "$FIX/.err")"; fi
+
 [ "$fail" = 0 ] && echo "read-s2-frontmatter contract: ALL PASS" || exit 1

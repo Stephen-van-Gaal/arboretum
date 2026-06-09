@@ -51,11 +51,52 @@ with open(parsed_path, encoding="utf-8") as parsed:
             test_tiers[subkey] = value
         elif key == "test-tiers":
             fm_parsed[key] = value
-        elif key in {"related-issue", "implementation-mode", "triage", "plan"}:
+        elif key in {"related-issue", "implementation-mode", "triage", "plan", "kind"}:
             fm_parsed[key] = value
+        elif key.startswith("kind."):
+            # Mapping-valued kind (e.g. `kind: {value: shaping}`) flattens here
+            # with no literal `kind=` key — record so we can reject it below.
+            fm_parsed["__kind_mapping__"] = "1"
 
 if test_tiers:
     fm_parsed["test-tiers"] = test_tiers
+
+# kind: closed enum {buildable, shaping}; absent ⇒ buildable. Both checks run
+# BEFORE the missing-field gate so the consumer gate is self-contained — it does
+# not rely on validate-design-spec.sh having run first (#692).
+#
+# An out-of-enum kind is malformed drift: exit 2 (same class as a bad
+# implementation-mode/triage enum) so /build surfaces the generic drift message.
+# Without this, a doc with an invalid kind but otherwise-complete five fields
+# would fall through to exit 0 and be treated as buildable.
+KIND_ENUM = {"buildable", "shaping"}
+if fm_parsed.get("__kind_mapping__") == "1" and "kind" not in fm_parsed:
+    # Mapping-valued kind is malformed — reject as drift rather than letting it
+    # read as absent ⇒ buildable (fail-open). (#692, Codex review)
+    sys.stderr.write(
+        f"read-s2-frontmatter: {sys.argv[1]} has invalid kind "
+        "(mapping; expected a scalar buildable|shaping); fix in /design.\n"
+    )
+    sys.exit(2)
+kind = fm_parsed.get("kind")
+if kind is not None and kind not in KIND_ENUM:
+    sys.stderr.write(
+        f"read-s2-frontmatter: {sys.argv[1]} has invalid kind {kind!r} "
+        f"(must be one of {sorted(KIND_ENUM)}); fix in /design.\n"
+    )
+    sys.exit(2)
+
+# kind: shaping is a non-buildable design artifact (epic/shaping doc). Refuse
+# cleanly with a DISTINCT exit code (3) so /build can surface a specific
+# "non-buildable" message instead of a generic "missing required field(s)"
+# error. Exit 2 stays reserved for real drift.
+if kind == "shaping":
+    sys.stderr.write(
+        f"read-s2-frontmatter: {sys.argv[1]} is a non-buildable shaping document "
+        "(kind: shaping); /build only runs buildable design specs — its children "
+        "build individually.\n"
+    )
+    sys.exit(3)
 
 REQUIRED = ["related-issue", "test-tiers", "implementation-mode", "triage", "plan"]
 MODE_ENUM = {"direct", "executing-plans", "subagent-driven-development"}

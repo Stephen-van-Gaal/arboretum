@@ -48,13 +48,22 @@ bash scripts/validate-design-spec.sh "$DESIGN_SPEC" || {
 EXIT_STATUS="success"
 
 FRONTMATTER="$(bash scripts/read-s2-frontmatter.sh "$DESIGN_SPEC")" || {
+  rc=$?
+  if [ "$rc" = 3 ]; then
+    # Non-buildable shaping/epic design doc (kind: shaping). /build only runs
+    # buildable design specs — refuse cleanly; the epic's children build
+    # individually (#692). No journey-log entry: the build never entered.
+    echo "$DESIGN_SPEC is a non-buildable shaping document (kind: shaping)." >&2
+    echo "/build only runs buildable design specs — an epic/shaping doc's children build individually." >&2
+    exit 1
+  fi
   echo "S2 contract drift — design spec frontmatter is missing required fields." >&2
   echo "Fix in /design, then re-invoke /build." >&2
   exit 1
 }
 ```
 
-The helper exits 2 with a named-field error if any of `related-issue:`, `test-tiers:`, `implementation-mode:`, `triage:`, `plan:` is missing or if `implementation-mode:` / `triage:` carries an invalid enum value. This is the **whole-schema strict gate from D5** — `/build` never self-heals; it refuses and surfaces the drift.
+The helper exits 2 with a named-field error if any of `related-issue:`, `test-tiers:`, `implementation-mode:`, `triage:`, `plan:` is missing or if `implementation-mode:` / `triage:` carries an invalid enum value. This is the **whole-schema strict gate from D5** — `/build` never self-heals; it refuses and surfaces the drift. A `kind: shaping` design doc is a separate, expected case: the helper exits **3** and `/build` refuses with a specific non-buildable message rather than the generic drift error (#692).
 
 Extract the values you'll need downstream:
 

@@ -1,6 +1,6 @@
 ---
 seam: validate-design-spec
-version: 1.1
+version: 1.2
 producer-type: script
 consumer-type: script
 consumes:
@@ -30,6 +30,8 @@ Validates the design spec at the positional path argument. Parses the leading fr
 - `test-tiers` — mapping with keys `unit`, `contract`, `integration`; each value `yes` (including quoted forms and the legacy normalized `True` spelling) or a reason-bearing `n/a` string.
 
 Cross-field invariants: `plan: null` forbids `implementation-mode: executing-plans`; a `plan:` path must be relative and resolve to an existing file under the repo root (located by walking up for a `.git` dir or `CLAUDE.md`). Emits one summary `S2-DRIFT:` line plus one indented bullet per issue to stderr; never mutates the spec.
+
+**`kind` handling (S2 v1.1, #692).** An optional `kind` field (closed enum `{buildable, shaping}`; absent ⇒ buildable) controls which schema applies. For `kind: shaping` (a non-buildable epic/shaping doc) the validator checks **only** `related-issue` and skips `triage`, `implementation-mode`, `plan`, `test-tiers`, and the cross-field invariants — so a shaping doc validates without the build-targeted fields. An out-of-enum `kind`, or a **mapping-valued** `kind` (e.g. `kind: {value: shaping}`, which flattens to `kind.<sub>` with no scalar `kind`), is a `kind:` drift issue rather than being read as absent — a malformed shaping marker never passes as buildable (fail-safe).
 
 ## Consumer
 
@@ -70,8 +72,14 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 - **VDS-4:** `plan:` pointing at a missing file (`design-plan-missing-file.md`) → exit 1, stderr `  - plan: file not found …`.
 - **VDS-5:** invocation error — non-existent path → exit 2, stderr `file not found`, no `S2-DRIFT:` line.
 - **VDS-6:** invocation error — missing `scripts/lib/yaml-lite.sh` helper → exit 2, stderr `yaml-lite helper not found`, no `S2-DRIFT:` line.
+- **VDS-7:** `kind: shaping` with only `related-issue` → exit 0 (identity-only; build fields not required). (#692)
+- **VDS-8:** `kind: shaping` missing `related-issue` → exit 1, `  - related-issue: missing`. (#692)
+- **VDS-9:** `kind: shaping` with stray build fields present → exit 0 (fields ignored). (#692)
+- **VDS-10:** out-of-enum `kind` → exit 1, `  - kind: not in [...]`. (#692)
+- **VDS-11:** mapping-valued `kind` → exit 1, `  - kind: must be a scalar enum value …` (not read as absent ⇒ buildable). (#692)
 
 ## Versioning
 
+- **1.2** (2026-06-08) — S2 v1.1 `kind` support (#692): `kind: shaping` validates identity-only (`related-issue`); out-of-enum or mapping-valued `kind` is `kind:` drift (exit 1), never read as absent; absent ⇒ buildable five-field schema unchanged. Adds VDS-7..11.
 - **1.1** (2026-06-01) — missing YAML-lite helper is an invocation error (exit 2) with no `S2-DRIFT:` summary.
 - **1.0** (2026-05-30) — initial contract. Validator shape as of `scripts/validate-design-spec.sh` on `main` (S2-DRIFT stderr format, exit 0/1/2). Issue #303 (WS5 PR 7a).

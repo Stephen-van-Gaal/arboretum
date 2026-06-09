@@ -255,6 +255,21 @@ test-tiers:
   integration: yes
 ```
 
+**Epic / shaping design docs** (a doc that stops after human review — its children
+build individually, never this doc) instead carry the optional `kind: shaping`
+marker and **omit the five build-targeted fields**; only `related-issue` is
+required. `validate-design-spec.sh` accepts this, and `/build` refuses such a doc
+(read-s2 exit 3). Use it for epic-level design docs so they validate without
+masquerading as a buildable `/build` input (S2 contract v1.1, #692):
+
+```yaml
+related-issue: <N>
+kind: shaping
+```
+
+(Auto-emitting `kind: shaping` from an epic/shaping `/design` session is not yet
+automated — set it by hand for now.)
+
 Do not auto-invoke `/build`. The user (or the calling skill) drives the next stage.
 
 ## Important
