@@ -22,13 +22,14 @@ cat > "$main" <<'JSONL'
 JSONL
 
 out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --stdout)"
-grep -qiE 'STAGE +design' <<<"$out" || fail "design stage not attributed"
+grep -qiE '^\*\*design\*\*' <<<"$out" || fail "design stage header not rendered"
+grep -qiE '^\| *Skill *\|' <<<"$out" || fail "skill table header not rendered"
 grep -qiE 'brainstorming' <<<"$out" || fail "brainstorming skill not attributed under design"
 # Cost math (opus rates: input 5, output 25, cache_write 6.25, cache_read 0.50 per 1M):
 #   m1 (design):       ctx=0                op=(100*5 + 50*25)/1e6  = 0.00175
 #   m2 (brainstorming): ctx=10000*0.50/1e6=0.005  op=(200*5 + 100*25)/1e6 = 0.00350
 #   total = 0.005 + 0.00525 = 0.01025 -> renders 0.010 at 3dp
-grep -qiE 'total\$?=?0\.010' <<<"$out" || fail "total cost math wrong (expected 0.010)"
+grep -qiE '\| *0\.010 *\|' <<<"$out" || fail "total cost math wrong (expected 0.010 in summary row)"
 # #655 item 4: no subagents have been spawned yet (no sess-abc/subagents dir) →
 # the artifact must say so explicitly, not silently omit the section.
 grep -qiE 'subagents: none detected' <<<"$out" || fail "item4: 'subagents: none detected' missing when no subagents ran"
@@ -49,7 +50,7 @@ grep -qiE 'Agent:general-purpose' <<<"$out" || fail "child subagent not joined"
 grep -qiE 'none detected' <<<"$out" && fail "item4: 'none detected' must not appear when subagents are present"
 grep -qiE 'Agent:Explore'         <<<"$out" || fail "grandchild subagent not joined (fixpoint failed)"
 # both subagents must land under the design stage block, not (pre-workflow)
-grep -qiE 'STAGE +design' <<<"$out" || fail "subagents not attributed to design stage"
+grep -qiE '^\*\*design\*\*' <<<"$out" || fail "subagents not attributed to design stage header"
 
 # broken chain → warn, not crash
 mkdir -p "$work/sess-broken/subagents"
@@ -111,12 +112,12 @@ p2="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --output
 
 # --- output inversion: default run must NOT print the per-stage table to stdout ---
 default_out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --output-dir "$work/j2" --descriptor "issue-627")"
-grep -qiE 'STAGE +design' <<<"$default_out" && fail "default run leaked report body into stdout (D8 violation)"
+grep -qiE '^\| *Skill *\|' <<<"$default_out" && fail "default run leaked report body into stdout (D8 violation)"
 grep -qiE 'token-journey report:' <<<"$default_out" || fail "default run should print a pointer line"
 grep -qiE 'total\$' <<<"$default_out" || fail "pointer should include headline total\$"
 # --stdout still dumps the full body
 full_out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --output-dir "$work/j3" --descriptor "issue-627" --stdout)"
-grep -qiE 'STAGE +design' <<<"$full_out" || fail "--stdout should include the full report body"
+grep -qiE '^\*\*design\*\*' <<<"$full_out" || fail "--stdout should include the full report body"
 
 # --- config: defaults when key absent; values when present ---
 cfg_absent="$work/absent.yml"; printf 'layer: 2\n' > "$cfg_absent"
@@ -153,6 +154,29 @@ if printf '%s' "$inj_out" | LC_ALL=C grep -q "$(printf '\033')"; then
   fail "control char (ESC) leaked into rendered output — scrub missing (CLAUDE.md defense-in-depth)"
 fi
 grep -qi 'Bash cat' <<<"$inj_out" || fail "scrub should strip control chars but keep the printable label"
+
+# --- #651 D5: a literal | in a transcript-derived label must be escaped (\|)
+# so it cannot break out of its GFM table cell or forge extra columns. ---
+pipe="$work/sess-pipe.jsonl"
+printf '%s\n' '{"uuid":"k1","timestamp":"2026-06-07T10:00:00Z","message":{"id":"km1","model":"claude-opus-4","content":[{"type":"tool_use","id":"kb","name":"Bash","input":{"command":"grep -E a|b"}}],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}}}' > "$pipe"
+printf '%s\n' '{"uuid":"k2","timestamp":"2026-06-07T10:01:00Z","message":{"id":"km2","content":[{"type":"tool_result","tool_use_id":"kb","content":"Z"}]}}' >> "$pipe"
+pipe_out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$pipe" --stdout)"
+grep -qE 'grep -E a\\\|b' <<<"$pipe_out" || fail "D5: literal | in a label must be escaped to \\| in the md cell"
+
+# --- #651 D5 (B4 ai-surface hardening): a cell value must stay a single, inert
+# table cell. Skill names / attribution labels are author-controlled and NOT
+# line-clamped, so _mdcell must (a) collapse newlines/tabs so a \n cannot break
+# the row and inject top-level markdown, and (b) escape <,> so raw HTML/<img>
+# cannot render live. ---
+inj2="$work/sess-mdinj.jsonl"
+printf '%s\n' '{"uuid":"y1","timestamp":"2026-06-07T10:00:00Z","message":{"id":"ym1","model":"claude-opus-4","content":[{"type":"tool_use","id":"yt","name":"Skill","input":{"skill":"evil\n# INJECTED HEADING\n<img src=x>&lt;b&gt;"}}],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":100,"output_tokens":5}}}' > "$inj2"
+mdinj_out="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$inj2" --stdout)"
+grep -qE '^#+ INJECTED' <<<"$mdinj_out" && fail "D5: a newline in a label broke the row and injected a markdown heading"
+grep -qE '<img' <<<"$mdinj_out" && fail "D5: raw HTML in a label rendered live (<,> not escaped)"
+grep -qi 'evil # INJECTED HEADING' <<<"$mdinj_out" || fail "D5: label should collapse to a single inert cell (newlines→space, html-escaped)"
+# A literal & must be escaped to &amp; FIRST (canonical html.escape order) so an
+# entity-encoded payload (e.g. &lt;b&gt;) can't survive as a decodable entity.
+grep -q '&amp;' <<<"$mdinj_out" || fail "D5: literal & must be escaped to &amp; so entity-encoded HTML cannot reconstitute"
 
 # --- format json: the artifact must be REAL JSON, not a text table with a .json ext ---
 pj="$(bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --output-dir "$work/j-json" --descriptor issue-627 --format json | sed -n 's/^token-journey report: //p')"

@@ -1,6 +1,6 @@
 ---
 script: scripts/token-report.sh
-version: 1.3
+version: 1.4
 invokers:
   - type: script
     name: scripts/token-cleanup.sh
@@ -130,7 +130,13 @@ offline/CI runs fall through to `$ISSUE`/branch/session deterministically.
   carries the warning into an in-file `NOTES:` footer that explains the `(pre-workflow)`
   bucket; and an intake table with more than 12 sources appends a `… +N more, $X
   remainder` line (json: `subagents.detected`, `notes`, `intake_remainder`) rather than
-  silently truncating. Covered by `scripts/_smoke-test-token-journey.sh`.
+  silently truncating. The `md` body is rendered as GitHub-flavored markdown tables
+  (a one-row summary, a per-stage skill table, and the CONTEXT INTAKE table); every
+  transcript-derived cell is sanitized (`\r\n\t` collapsed to a space, `|` escaped,
+  `&`/`<`/`>` HTML-escaped, `&` first) so it stays a single inert cell and cannot break the row or
+  inject markdown/HTML, so the artifact renders cleanly wherever markdown is shown;
+  the `--format json` shape is unchanged. Covered by
+  `scripts/_smoke-test-token-journey.sh`.
 
 ## Versioning
 
@@ -144,3 +150,9 @@ offline/CI runs fall through to `$ISSUE`/branch/session deterministically.
   carried into an in-file `NOTES:` footer (json `notes`), and a `… +N more, $X
   remainder` line replacing the silent intake `[:12]` cap (json `intake_remainder`)
   (#655, items 4–6) (2026-06-08).
+- **1.4** — journey `md` artifact renders as GitHub-flavored markdown tables
+  (one-row summary, per-stage skill tables, CONTEXT INTAKE table), replacing the
+  fixed-width ASCII columns; transcript-derived cells are sanitized (`\r\n\t`
+  collapsed, `|` escaped, `&`/`<`/`>` HTML-escaped) so they cannot break the row or
+  inject markdown/HTML; render-time label caps (`sk[:34]`/`src[:40]`) removed;
+  `--format json` shape unchanged (#651) (2026-06-10).

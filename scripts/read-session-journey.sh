@@ -189,22 +189,50 @@ def add_children(session_path, tree, uuid_root, fam_ctx=None):
     # fixpoint join miss (files present but unresolved → still produce rows + warn).
     return len(agents), warnings
 
+def _mdcell(s):
+    # #651 D5: keep a transcript-derived value a single, inert GFM table cell.
+    # Three transforms, all needed (B4 ai-surface findings):
+    #  - collapse \r\n\t → space: scrub() keeps newlines (\x0a is outside
+    #    ARBO_CTRL_CHAR_CLASS), and skill names / ⤷ Agent labels are author-
+    #    controlled and NOT line-clamped (unlike Bash labels), so a raw \n would
+    #    break the row and inject top-level markdown (a heading / link / image);
+    #  - escape | → \|: | is the column delimiter, else a label forges columns;
+    #  - escape & → &amp; FIRST, then <,> → &lt;/&gt;: canonical html.escape order.
+    #    GFM renders raw HTML in cells, so an <img src=x> would render a live
+    #    auto-fetching tag; escaping & first keeps the encoding idempotent so an
+    #    entity-encoded payload can't decode back (PR #737 Copilot review).
+    #    Inline emphasis/links remain rendered-but-non-structural (CLAUDE.md:
+    #    scrubbing is the floor).
+    # Composes with scrub() (control chars already stripped upstream).
+    s = re.sub(r'[\r\n\t]+', ' ', str(s))
+    s = s.replace('&', '&amp;')
+    s = s.replace('|', r'\|')
+    return s.replace('<', '&lt;').replace('>', '&gt;')
+
 def render(tree, intakes, total_turns, lines, dom_fam='opus', dom_rate=0.0,
            subagent_count=0, warnings=None):
     g_ctx=sum(s['ctx'] for st in tree.values() for s in st.values())
     g_op =sum(s['op']  for st in tree.values() for s in st.values())
-    lines.append(f"context$={g_ctx:.3f} operation$={g_op:.3f} total$={g_ctx+g_op:.3f} "
-                 f"tax={g_ctx/(g_op or 1e-9):.1f}x")
+    # #651 D2: headline as a one-row summary table (right-aligned numerics).
+    lines.append("| context$ | operation$ | total$ | tax |")
+    lines.append("|--:|--:|--:|--:|")
+    lines.append(f"| {g_ctx:.3f} | {g_op:.3f} | {g_ctx+g_op:.3f} | {g_ctx/(g_op or 1e-9):.1f}x |")
+    # #651 D3: per-stage section = subtotal header line + skill table. Stages sorted
+    # by stage total, skills by skill total (unchanged). #651 D4: render-time label
+    # caps removed — tables manage width; source_label() caps remain the real bound.
     for stage in sorted(tree, key=lambda s:-sum(tot(a) for a in tree[s].values())):
         st=tree[stage]
         s_ctx=sum(a['ctx'] for a in st.values()); s_op=sum(a['op'] for a in st.values())
-        lines.append(f"  STAGE {stage:<22} ctx${s_ctx:>8.3f} op${s_op:>8.3f} tax={s_ctx/(s_op or 1e-9):.1f}x")
+        lines.append(f"\n**{_mdcell(stage)}** — ctx$ {s_ctx:.3f} · op$ {s_op:.3f} · tax {s_ctx/(s_op or 1e-9):.1f}x")
+        lines.append("")
+        lines.append("| Skill | ctx$ | op$ | n | ctx$/t | tax |")
+        lines.append("|---|--:|--:|--:|--:|--:|")
         for sk in sorted(st, key=lambda k:-tot(st[k])):
             a=st[sk]
             # #650 item 2: ctx$/t = context-$ per turn — the late-context signal
             # (a cheap skill made expensive by running late against big context).
             per=a['ctx']/(a['turns'] or 1)
-            lines.append(f"      {sk[:34]:<34} ctx${a['ctx']:>8.3f} op${a['op']:>8.3f} n={a['turns']:<4} ctx$/t {per:>7.4f} tax={taxof(a):.1f}x")
+            lines.append(f"| {_mdcell(sk)} | {a['ctx']:.3f} | {a['op']:.3f} | {a['turns']} | {per:.4f} | {taxof(a):.1f}x |")
     from collections import defaultdict
     by_src=defaultdict(lambda: dict(bytes=0, burden=0.0, n=0))
     for (ti,size,src) in intakes:
@@ -213,30 +241,34 @@ def render(tree, intakes, total_turns, lines, dom_fam='opus', dom_rate=0.0,
     # #650 item 1: ctx$~<fam> ≈ approximate context-rent (burden tokens × dominant
     # family cache_read rate), so the intake half ranks in the same $ unit as the
     # stage/skill half. Approximate (bytes/4 token estimate) — billed remains authoritative.
-    lines.append("\n  CONTEXT INTAKE (burden = bytes × turns-resident):")
-    lines.append(f"  {'source':<40}{'KB in':>8}{'reads':>7}{'burden(MB·turn)':>16}{'ctx$~'+dom_fam:>12}")
+    # #651 D4: rendered as a table; source label cap removed.
+    lines.append("\n### CONTEXT INTAKE (burden = bytes × turns-resident)")
+    lines.append("")
+    lines.append(f"| source | KB in | reads | burden (MB·turn) | ctx$~{dom_fam} |")
+    lines.append("|---|--:|--:|--:|--:|")
     ranked=sorted(by_src.items(), key=lambda kv:-kv[1]['burden'])
     for src,b in ranked[:12]:
         context_usd=b['burden']/4*dom_rate/1e6
-        lines.append(f"  {src[:40]:<40}{b['bytes']/1024:>8.1f}{b['n']:>7}{b['burden']/1e6:>16.1f}{context_usd:>12.4f}")
+        lines.append(f"| {_mdcell(src)} | {b['bytes']/1024:.1f} | {b['n']} | {b['burden']/1e6:.1f} | {context_usd:.4f} |")
     # #655 item 6: no silent [:12] cap — account for the dropped tail (CLAUDE.md
-    # "no silent caps"). Remainder $ sums the same approximate context-rent.
+    # "no silent caps"). Kept as a contiguous italic note line (not tabular), which
+    # also preserves the "… +N more, $X remainder" contract string.
     rest=ranked[12:]
     if rest:
         rem_usd=sum(b['burden']/4*dom_rate/1e6 for _,b in rest)
-        lines.append(f"  … +{len(rest)} more, ${rem_usd:.4f} remainder")
+        lines.append(f"\n_… +{len(rest)} more, ${rem_usd:.4f} remainder_")
     # #655 item 4: make subagent presence explicit so the reader can tell
     # "none ran" from a fixpoint join miss.
     if subagent_count==0:
-        lines.append("\n  subagents: none detected")
+        lines.append("\n_subagents: none detected_")
     # #655 item 5: carry stderr warnings into the artifact (D8 output-inversion —
     # the operator reads the file, not stderr) so a (pre-workflow) bucket from an
     # unresolved chain is explained rather than reading as a bug.
     if warnings:
-        lines.append("\n  NOTES:")
+        lines.append("\n**NOTES:**")
         for w in warnings:
-            lines.append(f"    - warn: {w}")
-        lines.append("    (pre-workflow) above holds cost from subagents whose parent "
+            lines.append(f"- warn: {_mdcell(w)}")
+        lines.append("- (pre-workflow) above holds cost from subagents whose parent "
                      "turn could not be resolved (see warnings).")
 
 def render_json(tree, intakes, total_turns, dom_fam='opus', dom_rate=0.0,
