@@ -1,0 +1,1 @@
+{ "epics": [], "naked_issues": [ { "number": 624, "title": "collision MVP", "signal": "stage:design", "assignees": [], "author": "stvangaal" } ], "degraded": true, "viewer": null, "filter": null }

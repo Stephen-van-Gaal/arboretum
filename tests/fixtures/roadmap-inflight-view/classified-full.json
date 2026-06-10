@@ -1,0 +1,17 @@
+{
+  "epics": [
+    { "number": 516, "title": "Epic: Pipeline Slipstream", "done": 1, "total": 3,
+      "active": [ { "number": 677, "title": "review-stage driver", "stage": "/build" } ],
+      "next": null, "blocked": [],
+      "author": "stvangaal",
+      "sub_issues": [
+        { "number": 677, "title": "review-stage driver", "class": "active", "signal": "stage:build", "assignees": ["stvangaal"], "author": "stvangaal" }
+      ] }
+  ],
+  "naked_issues": [
+    { "number": 624, "title": "collision MVP", "signal": "stage:design", "assignees": [], "author": "stvangaal" },
+    { "number": 305, "title": "intake pipeline", "signal": "pr", "assignees": [], "author": "stvangaal" },
+    { "number": 671, "title": "richer permanent specs", "signal": "branch", "assignees": [], "author": "stvangaal" }
+  ],
+  "degraded": false, "viewer": null, "filter": null
+}

@@ -1,0 +1,1 @@
+{ "epics": [], "naked_issues": [ { "number": "abc", "title": "weird", "signal": "branch", "assignees": [], "author": "x" }, { "number": 42, "title": "normal", "signal": "pr", "assignees": [], "author": "x" } ], "degraded": false, "viewer": null, "filter": null }

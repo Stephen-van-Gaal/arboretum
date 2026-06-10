@@ -1,0 +1,6 @@
+[
+  { "number": 801, "title": "docs a", "labels": [{"name":"type:docs"}], "updatedAt": "2026-06-08T00:00:00Z", "milestone": null },
+  { "number": 802, "title": "docs b", "labels": [{"name":"type:docs"}], "updatedAt": "2026-06-08T00:00:00Z", "milestone": null },
+  { "number": 803, "title": "docs c", "labels": [{"name":"type:docs"}], "updatedAt": "2026-06-08T00:00:00Z", "milestone": null },
+  { "number": 804, "title": "chore d", "labels": [{"name":"type:chore"}], "updatedAt": "2026-06-08T00:00:00Z", "milestone": null }
+]

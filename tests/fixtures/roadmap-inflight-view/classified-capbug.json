@@ -1,0 +1,5 @@
+{ "epics": [], "naked_issues": [
+  { "number": 802, "title": "docs b", "signal": "branch", "assignees": [], "author": "x" },
+  { "number": 803, "title": "docs c", "signal": "pr", "assignees": [], "author": "x" },
+  { "number": 804, "title": "chore d", "signal": "stage:design", "assignees": [], "author": "x" }
+], "degraded": false, "viewer": null, "filter": null }

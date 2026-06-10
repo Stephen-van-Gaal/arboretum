@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: roadmap
+# owner: roadmap-inflight-view
 # view.sh — Shared deterministic roadmap-view core. Single renderer behind
 # /roadmap view, /roadmap run, and the SessionStart banner.
 #
@@ -27,7 +27,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MODE="render"; SPEC_FILE=""; FORMAT="view"; QUIET=false
-BOARD_FILE=""; CLOSED_FILE=""; GRAPH_FILE=""
+BOARD_FILE=""; CLOSED_FILE=""; GRAPH_FILE=""; INFLIGHT_FILE=""
 # Deterministic usage error (exit 2) when a value-flag is missing its argument,
 # instead of a `set -u` unbound-variable crash (exit 1). Pass the remaining
 # args: $1 is the flag, $# is how many remain.
@@ -41,6 +41,7 @@ while [ $# -gt 0 ]; do
     --board-file)    need_val "$@"; BOARD_FILE="$2"; shift 2 ;;
     --closed-file)   need_val "$@"; CLOSED_FILE="$2"; shift 2 ;;
     --graph-file)    need_val "$@"; GRAPH_FILE="$2"; shift 2 ;;
+    --inflight-file) need_val "$@"; INFLIGHT_FILE="$2"; shift 2 ;;
     *) echo "view.sh: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -90,6 +91,27 @@ orientation_render() {
 
   # shellcheck source=lib.sh
   source "$SCRIPT_DIR/lib.sh"
+
+  # ── In-flight classifier board (VD3/VD6): --inflight-file seam or live. The
+  #    condensed (SessionStart) path never renders in-flight sections, so it must
+  #    NOT pay the classifier fetch/IO — gate the whole block on !$condensed. ──
+  local inflight_json="" inflight_ok=false inflight_degraded=false
+  if ! $condensed; then
+    if [ -n "$INFLIGHT_FILE" ]; then
+      inflight_json="$(cat "$INFLIGHT_FILE" 2>/dev/null || true)"
+    elif [ -z "$board_file" ]; then
+      inflight_json="$(bash "$SCRIPT_DIR/inflight.sh" 2>/dev/null || true)"
+    fi
+    if [ -n "$inflight_json" ] \
+       && printf '%s' "$inflight_json" | jq -e 'has("epics") and has("naked_issues")' >/dev/null 2>&1; then
+      inflight_ok=true
+      [ "$(printf '%s' "$inflight_json" | jq -r '.degraded')" = "true" ] && inflight_degraded=true
+    fi
+  fi
+
+  # Drop "<num>\t<title>..." lines whose number is in the suppression set.
+  # $suppress is space-delimited; the guard spaces make membership exact.
+  _suppressed() { case " $suppress " in *" $1 "*) return 0;; *) return 1;; esac; }
 
   if [ -z "$board_file" ]; then
     CONFIG="$(roadmap_config_path)" || true
@@ -189,18 +211,76 @@ orientation_render() {
     "$total_open" "$now_count" "$next_count" "$later_count" "$wip_count" "$wip_limit"
   echo "$sep"
 
-  local done_count
-  done_count=$(echo "$closed_json" | jq 'length')
-  if [ "$done_count" -gt 0 ]; then
-    echo; echo "DONE  (last 7 days)"
-    echo "$closed_json" | jq -r '.[] | "  #\(.number)  \(.title)  \(.closedAt[0:10])"' | head -5
+  # ── In-flight sections (VD1/VD4): print IN FLIGHT — ISSUES / EPICS (no cap),
+  #    emit the suppression set on the first stdout line as "SUPPRESS:<nums>". ──
+  local inflight_render="" suppress=""
+  if $inflight_ok; then
+    # shellcheck source=../lib/scrub-control-chars.sh
+    source "$SCRIPT_DIR/../lib/scrub-control-chars.sh"
+    inflight_render="$(INFLIGHT_JSON="$inflight_json" python3 - <<'PY'
+import os, json, re, sys
+ctrl = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])
+def scrub(s): return ctrl.sub("", (s or "")).replace("\t"," ").replace("\n"," ").replace("\r"," ")
+# Normalize EVERY author-controlled field before it is rendered into terminal
+# text — not just title/signal. A hostile --inflight-file (or contract drift)
+# could smuggle control chars through number/done/total/child fields. scrubbing
+# stringifies too, so the suppression set is built from the same normalized
+# tokens the rows display (Copilot review).
+def s(v): return scrub("" if v is None else str(v))
+try:
+    d = json.loads(os.environ["INFLIGHT_JSON"])
+except Exception:
+    print("SUPPRESS:"); sys.exit(0)
+epics = d.get("epics") or []
+naked = d.get("naked_issues") or []
+suppress, out = set(), []
+if naked:
+    out += ["", "IN FLIGHT — ISSUES"]
+    for n in naked:
+        num = s(n.get("number")); suppress.add(num)
+        sig = scrub(n.get("signal") or "")
+        out.append(f"  #{num}  {scrub(n.get('title',''))}" + (f"  [{sig}]" if sig else ""))
+if epics:
+    out += ["", "IN FLIGHT — EPICS"]
+    for e in epics:
+        num = s(e.get("number")); suppress.add(num)
+        out.append(f"  ▸ #{num}  {scrub(e.get('title',''))}   {s(e.get('done',0))}/{s(e.get('total',0))}")
+        marks = []
+        for a in (e.get("active") or []):
+            an = s(a.get("number")); suppress.add(an); marks.append(f"▸active #{an}")
+        nx = e.get("next")
+        if nx: nn = s(nx.get("number")); suppress.add(nn); marks.append(f"•next #{nn}")
+        for b in (e.get("blocked") or []):
+            bn = s(b.get("number")); suppress.add(bn); marks.append(f"⊘blocked #{bn}")
+        if marks: out.append("      " + "  ".join(marks))
+# Sort the suppression set as strings — a hostile --inflight-file may carry a
+# non-int `number`, and sorting mixed str/int would raise (silently dropping the
+# in-flight section with no notice). String keys keep the set crash-proof; the
+# bash-side membership test is string-based anyway.
+print("SUPPRESS:" + " ".join(sorted(x for x in suppress if x)))
+print("\n".join(out))
+PY
+)"
+    suppress="$(printf '%s\n' "$inflight_render" | head -1 | sed 's/^SUPPRESS://')"
+    inflight_render="$(printf '%s\n' "$inflight_render" | tail -n +2)"
+    [ -n "$inflight_render" ] && printf '%s\n' "$inflight_render"
+    if $inflight_degraded; then
+      echo "  (partial board — some work may be missing)"
+    fi
+  else
+    # VD5: only emit the failure notice when an in-flight view was expected
+    # (live mode, or an explicit --inflight-file that didn't parse). A plain
+    # --board-file unit run with no --inflight-file expects no in-flight view.
+    if [ -n "$INFLIGHT_FILE" ] || [ -z "$board_file" ]; then
+      echo "  (in-flight view unavailable — classifier failed; showing horizon board)"
+    fi
   fi
 
   echo
   printf 'NOW  (%d/%d WIP)\n' "$wip_count" "$wip_limit"
   if [ -n "$now_list" ]; then
     printf '%s\n' "$now_list" | while IFS=$'\t' read -r n t; do
-      [ -z "$n" ] && continue; printf '  #%s  %s\n' "$n" "$t"
+      [ -z "$n" ] && continue; _suppressed "$n" && continue; printf '  #%s  %s\n' "$n" "$t"
     done
   else
     echo "  (nothing in flight)"
@@ -208,9 +288,11 @@ orientation_render() {
 
   echo; printf 'NEXT\n'
   if [ -n "$next_list" ]; then
-    printf '%s\n' "$next_list" | head -10 | while IFS=$'\t' read -r n t; do
-      [ -z "$n" ] && continue; printf '  #%s  %s\n' "$n" "$t"
-    done
+    # Cap the PRINTED (non-suppressed) rows, not the raw list — suppress first,
+    # then head, so in-flight items at the top don't under-fill the bucket.
+    printf '%s\n' "$next_list" | while IFS=$'\t' read -r n t; do
+      [ -z "$n" ] && continue; _suppressed "$n" && continue; printf '  #%s  %s\n' "$n" "$t"
+    done | head -10
   else
     echo "  (queue empty — run /roadmap maintain to surface candidates)"
   fi
@@ -218,15 +300,15 @@ orientation_render() {
   if [ -n "$agent_ready_list" ]; then
     echo; echo 'AGENT-READY (parallel pickup via /start <n>)'
     printf '%s\n' "$agent_ready_list" | while IFS=$'\t' read -r n t; do
-      [ -z "$n" ] && continue; printf '  ★ #%s  %s\n' "$n" "$t"
+      [ -z "$n" ] && continue; _suppressed "$n" && continue; printf '  ★ #%s  %s\n' "$n" "$t"
     done
   fi
 
   if [ "$later_count" -gt 0 ]; then
     echo; printf 'LATER  (top 5 of %d)\n' "$later_count"
-    printf '%s\n' "$later_list" | head -5 | while IFS=$'\t' read -r n t; do
-      [ -z "$n" ] && continue; printf '  #%s  %s\n' "$n" "$t"
-    done
+    printf '%s\n' "$later_list" | while IFS=$'\t' read -r n t; do
+      [ -z "$n" ] && continue; _suppressed "$n" && continue; printf '  #%s  %s\n' "$n" "$t"
+    done | head -5
   fi
 
   echo; echo 'SLACK  (parallel-safe alongside WIP)'
@@ -234,9 +316,16 @@ orientation_render() {
     printf '  /roadmap maintain  ← %d untriaged\n' "$untriaged_count"
   fi
   if [ -n "$slack_list" ]; then
-    printf '%s\n' "$slack_list" | head -3 | while IFS=$'\t' read -r n t l; do
-      [ -z "$n" ] && continue; printf '  #%s  %s  [%s]\n' "$n" "$t" "$l"
-    done
+    printf '%s\n' "$slack_list" | while IFS=$'\t' read -r n t l; do
+      [ -z "$n" ] && continue; _suppressed "$n" && continue; printf '  #%s  %s  [%s]\n' "$n" "$t" "$l"
+    done | head -3
+  fi
+
+  local done_count
+  done_count=$(echo "$closed_json" | jq 'length')
+  if [ "$done_count" -gt 0 ]; then
+    echo; echo "DONE  (last 7 days)"
+    echo "$closed_json" | jq -r '.[] | "  #\(.number)  \(.title)  \(.closedAt[0:10])"' | head -5
   fi
 
   echo; echo "$sep"; echo "RECOMMEND"
