@@ -41,9 +41,11 @@ lower precision — default to type-1, offer `--mask` as a second pass.
 No script ships for this tier — it is inherently a reasoning step. Method:
 
 1. Extract each function's name / arg-refs / env-refs / body deterministically.
-2. Have a cheap model (Haiku-class) **confirm / describe / judge** semantic
-   clones — same behaviour, different code (Type-4) — that textual passes are
-   blind to.
+2. Have a cheap model **confirm / describe / judge** semantic clones — same
+   behaviour, different code (Type-4) — that textual passes are blind to.
+   Dispatch the confirm sub-task on a concrete Haiku-class model: set the
+   dispatch tool's `model` parameter to `claude-haiku-4-5` (never the session's
+   frontier default), so the cheap-model intent is enforced, not advisory.
 3. **Confine the LLM to the confirm step.** Run it only on candidate clusters,
    cross-file same-name collisions, and otherwise-unmatched functions — never a
    from-scratch scan of every function (that is ~hundreds of k tokens and
