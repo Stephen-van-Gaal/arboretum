@@ -5,6 +5,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail() { echo "FAIL token-journey: $1" >&2; exit 1; }
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+# #708: isolate the state-dir so every bare (no --output-dir) read-session-journey
+# / token-report journey call defaults under $work, never the real central store.
+# arboretum_state_dir() honors ARBORETUM_STATE_DIR first (scripts/lib/state-dir.sh),
+# so this one export covers all current and future bare call sites in this test.
+# Value is the `.arboretum` dir itself (consumers append /token-journey), mirroring
+# the real <main-checkout>/.arboretum convention so the device-stable path shape holds.
+export ARBORETUM_STATE_DIR="$work/.arboretum"
 main="$work/sess-abc.jsonl"
 
 # Synthetic main transcript: one /design Skill turn, then a brainstorming Skill
@@ -206,5 +213,17 @@ assert big["subagents"]["detected"] == 0, "big (no agent files) should report de
 assert broken.get("notes"), "broken-chain session should carry warnings in json notes"
 assert any("unresolved" in n for n in broken["notes"]), "notes should name the unresolved chain"
 PYCHK
+
+# --- #708 regression guard: bare calls (no --output-dir) must resolve their
+# default store under the ISOLATED state-dir, never the real central store.
+# Positive assertion (robust to pre-existing pollution in the shared real store,
+# where deterministic filenames would make an ls-diff false-pass on overwrite):
+# a bare run must land its artifact under $work, proving ARBORETUM_STATE_DIR
+# isolation is in effect. Without it, arboretum_state_dir falls back to the main
+# checkout and the fixture leaks into the real .arboretum/token-journey store.
+iso_store="$work/.arboretum/token-journey"
+bash "$ROOT/scripts/read-session-journey.sh" --transcript "$main" --stdout >/dev/null
+ls "$iso_store"/*.md >/dev/null 2>&1 \
+  || fail "#708: a bare (no --output-dir) journey call did not write under the isolated state-dir ($iso_store) — it leaked to the real central store; export ARBORETUM_STATE_DIR=\"\$work/.arboretum\" at the top of this test"
 
 echo "PASS token-journey"
