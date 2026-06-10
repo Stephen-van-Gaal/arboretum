@@ -1,8 +1,0 @@
-{
-  "next_up": 273,
-  "nodes": {
-    "404": {"number":404,"is_epic":true,"state":"open","title":"autonomous discovery","labels":[],"parent":null,"children":[272,273],"stage":null},
-    "272": {"number":272,"is_epic":false,"state":"open","title":"in-flight discovery capture","labels":["blocked"],"parent":404,"children":[],"stage":null},
-    "273": {"number":273,"is_epic":false,"state":"open","title":"provenance labels","labels":[],"parent":404,"children":[],"stage":null}
-  }
-}

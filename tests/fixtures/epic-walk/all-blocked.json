@@ -1,7 +1,0 @@
-{
-  "next_up": 451,
-  "nodes": {
-    "446": {"number":446,"is_epic":true,"state":"open","title":"token-efficient docs","labels":[],"parent":null,"children":[451],"stage":null},
-    "451": {"number":451,"is_epic":false,"state":"open","title":"WS5: explicit read contracts","labels":["blocked"],"parent":446,"children":[],"stage":null}
-  }
-}

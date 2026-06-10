@@ -30,7 +30,8 @@ classified-board JSON on stdout. Two modes: `--graph-file <path>` +
 `--signals-file <path>` (test seams; no network), or live — it builds the board
 graph via `roadmap_inflight_board_graph` (`scripts/roadmap/lib.sh`) plus local
 git signals (`inflight_local_signals`). The classification core is single-sourced
-in `scripts/roadmap/_classify_core.py`, shared with `epic-walk.sh`.
+in `scripts/roadmap/_classify_core.py` (sole importer after #705 retired the
+former co-importer `epic-walk.sh`).
 
 ## Consumer
 
@@ -112,8 +113,9 @@ Asserted by `scripts/_smoke-test-contract-inflight-classifier.sh` against
 - **INT-3: Sub-issue classes + progress.** active/ready/blocked classes assigned per child; epic `done/total` reflect unfiltered progress.
 - **INT-4: Degraded integration.** The degraded fixture propagates `degraded:true`.
 
-The existing `docs/contracts/epic-walk.contract.md` (EW-1..EW-7) must still pass
-against the extracted `_classify_core.py` (regression — epic-walk output unchanged).
+(The `_classify_core.py` extraction was originally regression-guarded against
+`epic-walk.sh`'s byte-identical output; #705 retired `epic-walk.sh`, so `inflight.sh`
+is now the sole consumer of the core.)
 
 ## Versioning
 

@@ -56,7 +56,6 @@
 | scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
 | scripts/review-dispatch.sh | docs/contracts/review-dispatch.cli-contract.md | cli |
 | scripts/roadmap/audit-board.sh | docs/contracts/roadmap-audit-board.cli-contract.md | cli |
-| scripts/roadmap/epic-walk.sh | docs/contracts/epic-walk.contract.md | full |
 | scripts/roadmap/inflight.sh | docs/contracts/inflight-classifier.contract.md | full |
 | scripts/roadmap/install-labels.sh | docs/contracts/roadmap-install-labels.cli-contract.md | cli |
 | scripts/roadmap/lib.sh | docs/contracts/roadmap-lib.contract.md | full |

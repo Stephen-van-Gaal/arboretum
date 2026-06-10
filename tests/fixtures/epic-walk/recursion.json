@@ -1,9 +1,0 @@
-{
-  "next_up": 111,
-  "nodes": {
-    "100": {"number":100,"is_epic":true,"state":"open","title":"super-epic","labels":[],"parent":null,"children":[110,101],"stage":null},
-    "110": {"number":110,"is_epic":true,"state":"open","title":"sub-epic","labels":[],"parent":100,"children":[111],"stage":null},
-    "111": {"number":111,"is_epic":false,"state":"closed","title":"leaf","labels":[],"parent":110,"children":[],"stage":null},
-    "101": {"number":101,"is_epic":false,"state":"open","title":"sibling ready","labels":[],"parent":100,"children":[],"stage":null}
-  }
-}

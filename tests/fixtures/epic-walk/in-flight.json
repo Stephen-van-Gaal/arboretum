@@ -1,9 +1,0 @@
-{
-  "next_up": 305,
-  "nodes": {
-    "295": {"number":295,"is_epic":true,"state":"open","title":"pipeline overhaul","labels":[],"parent":null,"children":[297,305,306],"stage":null},
-    "297": {"number":297,"is_epic":false,"state":"closed","title":"WS0","labels":[],"parent":295,"children":[],"stage":null},
-    "305": {"number":305,"is_epic":false,"state":"open","title":"WS7: Intake pipeline","labels":[],"parent":295,"children":[],"stage":"/build"},
-    "306": {"number":306,"is_epic":false,"state":"open","title":"WS8: Orphan bug sweep","labels":[],"parent":295,"children":[],"stage":"/design"}
-  }
-}

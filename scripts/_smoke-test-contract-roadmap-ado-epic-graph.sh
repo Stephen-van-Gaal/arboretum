@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# owner: epic-aware-orientation
+# owner: roadmap
 # _smoke-test-contract-roadmap-ado-epic-graph.sh — Contract test for the
-# azure-devops branch of roadmap_epic_graph (docs/contracts/epic-walk.contract.md
-# §ADO native hierarchy, v1.1). PATH-shadows `az` with a stub that returns
+# azure-devops branch of roadmap_epic_graph (docs/contracts/roadmap-view.contract.md
+# § Epic-tree ADO hierarchy / EWA-1). PATH-shadows `az` with a stub that returns
 # canned work-item JSON, so the relations->graph transform is exercised with
 # no network. Auto-discovered by ci-checks.sh.
 set -uo pipefail
@@ -71,7 +71,7 @@ printf '%s' "$graph" | python3 -c '
 import json,sys
 n=json.load(sys.stdin)["nodes"]
 assert n["135"]["parent"]==100, n["135"]["parent"]
-assert "100" in n, "parent node must be inserted so epic-walk can resolve nodes.get(parent)"
+assert "100" in n, "parent node must be inserted so the classifier can resolve nodes.get(parent)"
 assert n["100"]["children"]==[135] and n["100"]["is_epic"] is True, n["100"]
 ' && pass "EWA-2 parent node inserted (F3)" || failc "EWA-2 parent node missing" "$graph"
 

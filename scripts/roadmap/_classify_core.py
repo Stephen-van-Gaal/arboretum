@@ -1,5 +1,5 @@
 # owner: inflight-work-classifier
-"""Shared classification core. Imported by epic-walk.sh and inflight.sh.
+"""Shared classification core. Imported by inflight.sh.
 No I/O — pure functions over a {nodes, ...} graph dict (nodes keyed by int)."""
 import os
 import re
@@ -53,7 +53,7 @@ def brief(n):
 
 
 def classify_epic(nodes, epic_num):
-    """Returns the epic-walk per-epic dict {number,title,done,total,active,next,blocked}."""
+    """Returns the per-epic classification dict {number,title,done,total,active,next,blocked}."""
     epic = nodes[epic_num]
     kids = [nodes[c] for c in epic.get("children", []) if c in nodes]
     closed = [k for k in kids if k["state"] == "closed"]

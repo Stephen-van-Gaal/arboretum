@@ -17,7 +17,7 @@ owns:
 
 # roadmap-lib — `roadmap/lib.sh` Shared Roadmap-Helper Contract
 
-The seam between `scripts/roadmap/lib.sh` (the sourceable shared-helper library for the roadmap subsystem) and the scripts/skills that source it — `scripts/roadmap/view.sh`, `nag.sh`, `epic-walk.sh`, session-continuity scripts, and the `/roadmap` + `/idea` skills. The library is never executed directly; each helper echoes a scalar (or a newline-delimited list) consumed by callers. This contract pins the output protocol of the load-bearing functions — root/config resolution, the YAML scalar/list getters, backend selection, tracker-adapter dispatch, and the pulse-file read/write helpers — so a caller never re-parses project config or shells out to vendor-specific tracker commands by hand.
+The seam between `scripts/roadmap/lib.sh` (the sourceable shared-helper library for the roadmap subsystem) and the scripts/skills that source it — `scripts/roadmap/view.sh`, `nag.sh`, `inflight.sh`, session-continuity scripts, and the `/roadmap` + `/idea` skills. The library is never executed directly; each helper echoes a scalar (or a newline-delimited list) consumed by callers. This contract pins the output protocol of the load-bearing functions — root/config resolution, the YAML scalar/list getters, backend selection, tracker-adapter dispatch, and the pulse-file read/write helpers — so a caller never re-parses project config or shells out to vendor-specific tracker commands by hand.
 
 ## Producer
 
@@ -46,7 +46,7 @@ The config/pulse helpers degrade gracefully: missing tooling (`yq`/`python3`/`jq
 
 Consumer-type: `script`. Downstream consumers source the lib and capture function stdout:
 
-- **`scripts/roadmap/view.sh`, `nag.sh`, `epic-walk.sh`** source the lib for root/config/pulse/graph access.
+- **`scripts/roadmap/view.sh`, `nag.sh`, `inflight.sh`** source the lib for root/config/pulse/graph access.
 - **`/roadmap` and `/idea` skills** invoke roadmap scripts that depend on these helpers (e.g. `roadmap_config_list component_values` for the component vocabulary).
 
 **Consumer obligations:**

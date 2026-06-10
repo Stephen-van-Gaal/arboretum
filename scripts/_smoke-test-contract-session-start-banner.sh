@@ -102,27 +102,6 @@ else
   fail_case SSB-2 "scrubbed title residue not as expected" "$out"
 fi
 
-# ── SSB-3: roadmap orientation passthrough is appended (and NOT scrubbed) ─
-# Stub view.sh --format condensed to emit a [roadmap] block whose content
-# carries a raw ESC byte. The contract documents that this passthrough is
-# NOT control-char scrubbed by the hook (known gap). We assert the block is
-# appended verbatim — including the ESC byte — which documents the gap
-# behaviourally without claiming the lack of scrub is desirable.
-fix=$(new_fixture ssb3)
-cat > "$fix/scripts/roadmap/view.sh" <<'SH'
-#!/usr/bin/env bash
-printf '[roadmap] evil\033INJECT block\n'
-SH
-chmod +x "$fix/scripts/roadmap/view.sh"
-out=$(run_hook "$fix")
-if ! echo "$out" | grep -q '\[roadmap\]'; then
-  fail_case SSB-3 "[roadmap] passthrough block not appended" "$out"
-elif printf '%s' "$out" | python3 -c "import sys; sys.exit(0 if b'\x1b' in sys.stdin.buffer.read() else 1)"; then
-  pass SSB-3   # ESC byte present → confirms the documented unscrubbed-passthrough gap
-else
-  fail_case SSB-3 "expected unscrubbed roadmap passthrough (ESC byte) — gap may have been silently closed; update the contract if so" "$out"
-fi
-
 # ── SSB-4: always-exits-0 on a clean no-signal fixture ──────────────────
 fix=$(new_fixture ssb4)
 CLAUDE_PROJECT_DIR="$fix" bash "$fix/.claude/hooks/session-start.sh" >/dev/null 2>&1
@@ -185,36 +164,6 @@ elif echo "$out" | grep -qF "[Arboretum] Could not check latest release — rele
   pass "SSB-5c"
 else
   fail_case "SSB-5c" "missing scrubbed fallback diagnostic" "$out"
-fi
-
-# ── SSB-6: configured roadmap emits diagnostics when orientation is absent ─
-fix=$(new_fixture ssb6a)
-cat > "$fix/roadmap.config.yaml" <<'YAML'
-profile: lean
-wip_limit: 1
-YAML
-out=$(run_hook "$fix")
-if echo "$out" | grep -qF "[roadmap] Renderer missing from project tree — run /upgrade."; then
-  pass "SSB-6a"
-else
-  fail_case "SSB-6a" "missing roadmap-renderer-missing diagnostic" "$out"
-fi
-
-fix=$(new_fixture ssb6b)
-cat > "$fix/roadmap.config.yaml" <<'YAML'
-profile: lean
-wip_limit: 1
-YAML
-cat > "$fix/scripts/roadmap/view.sh" <<'SH'
-#!/usr/bin/env bash
-exit 42
-SH
-chmod +x "$fix/scripts/roadmap/view.sh"
-out=$(run_hook "$fix")
-if echo "$out" | grep -qF "[roadmap] Configured, but render failed — run /roadmap run for details."; then
-  pass "SSB-6b"
-else
-  fail_case "SSB-6b" "missing roadmap-render-failed diagnostic" "$out"
 fi
 
 # ── SSB-7: [Register] mtime-staleness emission removed (#643) ───────────

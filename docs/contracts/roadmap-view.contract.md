@@ -1,6 +1,6 @@
 ---
 seam: roadmap-view
-version: 1.0
+version: 1.1
 producer-type: skill
 consumer-type: script
 consumes:
@@ -91,11 +91,21 @@ resolves the graph via `roadmap_epic_graph` (GitHub `subIssues` / ADO
   `no matches` line). The **orientation path** (`--format condensed`) is
   separately fail-soft (exit 0) but is *not* fully silent — when
   `roadmap.config.yaml` exists yet the tracker or `jq` is unavailable it still
-  emits the single `[roadmap] …` diagnostic the SessionStart banner relies on
-  (session-start-banner contract SSB-6).
+  emits a single `[roadmap] …` diagnostic rather than nothing. (The SessionStart
+  banner formerly consumed this `--format condensed` output; #705 retired that
+  banner consumer, so the mode is now invoked only directly.)
 - **Backend parity.** `state`, `label_*`, `text_match`, `group_by:horizon`, and
   flat render behave identically on GitHub and ADO. Epic-tree render is
   identical in shape; only the label column differs by backend.
+- **Epic-tree ADO hierarchy.** In epic-tree mode the graph comes from
+  `roadmap_epic_graph`; its ADO branch (`roadmap_ado_epic_graph`) resolves native
+  hierarchy from the work-item `relations` field — `Hierarchy-Forward` = children,
+  `Hierarchy-Reverse` = parent; `Related` and other link types are ignored —
+  producing the same `{next_up, nodes}` shape as the GitHub `subIssues` branch.
+  State is normalized to `open`/`closed` via `azure_devops_closed_states`. The
+  empty graph is emitted only on fetch failure or an unlinked epic (fail-soft).
+  (Preserved from the retired `epic-walk.contract.md` EWA invariant when #705
+  deleted that contract; `roadmap_epic_graph` survives as `view.sh`'s graph source.)
 - **Deterministic render.** Output is a pure function of the validated query-spec
   and tracker state — the model contributes only the query-spec, never ranking
   or prose over the results.
@@ -121,8 +131,23 @@ Asserted by `scripts/_smoke-test-contract-roadmap-view.sh` (no network; uses
 - **RV-14:** `--format full` board view renders the separator, NOW/NEXT, and RECOMMEND.
 - **RV-15:** `--format full` on an empty board still renders the header, exit 0.
 
+ADO native-hierarchy production (the **Epic-tree ADO hierarchy** invariant) is
+asserted separately by `scripts/_smoke-test-contract-roadmap-ado-epic-graph.sh`
+(PATH-shadowed `az` stub, no network):
+
+- **EWA-1: ADO relations → graph.** An ADO epic whose `relations` carry two
+  `Hierarchy-Forward` children (one Active, one Closed) and a `Related` link →
+  `roadmap_epic_graph` (backend `azure-devops`) emits `{next_up, nodes}` with the
+  epic flagged `is_epic`, both hierarchy ids as `children`, the `Related` target
+  absent, child states normalized, and `parent` back-pointers set. (Assertion id
+  retained from the retired epic-walk contract.)
+
 ## Versioning
 
+- **1.1** (2026-06-10) — absorbed the **Epic-tree ADO hierarchy** invariant and
+  its EWA-1 test-surface assertion from the retired `epic-walk.contract.md` when
+  #705 deleted that contract. `roadmap_epic_graph` / `roadmap_ado_epic_graph`
+  survive as `view.sh`'s epic-tree graph source. Issue #705.
 - **1.0** (2026-06-07) — initial contract. Producer = preset/subagent emitting
   `roadmap-view-spec@v1`; consumer = `scripts/roadmap/view.sh`. Covers
   RV-1..RV-15 (validation, fetch/filter, flat/horizon render, epic-tree, and

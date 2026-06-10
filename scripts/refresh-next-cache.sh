@@ -109,166 +109,6 @@ write_err() {
   printf '[%s] %s\n' "$(now_iso)" "$1" >> "$ERR_FILE"
 }
 
-# ── Shared helper: run epic-walk + perform auto-advance label move ────
-# F1: factored helper used by BOTH the normal (open issue) path and the
-# closed-next-up path so auto-advance logic is not duplicated.
-#
-# Args: $1 = next-up issue number (may be closed)
-# Sets: epic_json, auto_to, auto_from in the caller's scope
-# Writes: cache to CACHE_FILE via write_cache (with issue:null for the
-#         closed path — caller is responsible for the issue field value)
-#
-# Returns 0 always (fail-soft).
-run_epic_walk_and_cache_if_advance() {
-  local _nu="$1"
-  local _epic_json _epic_out _auto_to _auto_from _advance_ok _rewrite_json
-  _epic_json='{"epics_in_flight":[],"auto_advance":null}'
-  if [ -f "$SCRIPT_DIR/roadmap/epic-walk.sh" ]; then
-    if _epic_out=$( cd "$PROJECT_DIR" && bash "$SCRIPT_DIR/roadmap/epic-walk.sh" --next-up "${_nu}" 2>>"$ERR_FILE" ); then
-      [ -n "$_epic_out" ] && _epic_json="$_epic_out"
-    else
-      write_err "epic-walk failed for closed next-up #${_nu}; epics_in_flight omitted"
-    fi
-  fi
-
-  _auto_to=$(printf '%s' "$_epic_json" | python3 -c \
-    'import json,sys;a=json.load(sys.stdin)["auto_advance"];print(a["to"] if a else "")' \
-    2>/dev/null || true)
-  _auto_from=$(printf '%s' "$_epic_json" | python3 -c \
-    'import json,sys;a=json.load(sys.stdin)["auto_advance"];print(a["from"] if a else "")' \
-    2>/dev/null || true)
-
-  if [ -z "$_auto_to" ] || [ -z "$_auto_from" ]; then
-    # No auto-advance candidate from closed next-up. If the resolver found
-    # epics_in_flight (e.g. all children blocked), write a cache that includes
-    # that epic context so the banner can surface the blocked-epic state.
-    # Without this, the blocked children that explain "why no advance" are lost
-    # and the boot banner shows no epic orientation at all.
-    # When epics_in_flight is empty there is nothing to add; let the caller
-    # write the standard empty cache (return 0 = "I did not write the cache").
-    local _has_epics
-    _has_epics=$(printf '%s' "$_epic_json" | python3 -c \
-      'import json,sys;d=json.load(sys.stdin);print("yes" if d.get("epics_in_flight") else "no")' \
-      2>/dev/null || true)
-    if [ "${_has_epics:-no}" != "yes" ]; then
-      return 0
-    fi
-    # Build and write a cache with the blocked-epic context (issue:null, auto_advanced:null).
-    local _blocked_cache_json _blocked_epic_file
-    _blocked_epic_file=$(mktemp "$CACHE_DIR/epic.json.XXXXXX")
-    printf '%s' "$_epic_json" > "$_blocked_epic_file"
-    _blocked_cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$_blocked_epic_file" 2>/dev/null <<'PY'
-import json, os, re, sys
-_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
-def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
-def scrub_epic(e):
-    out = dict(e)
-    out["title"] = scrub(out.get("title", ""))
-    out["active"] = [{**c, "title": scrub(c.get("title", "")), "stage": c.get("stage")}
-                     for c in (out.get("active") or [])]
-    if out.get("next"):
-        out["next"] = {**out["next"], "title": scrub(out["next"].get("title", ""))}
-    out["blocked"] = [{**b, "title": scrub(b.get("title", ""))} for b in (out.get("blocked") or [])]
-    return out
-try:
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        epic_data = json.load(fh)
-    epics_in_flight = [scrub_epic(e) for e in epic_data.get("epics_in_flight", [])]
-except Exception:
-    epics_in_flight = []
-cache = {
-    "fetched_at": os.environ["FETCHED_AT"],
-    "issue": None,
-    "handoff": None,
-    "no_gh_remote": False,
-    "error": None,
-    "epics_in_flight": epics_in_flight,
-    "auto_advanced": None,
-}
-print(json.dumps(cache, indent=2))
-PY
-    )
-    rm -f "$_blocked_epic_file"
-    if [ -n "$_blocked_cache_json" ]; then
-      write_cache "$_blocked_cache_json"
-    fi
-    # Return so the caller's stamp check detects the write (if any) and skips
-    # the standard empty-cache fallback.
-    return 0
-  fi
-
-  # Build epics_in_flight from the resolver output and write an issue:null cache
-  # that includes the auto_advanced field (pending label write below).
-  local _epics_json _advance_candidate _cache_json _epic_file
-  _epic_file=$(mktemp "$CACHE_DIR/epic.json.XXXXXX")
-  printf '%s' "$_epic_json" > "$_epic_file"
-  _cache_json=$(FETCHED_AT="$(now_iso)" python3 - "$_epic_file" 2>/dev/null <<'PY'
-import json, os, re, sys
-_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
-def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
-def scrub_epic(e):
-    out = dict(e)
-    out["title"] = scrub(out.get("title", ""))
-    out["active"] = [{**c, "title": scrub(c.get("title", "")), "stage": c.get("stage")}
-                     for c in (out.get("active") or [])]
-    if out.get("next"):
-        out["next"] = {**out["next"], "title": scrub(out["next"].get("title", ""))}
-    out["blocked"] = [{**b, "title": scrub(b.get("title", ""))} for b in (out.get("blocked") or [])]
-    return out
-try:
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        epic_data = json.load(fh)
-    epics_in_flight = [scrub_epic(e) for e in epic_data.get("epics_in_flight", [])]
-    auto_advance_candidate = epic_data.get("auto_advance")
-except Exception:
-    epics_in_flight = []
-    auto_advance_candidate = None
-cache = {
-    "fetched_at": os.environ["FETCHED_AT"],
-    "issue": None,
-    "handoff": None,
-    "no_gh_remote": False,
-    "error": None,
-    "epics_in_flight": epics_in_flight,
-    "auto_advanced": auto_advance_candidate,
-}
-print(json.dumps(cache, indent=2))
-PY
-  )
-  rm -f "$_epic_file"
-
-  if [ -z "$_cache_json" ]; then
-    write_err "closed-next-up auto-advance: python cache build failed for #${_nu}; skipping"
-    return 0
-  fi
-  write_cache "$_cache_json"
-
-  # F2: add-to-target FIRST, then remove-from-source
-  _advance_ok=false
-  if ( cd "$PROJECT_DIR" && roadmap_tracker_issue_update "$_auto_to" --add-label next-up ) 2>>"$ERR_FILE"; then
-    _advance_ok=true
-    if ! ( cd "$PROJECT_DIR" && roadmap_tracker_issue_update "$_auto_from" --remove-label next-up ) 2>>"$ERR_FILE"; then
-      write_err "closed-next-up auto-advance: --add-label next-up on #${_auto_to} succeeded but --remove-label from #${_auto_from} failed (tolerable transient)"
-    fi
-  else
-    write_err "closed-next-up auto-advance: --add-label next-up on #${_auto_to} failed; label stays on #${_auto_from}"
-  fi
-
-  if ! $_advance_ok; then
-    # Rewrite cache with auto_advanced:null
-    _rewrite_json=$(python3 - "$CACHE_FILE" 2>/dev/null <<'PY'
-import json, sys
-c = json.load(open(sys.argv[1]))
-c['auto_advanced'] = None
-print(json.dumps(c, indent=2))
-PY
-)
-    if [ -n "$_rewrite_json" ]; then
-      write_cache "$_rewrite_json"
-    fi
-  fi
-}
-
 # ── Detect git remote (any) ──────────────────────────────────────────
 # We don't insist on a remote named `origin` — repos that use
 # `upstream`-style workflows would be silently skipped. The selected
@@ -281,9 +121,7 @@ if [ -z "$remote_name" ]; then
   "issue": null,
   "handoff": null,
   "no_gh_remote": true,
-  "error": null,
-  "epics_in_flight": [],
-  "auto_advanced": null
+  "error": null
 }' "$(now_iso)")"
   exit 0
 fi
@@ -302,9 +140,7 @@ if ! roadmap_probe_backend_access "$ROADMAP_BACKEND" "$PROJECT_DIR" > /dev/null 
   "issue": null,
   "handoff": null,
   "no_gh_remote": false,
-  "error": "%s",
-  "epics_in_flight": [],
-  "auto_advanced": null
+  "error": "%s"
 }' "$(now_iso)" "$backend_unavailable_error")"
   while IFS= read -r _err_line; do
     [ -n "$_err_line" ] && write_err "$_err_line"
@@ -341,9 +177,7 @@ if [ "$tracker_exit" -ne 0 ]; then
   "issue": null,
   "handoff": null,
   "no_gh_remote": true,
-  "error": null,
-  "epics_in_flight": [],
-  "auto_advanced": null
+  "error": null
 }' "$(now_iso)")"
     exit 0
   fi
@@ -357,9 +191,7 @@ if [ "$tracker_exit" -ne 0 ]; then
   "issue": null,
   "handoff": null,
   "no_gh_remote": false,
-  "error": "%s",
-  "epics_in_flight": [],
-  "auto_advanced": null
+  "error": "%s"
 }' "$(now_iso)" "$tracker_call_error")"
   write_err "tracker issue list call failed: $tracker_err"
   exit 2
@@ -368,65 +200,14 @@ fi
 issues_json=$(cat "$tracker_stdout")
 rm -f "$tracker_stdout" "$tracker_stderr"
 
-# If the array is empty, no OPEN issue carries the label.
-# F1: Closed next-up probe — the real auto-advance trigger. The open fetch
-# returned [] because the next-up issue is now CLOSED (was just merged/closed).
-# Check for a recently-closed next-up and, if found, run the epic resolver to
-# see if there is an auto-advance candidate (ready sibling in the same epic).
 if [ -z "$issues_json" ] || [ "$issues_json" = "[]" ]; then
-  # Probe for a CLOSED issue carrying the next-up label
-  _closed_stdout=$(mktemp "$CACHE_DIR/tracker.closed.XXXXXX")
-  _closed_exit=0
-  ( cd "$PROJECT_DIR" && \
-    roadmap_tracker_issue_list --label next-up --state closed --limit 1 \
-      --json number \
-      >"$_closed_stdout" 2>/dev/null ) || _closed_exit=$?
-  _closed_num=""
-  if [ "$_closed_exit" -eq 0 ]; then
-    _closed_num=$(python3 -c \
-      'import json,sys; d=json.load(open(sys.argv[1])); print(d[0]["number"] if d else "")' \
-      "$_closed_stdout" 2>/dev/null || true)
-  fi
-  rm -f "$_closed_stdout"
-
-  if [ -n "$_closed_num" ] && command -v python3 >/dev/null 2>&1; then
-    # Found a closed next-up — try epic-walk for auto-advance.
-    # The helper writes the cache only when auto-advance fires; use a sentinel
-    # stamp to detect whether it ran (we use the cache mtime vs a pre-call stamp).
-    _pre_call_stamp=$(mktemp "$CACHE_DIR/stamp.XXXXXX")
-    run_epic_walk_and_cache_if_advance "$_closed_num"
-    # If the helper did NOT find an advance (returned without writing cache),
-    # write the standard empty cache. We detect "no write" by checking if
-    # CACHE_FILE is newer than our pre-call stamp — if not, the helper did
-    # nothing (or python was unavailable).
-    _cache_was_written=false
-    if [ -f "$CACHE_FILE" ] && [ "$CACHE_FILE" -nt "$_pre_call_stamp" ]; then
-      _cache_was_written=true
-    fi
-    rm -f "$_pre_call_stamp"
-    if ! $_cache_was_written; then
-      write_cache "$(printf '{
+  write_cache "$(printf '{
   "fetched_at": "%s",
   "issue": null,
   "handoff": null,
   "no_gh_remote": false,
-  "error": null,
-  "epics_in_flight": [],
-  "auto_advanced": null
+  "error": null
 }' "$(now_iso)")"
-    fi
-  else
-    # No closed next-up found (or python3 unavailable) — standard empty cache
-    write_cache "$(printf '{
-  "fetched_at": "%s",
-  "issue": null,
-  "handoff": null,
-  "no_gh_remote": false,
-  "error": null,
-  "epics_in_flight": [],
-  "auto_advanced": null
-}' "$(now_iso)")"
-  fi
   exit 0
 fi
 
@@ -475,24 +256,6 @@ fi
 
 # ── Truncate body and emit cache ─────────────────────────────────────
 
-# ── Epic-aware orientation (issue #562) ──────────────────────────────
-# Call the epic resolver to get epics_in_flight + auto_advance candidate.
-# Fail-soft: any failure (script missing, live fetch error, python error)
-# degrades to the empty shape. Never changes the script's exit code.
-#
-# F4(b): run epic-walk.sh under PROJECT_DIR so roadmap_github_epic_graph's
-# `gh repo view` resolves to the correct repository context.
-epic_json='{"epics_in_flight":[],"auto_advance":null}'
-if [ -f "$SCRIPT_DIR/roadmap/epic-walk.sh" ]; then
-  if epic_out=$( cd "$PROJECT_DIR" && bash "$SCRIPT_DIR/roadmap/epic-walk.sh" --next-up "${issue_number:-}" 2>>"$ERR_FILE" ); then
-    [ -n "$epic_out" ] && epic_json="$epic_out"
-  else
-    write_err "epic-walk failed; epics_in_flight omitted from cache"
-  fi
-fi
-epic_file=$(mktemp "$CACHE_DIR/epic.json.XXXXXX")
-printf '%s' "$epic_json" > "$epic_file"
-
 # Use python3 if available for robust JSON shaping; otherwise fall back
 # to a jq-and-awk pipeline. The python3 path is the common case in CI
 # and on developer machines.
@@ -505,7 +268,7 @@ if command -v python3 >/dev/null 2>&1; then
   cache_json=$(FETCHED_AT="$(now_iso)" \
                COMMENT_FETCH_STATUS="$comment_fetch_status" \
                COMMENT_FETCH_ERR="$comment_fetch_err" \
-               python3 - "$issues_file" "$comments_file" "$epic_file" <<'PY'
+               python3 - "$issues_file" "$comments_file" <<'PY'
 import json, os, re, sys
 
 with open(sys.argv[1], encoding="utf-8") as fh:
@@ -620,40 +383,6 @@ if comment_status == "failed":
 else:
     handoff = latest_handoff(sys.argv[2])
 
-# ── Merge epics_in_flight + auto_advanced (issue #562) ───────────────
-# Load the resolver output from the temp file. Titles are already scrubbed
-# by epic-walk.sh; apply scrub() defensively here (belt-and-suspenders per
-# CLAUDE.md defense-in-depth) in case a hand-edited or old-format file
-# bypasses the resolver's own scrub pass.
-def scrub_epic(e):
-    """Deep-scrub all author-controlled string fields in one epic entry."""
-    out = dict(e)
-    out["title"] = scrub(out.get("title", ""))
-    out["active"] = [
-        {**c, "title": scrub(c.get("title", "")), "stage": c.get("stage")}
-        for c in (out.get("active") or [])
-    ]
-    if out.get("next"):
-        out["next"] = {**out["next"], "title": scrub(out["next"].get("title", ""))}
-    out["blocked"] = [
-        {**b, "title": scrub(b.get("title", ""))}
-        for b in (out.get("blocked") or [])
-    ]
-    return out
-
-try:
-    with open(sys.argv[3], encoding="utf-8") as fh:
-        epic_data = json.load(fh)
-    epics_in_flight = [scrub_epic(e) for e in epic_data.get("epics_in_flight", [])]
-    # auto_advanced is set ONLY when the label write succeeds (see shell below).
-    # The python builder always stores what the resolver returned here; the shell
-    # layer below decides whether to overwrite it with null (if write failed) or
-    # keep it (if write succeeded). Both branches keep the cache shape stable.
-    auto_advance_candidate = epic_data.get("auto_advance")
-except Exception:
-    epics_in_flight = []
-    auto_advance_candidate = None
-
 if issue is None:
     cache = {
         "fetched_at": os.environ["FETCHED_AT"],
@@ -661,8 +390,6 @@ if issue is None:
         "handoff": handoff,
         "no_gh_remote": False,
         "error": None,
-        "epics_in_flight": epics_in_flight,
-        "auto_advanced": auto_advance_candidate,
     }
 else:
     body = issue.get("body") or ""
@@ -680,75 +407,14 @@ else:
         "handoff": handoff,
         "no_gh_remote": False,
         "error": None,
-        "epics_in_flight": epics_in_flight,
-        "auto_advanced": auto_advance_candidate,
     }
 print(json.dumps(cache, indent=2))
 PY
 )
   rm -f "$issues_file" "$comments_file"
 
-  # Write the cache now — the auto-advance block below may need to rewrite it.
+  # Write the cache.
   write_cache "$cache_json"
-
-  # ── One-shot auto-advance label write (fail-soft) ────────────────────
-  # Design: `auto_advanced` is only set in the cache for the run that actually
-  # performs the label move. The resolver returns `auto_advance` only when the
-  # current next-up is CLOSED and its epic has a ready sibling. Once the label
-  # moves to the new issue, the next boot's next-up will be the open child —
-  # epic-walk then returns auto_advance:null naturally, guaranteeing one-shot
-  # behavior without any external state management.
-  #
-  # Concretely: we write the cache above with auto_advanced = the resolver's
-  # candidate. If the label write SUCCEEDS, the cache stands as-is (one boot
-  # will show the ⤴ banner). If the write FAILS, we rewrite the cache with
-  # auto_advanced:null (the banner never fires). Either way the label write
-  # is never retried: the next run sees a different next-up (open child) or
-  # the same closed next-up with no change in epic state.
-  auto_to=$(printf '%s' "$epic_json" | python3 -c \
-    'import json,sys;a=json.load(sys.stdin)["auto_advance"];print(a["to"] if a else "")' \
-    2>/dev/null || true)
-  auto_from=$(printf '%s' "$epic_json" | python3 -c \
-    'import json,sys;a=json.load(sys.stdin)["auto_advance"];print(a["from"] if a else "")' \
-    2>/dev/null || true)
-  if [ -n "$auto_to" ] && [ -n "$auto_from" ]; then
-    # F2: add-to-target FIRST, then remove-from-source.
-    # If add fails → don't remove (source keeps next-up; treat as failure).
-    # If add succeeds but remove fails → tolerable transient (two labels; open-
-    # fetch --limit 1 picks one); treat the advance as succeeded.
-    _advance_ok=false
-    if ( cd "$PROJECT_DIR" && roadmap_tracker_issue_update "$auto_to" --add-label next-up ) 2>>"$ERR_FILE"; then
-      _advance_ok=true
-      # add succeeded — now remove from source (tolerate failure)
-      if ! ( cd "$PROJECT_DIR" && roadmap_tracker_issue_update "$auto_from" --remove-label next-up ) 2>>"$ERR_FILE"; then
-        write_err "auto-advance: --add-label next-up on #${auto_to} succeeded but --remove-label from #${auto_from} failed (tolerable transient — two issues carry next-up label; next open-fetch resolves)"
-      fi
-    else
-      write_err "auto-advance label write failed: --add-label next-up on #${auto_to} failed; next-up label stays on #${auto_from}"
-    fi
-
-    if ! $_advance_ok; then
-      # add failed — banner must not fire; rewrite cache with auto_advanced:null
-      write_err "auto-advance label write failed (#${auto_from}->#${auto_to}); banner renders read-only"
-      # Rewrite cache with auto_advanced:null — the move didn't happen so
-      # the ⤴ banner must not fire (user would see a lie).
-      # Capture into a temp var; only write_cache if non-empty so a python
-      # failure does not truncate the existing cache file.
-      _rewrite_json=$(python3 - "$CACHE_FILE" 2>/dev/null <<'PY'
-import json, sys
-c = json.load(open(sys.argv[1]))
-c['auto_advanced'] = None
-print(json.dumps(c, indent=2))
-PY
-)
-      if [ -n "$_rewrite_json" ]; then
-        cache_json="$_rewrite_json"
-        write_cache "$cache_json"
-      else
-        write_err "auto-advance rewrite produced empty output; leaving existing cache untouched"
-      fi
-    fi
-  fi
 else
   # Minimal fallback without python3 — do NOT attempt to hand-build
   # JSON from issue fields, because shell string interpolation will
@@ -763,9 +429,7 @@ else
   "issue": null,
   "handoff": null,
   "no_gh_remote": false,
-  "error": "python3 unavailable; issue details omitted in fallback cache",
-  "epics_in_flight": [],
-  "auto_advanced": null
+  "error": "python3 unavailable; issue details omitted in fallback cache"
 }' "$(now_iso)")
   rm -f "$comments_file"
   write_err "python3 not found — issue details omitted from cache. Install python3 to surface next-up details in the boot banner."
@@ -773,5 +437,4 @@ else
   write_cache "$cache_json"
 fi
 
-rm -f "$epic_file"
 exit 0

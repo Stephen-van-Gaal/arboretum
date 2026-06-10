@@ -1612,10 +1612,10 @@ PY
 roadmap_ado_epic_graph() {
   # ADO native hierarchy via the work-item `relations` field
   # (Hierarchy-Forward = children, Hierarchy-Reverse = parent). Produces the
-  # same {next_up, nodes{...}} graph shape as roadmap_github_epic_graph so
-  # epic-walk.sh consumes either backend identically (epic-walk.contract v1.1).
+  # same {next_up, nodes{...}} graph shape as roadmap_github_epic_graph, so
+  # the classifier (inflight.sh) consumes either backend identically.
   # Stage is always null for ADO children: Azure Boards has no pipeline-state
-  # stage signal equivalent to GitHub's, so epic-walk's "active = stage ≥ /design"
+  # stage signal equivalent to GitHub's, so the classifier's "active = stage ≥ /design"
   # detection is GitHub-only in v1. Labels are populated from System.Tags so
   # blocked/horizon detection still works; next/blocked selection still applies.
   local n="$1"
@@ -1668,7 +1668,7 @@ children=[int(x) for x in os.environ["CHILD_IDS"].split() if x.strip()]
 parent_raw=os.environ["PARENT_ID"].strip()
 parent_num=int(parent_raw) if parent_raw else None
 nodes={str(n):node(root, n, parent_num, children)}
-# Insert the parent node so epic-walk can resolve nodes.get(parent) when the
+# Insert the parent node so the classifier can resolve nodes.get(parent) when the
 # next-up is a child work item (not the epic itself).
 if parent_num is not None:
     pj=fetch(parent_num)
