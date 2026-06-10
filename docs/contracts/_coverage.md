@@ -32,6 +32,7 @@
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
 | scripts/post-review-closeout.sh | docs/contracts/review-closeout.contract.md | full |
 | scripts/pr-readiness.sh | docs/contracts/pr-readiness.cli-contract.md | cli |
+| scripts/read-decisions.sh | docs/contracts/read-decisions.cli-contract.md | cli |
 | scripts/read-doc-profile.sh | docs/contracts/read-doc-profile.cli-contract.md | cli |
 | scripts/read-doc-section.sh | docs/contracts/read-doc-section.cli-contract.md | cli |
 | scripts/read-doc-sections.sh | docs/contracts/read-doc-sections.cli-contract.md | cli |

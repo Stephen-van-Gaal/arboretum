@@ -312,6 +312,87 @@ else
   warn "Group-spec layer membership integrity violations — run scripts/validate-group-membership.sh"
 fi
 
+# ── Check 6: Decisions Status + supersession-link integrity (#682) ───
+# Deterministic, no semantic inference: Status must parse to the enum, and any
+# superseded→Dxx must resolve to a real in-table ID. (Design D3/D7.)
+echo ""
+echo "━━━ Check 6: Decisions Status integrity ━━━"
+check6_issues=0
+if [ -d "$SPECS_DIR" ]; then
+  for spec_file in "$SPECS_DIR"/*.spec.md; do
+    [ -f "$spec_file" ] || continue
+    while IFS= read -r msg; do
+      [ -z "$msg" ] && continue
+      warn "$msg"
+      ((check6_issues++)) || true
+    done < <(python3 - "$spec_file" <<'PY'
+import sys, re
+
+path = sys.argv[1]
+name = path.rsplit("/", 1)[-1]
+with open(path, encoding="utf-8") as h:
+    lines = h.read().splitlines()
+
+# Slice the level-2 "## Decisions" section: from its heading to the next
+# same-or-higher heading (## or #).
+sec, grab = [], False
+for ln in lines:
+    if re.match(r"^##\s+Decisions\b", ln):
+        grab = True
+        continue
+    if grab and re.match(r"^#{1,2}\s+\S", ln):
+        break
+    if grab:
+        sec.append(ln)
+
+header, rows = None, []
+for ln in sec:
+    s = ln.strip()
+    if not s.startswith("|"):
+        continue
+    # Split on unescaped pipes only — a cell may contain an escaped \| (valid
+    # Markdown), which must not be treated as a column boundary.
+    cells = [c.strip() for c in re.split(r"(?<!\\)\|", s.strip("|"))]
+    if set("".join(cells)) <= set("-: "):
+        continue
+    if header is None:
+        header = [re.sub(r"\s+", " ", c).strip().casefold() for c in cells]
+        continue
+    rows.append(cells)
+
+if header is None or not rows:
+    sys.exit(0)
+
+def col(n):
+    try:
+        return header.index(n)
+    except ValueError:
+        return None
+
+i_id, i_status = col("id"), col("status")
+if i_id is None or i_status is None:
+    sys.exit(0)  # no Status column → nothing to check (flat #671 table)
+
+def cell(c, idx):
+    return c[idx] if (idx is not None and idx < len(c)) else ""
+
+ids = {cell(c, i_id) for c in rows}
+for c in rows:
+    did, status = cell(c, i_id), cell(c, i_status)
+    if status in ("", "active", "moot"):
+        continue
+    m = re.match(r"^superseded→(D\d+)$", status)
+    if m:
+        if m.group(1) not in ids:
+            print("%s: decision %s is superseded by missing %s" % (name, did, m.group(1)))
+    else:
+        print("%s: decision %s has invalid Status '%s'" % (name, did, status))
+PY
+)
+  done
+fi
+[ "$check6_issues" -eq 0 ] && ok "All Decisions Status values + supersession links are valid"
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""

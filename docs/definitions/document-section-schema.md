@@ -11,7 +11,7 @@ status: active
 active
 
 ## Version
-v1
+v1.1
 
 ## Description
 
@@ -70,16 +70,47 @@ document_shapes:
         required: yes
 ```
 
+## Decisions Table — Extended Shape (#682)
+
+The governed-spec `Decisions` section is a Markdown table. The durable columns
+extend #671's required six-column core to eight:
+
+```
+| ID | Decision | Status | Tags | Alternatives Considered | Rationale | Date | Source |
+```
+
+- **Status** — `active | superseded→Dxx | moot`. Blank ≡ `active`. This is the
+  **only mutable cell** in the otherwise-immutable (APPEND-AUTO) table: the
+  Decision / Alternatives Considered / Rationale columns stay frozen (ADR
+  discipline); only `Status` may change, and only as a deliberate human act.
+- **Tags** — a mandatory facet from `{behaviour | seam | scope | quality}`,
+  optionally followed by ` +area:<key>` where `<key>` is a frontmatter `areas:`
+  entry (#681). Example: `seam +area:retrieval`.
+
+**Two-altitude retrieval (projection, not a storage split).** The single table
+is the source of truth. `scripts/read-decisions.sh` projects a cheap **summary**
+(`ID · Decision · Status · Tags`, one line per decision) or emits the full-row
+**detail** for named decision IDs. Column resolution is by header name
+(case-insensitive, whitespace-normalized per `document-access-format.contract.md`),
+so the projection tolerates both the 6-column and 8-column tables.
+
+**Threshold gating (author / `/consolidate` policy — not code-enforced).** The
+`Status` column appears whenever ≥1 decision is non-active (any spec size, for
+correctness). The `Tags` column and routine two-altitude retrieval activate at
+**≥15 decision rows**. Below that, the flat #671 six-column table stands.
+
 ## Consumers And Providers
 
 | Spec | Role | Notes |
 |------|------|-------|
 | document-taxonomy | Provider | Owns shipped document templates and shape catalog. |
-| document-access | Consumer | Uses shapes to discover and retrieve sections. |
+| document-access | Consumer | Uses shapes to discover and retrieve sections; `read-decisions.sh` projects the Decisions table. |
 | workflow-unification | Consumer | Skills retrieve design/spec/plan sections during workflow stages. |
+| consolidate-spec | Consumer | Harvests/preserves Decisions `Status`/`Tags`. |
 
 ## Changelog
 
 | Date | Version | Change | Affected Specs |
 |------|---------|--------|----------------|
 | 2026-06-04 | v1 | Initial schema for document section discovery and retrieval. | document-access, document-taxonomy, workflow-unification |
+| 2026-06-09 | v1.1 | Decisions-table extended shape: Status enum, Tags facet+area grammar, two-altitude projection, threshold gating (#682). | document-access, consolidate-spec, document-taxonomy |

@@ -1,6 +1,6 @@
 ---
 seam: document-access-format
-version: 1.0
+version: 1.1
 producer-type: skill
 consumer-type: script
 consumes:
@@ -65,6 +65,27 @@ only for matching.
 - `read_profiles.<profile>.sections[]` is the supported read-profile shape.
 - A read profile must resolve every referenced section before printing output.
 
+### Decisions projection (#682)
+
+A consumer (`read-decisions.sh`) may project the `Decisions` section's Markdown
+table at two altitudes:
+
+- **Summary** — one line per data row: `<ID> · <Decision> · <Status> · <Tags>`.
+  A blank `Status` cell renders as `active`; an absent `Status`/`Tags` column
+  renders as `active`/empty.
+- **Detail** — the verbatim original table row(s) for a requested set of decision
+  IDs, emitted in the order requested.
+
+Projection invariants:
+
+- Columns are located by **header name** (`ID`, `Decision`, `Status`, `Tags`),
+  resolved with the same whitespace/case normalization as heading matching; column
+  *order* is not fixed, and the 6-column (#671) table is tolerated.
+- The projection fails closed: a missing `Decisions` section, a table with no data
+  rows, or a requested detail ID that is absent yields no partial stdout and a
+  non-zero exit naming the miss.
+- The middle-dot separator `·` is literal in summary output.
+
 ## Test surface
 
 - **DAF-1: Case-insensitive match.** `Purpose`, `purpose`, and `PURPOSE` resolve
@@ -79,7 +100,12 @@ only for matching.
   not selectable.
 - **DAF-6: Profile all-or-nothing.** A profile with one unresolved section emits
   no partial output.
+- **DAF-7: Decisions projection.** Summary renders `ID · Decision · Status · Tags`
+  with blank Status as `active`; detail returns verbatim rows for named IDs in
+  order; an absent ID or missing Decisions section fails closed with no partial
+  output. (Exercised by `_smoke-test-contract-read-decisions.sh`.)
 
 ## Versioning
 
+- **1.1** (2026-06-09) - add the Decisions two-altitude projection (summary/detail) for Issue #682.
 - **1.0** (2026-06-04) - initial document-access format contract for Issue #525.

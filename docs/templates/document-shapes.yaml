@@ -52,7 +52,7 @@ document_shapes:
         authorship: human
       - key: decisions
         heading: Decisions
-        content: Durable decisions (Alternatives + Rationale) harvested or authored for this component.
+        content: Durable decisions (Alternatives + Rationale) harvested or authored for this component. Threshold-gated Status + Tags columns and two-altitude retrieval per document-section-schema (#682).
         required: yes
         authorship: append-auto
   design-spec:

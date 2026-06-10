@@ -106,7 +106,10 @@ test-tiers:
 ## Decisions
 
 <!-- APPEND-AUTO or HUMAN - Durable decisions made during design. /consolidate
-     may harvest these into governed specs. -->
+     may harvest these into governed specs. A decision may lead its Decision cell
+     with an optional [facet] token (e.g. "[seam] Use a single table") which
+     /consolidate reads to populate the governed-spec Tags column (#682);
+     otherwise Tags is left blank for human fill. Do not widen this table. -->
 
 | ID | Decision | Alternatives Considered | Rationale | Date | Source |
 |----|----------|------------------------|-----------|------|--------|

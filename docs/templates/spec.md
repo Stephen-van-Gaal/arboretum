@@ -113,12 +113,26 @@ confidence Arboretum is claiming).
 
 ## Decisions
 
-<!-- /consolidate harvests new rows from design specs and plans. Existing rows are
-     never modified or removed. The Source column is the idempotency key —
-     /consolidate does not re-add a decision whose source artifact + decision ID is
-     already cited. The human can also add rows manually with Source: human (or a
+<!-- /consolidate harvests new rows from design specs and plans. A row's
+     Decision / Alternatives Considered / Rationale are never modified or removed
+     (ADR discipline). The Source column is the idempotency key — /consolidate
+     does not re-add a decision whose source artifact + decision ID is already
+     cited. The human can also add rows manually with Source: human (or a
      free-text citation). Every row carries Alternatives Considered + Rationale —
-     never a reduced ID·Decision·Source schema. -->
+     never a reduced ID·Decision·Source schema.
 
-| ID | Decision | Alternatives Considered | Rationale | Date | Source |
-|----|----------|------------------------|-----------|------|--------|
+     Status + Tags are threshold-gated (#682; schema authority:
+     docs/definitions/document-section-schema.md):
+       - Status ∈ {active | superseded→Dxx | moot}; blank ≡ active. This is the
+         ONLY mutable cell — it may flip (active→superseded/moot) as a deliberate
+         human act; everything else in the row stays frozen.
+       - Tags = a facet {behaviour | seam | scope | quality}, optionally
+         + area:<key> (a frontmatter areas: entry).
+       - The Status column appears once any decision is non-active (any size);
+         the Tags column + two-altitude retrieval (read-decisions.sh) activate at
+         ≥15 rows. Below that, drop Status/Tags and use the flat 6-column table.
+     Provenance (a dated changelog of which artifact touched which sections) lives
+     in the ### Design record subsection under Implementation Notes — NOT here. -->
+
+| ID | Decision | Status | Tags | Alternatives Considered | Rationale | Date | Source |
+|----|----------|--------|------|------------------------|-----------|------|--------|
