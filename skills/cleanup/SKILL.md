@@ -170,6 +170,12 @@ runs in fresh context, not the main message thread. This is an early, independen
 application of the conductor/driver pattern (epic #516): the main thread holds
 only the file-seam results the driver reports back, never the driver's transcript.
 
+(This is the fresh-context-driver idiom — a generic `general-purpose` subagent
+briefed with the steps below; see `docs/specs/skill-and-agent-authoring.spec.md`
+§ "Fresh-context driver dispatch". The cleanup driver **inlines** its procedure
+rather than invoking a skill, so there is no skill name to confuse with a
+`subagent_type`.)
+
 Brief the driver with the captured `$BRANCH`, `$SESSION_WORKTREE`, the merged PR
 number `$MERGED_PR_NUMBER`, the resolved backend, and the tracker-close decision
 from Step 2. Instruct it to:

@@ -18,6 +18,8 @@ This skill focuses on risks that require reasoning about intent and context — 
 
 This is the `ai-surface` lane of the B4 review stage (`docs/specs/review-stage.spec.md`). Mirroring the `/cleanup` driver pattern, the read-heavy full-file analysis runs in a **fresh subagent**; the main thread receives only the returned coverage manifest, never the driver's transcript. This is what keeps the stage's context cost bounded. The brief carries `diff_scope`, `lane`, the matched `surface`, the `invariants_to_preserve` (the CLAUDE.md scrub rule), and the risk `categories` — consume them; do not re-derive the diff.
 
+This skill is **invoked inside** a generic `general-purpose` subagent per the fresh-context-driver idiom (`docs/specs/skill-and-agent-authoring.spec.md` § "Fresh-context driver dispatch"); it is not itself a registered subagent type. The dispatcher must never pass `ai-surface-review` as `subagent_type` — it invokes the skill via the Skill tool (resolved as `arboretum:ai-surface-review`).
+
 ## Scope
 
 Files that influence agent behavior:

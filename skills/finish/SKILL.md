@@ -168,14 +168,22 @@ The B4 review stage is a **dispatch** over replaceable, fresh-context lanes
    bash scripts/review-dispatch.sh "$BASE"
    ```
 
-2. For each planned lane, in the printed order, dispatch a fresh subagent driver
-   with a brief carrying `diff_scope` (the `git diff $BASE...HEAD --name-only`
-   output, regenerated **now** — not carried from an earlier stage), the `lane`,
-   and (for `ai-surface`) the matched `surface`, the CLAUDE.md scrub invariant,
-   and the risk categories:
-   - `ai-surface` → `/ai-surface-review` driver (homegrown injection + data-flow).
-   - `general-security` → the configured general backend (default: the built-in `/security-review`).
-   - `correctness` → the configured correctness backend (default: `/code-review`).
+2. For each planned lane, in the printed order, dispatch a **generic
+   `general-purpose` subagent** (per `docs/specs/skill-and-agent-authoring.spec.md`
+   § "Fresh-context driver dispatch") and instruct it to **invoke the lane's
+   skill**, passing a brief carrying `diff_scope` (the `git diff $BASE...HEAD
+   --name-only` output, regenerated **now** — not carried from an earlier stage),
+   the `lane`, and (for `ai-surface`) the matched `surface`, the CLAUDE.md scrub
+   invariant, and the risk categories:
+   - `ai-surface` → instruct the subagent to invoke `/ai-surface-review` — via the Skill tool as `arboretum:ai-surface-review` (homegrown injection + data-flow). The slash form is the user-facing command; the plugin-prefixed form is the Skill-tool name the subagent resolves.
+   - `general-security` → instruct it to invoke the configured general backend (default: the built-in `/security-review`).
+   - `correctness` → instruct it to invoke the configured correctness backend (default: `/code-review`).
+
+   **Invariant:** the lane name and skill name are *what the subagent invokes* —
+   never pass them as `subagent_type`; the subagent type is always
+   `general-purpose`. Arboretum skills resolve under their plugin-prefixed Skill
+   name (e.g. `arboretum:ai-surface-review`); the bare name does not. The subagent
+   returns only the coverage manifest.
 
    Validate each returned manifest with `scripts/validate-review-manifest.sh`; relay it.
 
