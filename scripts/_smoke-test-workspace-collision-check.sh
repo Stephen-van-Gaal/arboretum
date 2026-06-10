@@ -93,4 +93,56 @@ out=$( cd "$FIX/wtO" && bash "$SUT" --pre-commit 2>/dev/null )
 [ "$out" = "VERDICT=clear" ] && pass "CC-pc-offline: claim fixture ignored" || fk "CC-pc-offline" "out=$out"
 git worktree remove --force "$FIX/wtO" 2>/dev/null; unset ARBO_COLLISION_ISSUE_JSON
 
+# ===== Cross-tool (#714): detached Codex worktrees =====
+# Codex worktrees are DETACHED linked worktrees under $CODEX_HOME/worktrees,
+# reproduced here with `git worktree add --detach` (no Codex needed).
+export ARBO_COLLISION_ISSUE_JSON="$FIX/empty.json"          # no recorded claim
+CODEX_HM="$FIX/codex-home"; mkdir -p "$CODEX_HM/worktrees"   # under $FIX so the EXIT trap cleans it
+git "${GIT_ID[@]}" branch feat/714-cross-tool-signals >/dev/null 2>&1
+
+# --- CT-1: correlated Codex worktree, caller on main -> warn-crosstool (D8: > warn-reattach) ---
+git "${GIT_ID[@]}" worktree add -q --detach "$CODEX_HM/worktrees/wt1" feat/714-cross-tool-signals 2>/dev/null
+out=$(CODEX_HOME="$CODEX_HM" bash "$SUT" --issue 714 2>/dev/null); rc=$?
+{ [ "$rc" -eq 0 ] && [ "$out" = "VERDICT=warn-crosstool" ]; } \
+  && pass "CT-1: correlated codex worktree -> warn-crosstool (> warn-reattach)" || fk "CT-1" "rc=$rc out=$out"
+
+# --- CT-2: block outranks crosstool (own-tool branch checked out elsewhere + codex) ---
+git "${GIT_ID[@]}" worktree add -q "$FIX/own2" feat/714-cross-tool-signals 2>/dev/null
+out=$(CODEX_HOME="$CODEX_HM" bash "$SUT" --issue 714 2>/dev/null)
+[ "$out" = "VERDICT=block" ] && pass "CT-2: block outranks crosstool" || fk "CT-2" "out=$out"
+git worktree remove --force "$FIX/own2" 2>/dev/null
+git worktree remove --force "$CODEX_HM/worktrees/wt1" 2>/dev/null
+
+# Caller sits ON feat/714 (own-branch suppresses warn-reattach) to isolate crosstool.
+git "${GIT_ID[@]}" worktree add -q "$FIX/caller714" feat/714-cross-tool-signals 2>/dev/null
+
+# --- CT-3: a NON-codex detached worktree at the tip -> ignored -> clear ---
+git "${GIT_ID[@]}" worktree add -q --detach "$FIX/usrwt" feat/714-cross-tool-signals 2>/dev/null
+out=$( cd "$FIX/caller714" && CODEX_HOME="$CODEX_HM" bash "$SUT" --issue 714 2>/dev/null )
+[ "$out" = "VERDICT=clear" ] && pass "CT-3: non-codex detached worktree ignored" || fk "CT-3" "out=$out"
+git worktree remove --force "$FIX/usrwt" 2>/dev/null
+
+# --- CT-4: a Codex detached worktree at the tip (caller on its branch) -> warn-crosstool ---
+git "${GIT_ID[@]}" worktree add -q --detach "$CODEX_HM/worktrees/wt4" feat/714-cross-tool-signals 2>/dev/null
+out=$( cd "$FIX/caller714" && CODEX_HOME="$CODEX_HM" bash "$SUT" --issue 714 2>/dev/null )
+[ "$out" = "VERDICT=warn-crosstool" ] && pass "CT-4: codex worktree on own branch -> warn-crosstool" || fk "CT-4" "out=$out"
+
+# --- CT-5: uncorrelated Codex worktree (committed past tip), no local branch -> clear (silent, D7) ---
+( cd "$CODEX_HM/worktrees/wt4" && echo x > g && git "${GIT_ID[@]}" add g && git "${GIT_ID[@]}" commit -qm past )
+git worktree remove --force "$FIX/caller714" 2>/dev/null
+git branch -D feat/714-cross-tool-signals >/dev/null 2>&1
+out=$(CODEX_HOME="$CODEX_HM" bash "$SUT" --issue 714 2>/dev/null)
+[ "$out" = "VERDICT=clear" ] && pass "CT-5: uncorrelated codex worktree -> clear (silent)" || fk "CT-5" "out=$out"
+git worktree remove --force "$CODEX_HM/worktrees/wt4" 2>/dev/null
+
+# --- CT-6: CODEX_HOME with a trailing slash still classifies (Copilot review fix) ---
+export ARBO_COLLISION_ISSUE_JSON="$FIX/empty.json"
+git "${GIT_ID[@]}" branch feat/714-cross-tool-signals >/dev/null 2>&1
+git "${GIT_ID[@]}" worktree add -q --detach "$CODEX_HM/worktrees/wt6" feat/714-cross-tool-signals 2>/dev/null
+out=$(CODEX_HOME="$CODEX_HM/" bash "$SUT" --issue 714 2>/dev/null)   # note trailing slash
+[ "$out" = "VERDICT=warn-crosstool" ] && pass "CT-6: trailing-slash CODEX_HOME normalized" || fk "CT-6" "out=$out"
+git worktree remove --force "$CODEX_HM/worktrees/wt6" 2>/dev/null
+git branch -D feat/714-cross-tool-signals >/dev/null 2>&1
+unset ARBO_COLLISION_ISSUE_JSON
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || exit 1

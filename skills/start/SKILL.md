@@ -114,6 +114,11 @@ Act on the `VERDICT=` token (the script never blocks — `/start` is guidance):
 - `warn-reattach` — surface the stderr reason to the user and **offer to reattach**
   to the existing worktree (via `EnterWorktree`) instead of forking a second
   branch. Proceed with a new branch only if the user confirms they want to fork.
+- `warn-crosstool` — a detached **Codex** worktree correlates to this issue's
+  branch (#714). Surface the stderr reason to the user and ask whether to
+  **proceed anyway** or pause to **coordinate with Codex**. Do **not** offer to
+  reattach via `EnterWorktree` — a detached Codex worktree is not a branch you
+  can attach to, and the branch it sits on may be Codex's active work.
 - `block` — the issue's branch is already checked out in another worktree; git
   will refuse a duplicate. Surface the reason and reattach to that worktree.
 

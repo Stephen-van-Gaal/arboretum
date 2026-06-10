@@ -26,7 +26,7 @@ bash "$SUT" >/dev/null 2>&1; [ "$?" -eq 1 ] && pass "CWCC-1 bad args exit 1" || 
 printf '{"number":1,"state":"OPEN","comments":[]}' > "$FIX/e.json"
 out=$(ARBO_COLLISION_ISSUE_JSON="$FIX/e.json" bash "$SUT" --issue 1 2>/dev/null); rc=$?
 { [ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 1 ] \
-    && printf '%s' "$out" | grep -qE '^VERDICT=(clear|warn-reattach|block)$'; } \
+    && printf '%s' "$out" | grep -qE '^VERDICT=(clear|warn-reattach|warn-crosstool|block)$'; } \
   && pass "CWCC-2 single well-formed token, exit 0" || fk "CWCC-2"
 
 # CWCC-3: mapping — recorded claim -> warn-reattach
@@ -44,5 +44,13 @@ git worktree remove --force "$FIX/w1" 2>/dev/null
 git worktree add -q "$FIX/wa" -b feat/9-a 2>/dev/null; git branch feat/9-b >/dev/null 2>&1
 out=$( cd "$FIX/wa" && bash "$SUT" --pre-commit 2>/dev/null )
 [ "$out" = "VERDICT=warn-reattach" ] && pass "CWCC-5 pre-commit >=2 -> warn" || fk "CWCC-5"
+
+# CWCC-6: mapping — detached Codex worktree under $CODEX_HOME/worktrees -> warn-crosstool
+# (--issue only; reuses feat/1-x from CWCC-4; caller on main).
+CODEX_HM="$FIX/codex-home"; mkdir -p "$CODEX_HM/worktrees"   # under $FIX so the EXIT trap cleans it
+git "${GIT_ID[@]}" worktree add -q --detach "$CODEX_HM/worktrees/c1" feat/1-x 2>/dev/null
+out=$(ARBO_COLLISION_ISSUE_JSON="$FIX/e.json" CODEX_HOME="$CODEX_HM" bash "$SUT" --issue 1 2>/dev/null)
+[ "$out" = "VERDICT=warn-crosstool" ] && pass "CWCC-6 detached codex worktree -> warn-crosstool" || fk "CWCC-6"
+git worktree remove --force "$CODEX_HM/worktrees/c1" 2>/dev/null
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || exit 1

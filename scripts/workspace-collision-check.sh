@@ -50,6 +50,34 @@ worktree_branches() {
 # All local branch short-names.
 local_branches() { git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null; }
 
+# Detached HEAD shas of *Codex-owned* linked worktrees. Codex creates detached
+# linked worktrees under $CODEX_HOME/worktrees (default ~/.codex/worktrees); they
+# share our .git, so `git worktree list` already sees them. worktree_branches()
+# drops them (no `branch` line). Classify by path prefix — the dir NAME is
+# undocumented, so treat it as opaque (#714 D5).
+codex_worktrees() {
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"; codex_home="${codex_home%/}"
+  local codex_root="$codex_home/worktrees"
+  git worktree list --porcelain 2>/dev/null | awk -v root="$codex_root" '
+    /^worktree /{ p=substr($0,10); codex=(index(p, root"/")==1 || p ~ /\/\.codex\/worktrees\//); sha="" }
+    /^HEAD /{ sha=$2 }
+    /^detached/{ if (codex && sha!="") print sha }
+  '
+}
+
+# True (0) if any Codex worktree's detached HEAD is the tip of a branch mapping
+# to $1. Correlation degrades to false once Codex commits past the tip (#714
+# D6/D7 — silent rather than guess).
+crosstool_hit() {
+  local issue="$1" sha b
+  while IFS= read -r sha; do [ -n "$sha" ] || continue
+    while IFS= read -r b; do [ -n "$b" ] || continue
+      [ "$(branch_issue "$b")" = "$issue" ] && return 0
+    done < <(git branch --points-at "$sha" --format='%(refname:short)' 2>/dev/null)
+  done < <(codex_worktrees)
+  return 1
+}
+
 # Latest recorded claim (branch: <name>) for the issue, from the fixture JSON
 # when ARBO_COLLISION_ISSUE_JSON is set, else from the live tracker. Network
 # only on the live path; never reached from --pre-commit.
@@ -93,6 +121,13 @@ if [ "$MODE" = issue ]; then
 
   if [ -n "$checked_out" ]; then
     emit block "issue #$ISSUE branch '$checked_out' is checked out in another worktree — reattach there (git refuses a duplicate checkout)"
+    exit 0
+  fi
+  # Cross-tool (#714 D2/D3/D8): a detached Codex worktree on the issue's branch.
+  # Evaluated ABOVE warn-reattach: the correlating branch also trips warn-reattach,
+  # but "reattach" is wrong when Codex occupies it — coordinate instead.
+  if crosstool_hit "$ISSUE"; then
+    emit warn-crosstool "issue #$ISSUE appears to have a Codex worktree (detached HEAD on this issue's branch) — coordinate with Codex before forking or reattaching"
     exit 0
   fi
   if [ -n "$claim" ] || [ -n "$exists_local" ]; then
