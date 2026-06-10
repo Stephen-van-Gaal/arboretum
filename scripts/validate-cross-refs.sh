@@ -303,6 +303,15 @@ else
   [ "$check4_issues" -eq 0 ] && ok "All frontmatter dep notations are well-formed"
 fi
 
+# ── Check 5: group-spec layer membership integrity (#681) ────────────
+# Bidirectional parent/contains + group owns: ⇄ # owner: glue (D7). Vacuous
+# on a group-free repo. Folds into the global issues counter via warn().
+if bash "$(dirname "${BASH_SOURCE[0]}")/validate-group-membership.sh" "$PROJECT_DIR" >/dev/null 2>&1; then
+  ok "Group-spec layer membership integrity holds"
+else
+  warn "Group-spec layer membership integrity violations — run scripts/validate-group-membership.sh"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""

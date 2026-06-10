@@ -8,7 +8,7 @@ owns: []
 # areas:                       # OPTIONAL — declare intra-spec facets (retrieval-only).
 #   - name: <slug>             # If ≥1 area is declared, split-assessment is REQUIRED.
 #     summary: <one line>      # Forcing rule: ≥2 distinct ### Behaviour facets ⇒ declare + assess.
-#   split-assessment: "Areas of ONE component (single reason to change, shared invariants), or subsystems that should split into specs under a group (#681)? State the call."
+#   split-assessment: "Run the Area-vs-split gate (docs/specs/document-taxonomy.spec.md § Area-vs-split gate): areas of ONE component, or split into specs under a group? State the call."
 #   # split-assessment is a single-line string — the frontmatter parser does not accept `|` block scalars.
 # governs-narrative: docs/ARCHITECTURE.md §X.Y    # optional; required when status=active and owns:[] — cites the narrative section this spec governs inside a shared document
 ---

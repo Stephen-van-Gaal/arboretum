@@ -119,3 +119,54 @@ document_shapes:
         heading: Final Verification
         content: End-of-plan verification checklist.
         required: yes
+  group:
+    template: docs/templates/group.md
+    description: Optional middle level — a subsystem as a collection of specs; owns integration/orchestration and (D7) thin orchestration glue, never business logic.
+    sections:
+      - key: job
+        heading: Job (JTBD)
+        content: What this sub-system is hired to do as a coherent unit.
+        required: yes
+        authorship: human
+      - key: boundaries
+        heading: Boundaries (non-goals)
+        content: What this group is NOT; each non-goal redirects elsewhere.
+        required: yes
+        authorship: human
+        aliases:
+          - Non-goals
+      - key: children
+        heading: Children
+        content: Sub-groups and/or component specs; bidirectional parent/contains.
+        required: yes
+        authorship: human
+      - key: integration
+        heading: Integration
+        content: How children fit together topologically (calls, dependencies, data flow).
+        required: yes
+        authorship: human
+      - key: orchestration
+        heading: Orchestration
+        content: How children coordinate at runtime / through workflows.
+        required: yes
+        authorship: human
+      - key: shared-contracts
+        heading: Shared Contracts
+        content: Explicit interfaces consumed across children; N/A if none.
+        required: no
+        authorship: human
+      - key: shared-schemas
+        heading: Shared Schemas
+        content: Data structures shared between children; N/A if none.
+        required: no
+        authorship: human
+      - key: implementation-notes
+        heading: Implementation Notes
+        content: Guidance for the group's organization (groups own no business logic); Design record is a template-owned subsection here (not cataloged, matching governed-spec).
+        required: no
+        authorship: human
+      - key: decisions
+        heading: Decisions
+        content: Durable decisions about this group's structure.
+        required: no
+        authorship: append-auto

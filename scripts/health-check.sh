@@ -64,6 +64,7 @@ REGISTER="$PROJECT_DIR/docs/REGISTER.md"
 CONTRACTS="$PROJECT_DIR/contracts.yaml"
 DEFS_DIR="$PROJECT_DIR/docs/definitions"
 SPECS_DIR="$PROJECT_DIR/docs/specs"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/owner-doc-resolve.sh"   # group-aware # owner: resolution (D7, #681)
 
 # Severity-tiered finding counters (S2 #641): warn() emits blocking ✗,
 # advise() emits advisory ⚠. The exit code summarizes the run:
@@ -827,9 +828,9 @@ while IFS= read -r f; do
   owner_line=$(shell_owner_marker "$f")
   if [[ "$owner_line" =~ $owner_re ]]; then
     owner_name="${BASH_REMATCH[1]}"
-    if [ ! -f "$SPECS_DIR/$owner_name.spec.md" ]; then
+    if ! owner_doc_path "$owner_name" "$PROJECT_DIR" >/dev/null; then
       if missing_owner_spec_is_applicable "$rel"; then
-        warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md"
+        warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md or group at docs/groups/$owner_name.md"
         ((unowned_count++)) || true
       else
         info "$rel: framework owner '$owner_name' spec is not installed in this root"
@@ -859,9 +860,9 @@ if [ -d "$PROJECT_DIR/skills" ]; then
     owner_line=$(awk '/^---[[:space:]]*$/{n++; next} n>=2{exit} n==1 && /^owner:/{print; exit}' "$f")
     if [[ "$owner_line" =~ $skill_owner_re ]]; then
       owner_name="${BASH_REMATCH[1]}"
-      if [ ! -f "$SPECS_DIR/$owner_name.spec.md" ]; then
+      if ! owner_doc_path "$owner_name" "$PROJECT_DIR" >/dev/null; then
         if missing_owner_spec_is_applicable "$rel"; then
-          warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md"
+          warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md or group at docs/groups/$owner_name.md"
           ((unowned_count++)) || true
         else
           info "$rel: framework owner '$owner_name' spec is not installed in this root"
@@ -872,6 +873,15 @@ if [ -d "$PROJECT_DIR/skills" ]; then
       ((unowned_count++)) || true
     fi
   done < <(find "$PROJECT_DIR/skills" -type f -name 'SKILL.md' -print 2>/dev/null)
+fi
+
+# ── Group-spec layer membership integrity (#681) ─────────────────────
+# Bidirectional parent/contains + group owns: ⇄ # owner: glue (D7). Vacuous
+# on a group-free repo (exit 0, no docs/groups instances).
+if bash "$(dirname "${BASH_SOURCE[0]}")/validate-group-membership.sh" "$PROJECT_DIR" >/dev/null 2>&1; then
+  ok "Group-spec layer membership integrity holds"
+else
+  warn "Group-spec layer membership integrity violations — run scripts/validate-group-membership.sh"
 fi
 
 # ── Check 3 Half B: general source-ownership scan ────────────────────

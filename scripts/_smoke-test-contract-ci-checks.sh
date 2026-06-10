@@ -185,7 +185,7 @@ else
   fail=1
 fi
 
-if grep -q "owner '.*' spec is not installed in this root" "$TARGET"; then
+if grep -q "owner '.*' has no spec or group installed in this root" "$TARGET"; then
   echo "PASS: CLI-7c — inapplicable framework smoke tests emit a SKIP diagnostic"
 else
   echo "FAIL: CLI-7c — inapplicable smoke-test skip diagnostic is missing" >&2

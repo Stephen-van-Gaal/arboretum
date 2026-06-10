@@ -30,6 +30,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SPECS_DIR="$PROJECT_ROOT/docs/specs"
+source "$SCRIPT_DIR/lib/owner-doc-resolve.sh"   # group-aware # owner: resolution (D7, #681)
 
 is_plugin_root() {
   [ -d "$PROJECT_ROOT/skills" ] \
@@ -124,9 +125,9 @@ for f in "${scripts_to_check[@]}"; do
   fi
   owner_name="$SHELL_OWNER_NAME"
 
-  # Resolve to a spec file.
-  if [ ! -f "$SPECS_DIR/$owner_name.spec.md" ]; then
-    fail "$rel: declared owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md"
+  # Resolve to a spec or group document (D7).
+  if ! owner_doc_path "$owner_name" "$PROJECT_ROOT" >/dev/null; then
+    fail "$rel: declared owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md or group at docs/groups/$owner_name.md"
   fi
 done
 
@@ -139,8 +140,8 @@ if [ -d "$PROJECT_ROOT/bin" ]; then
     if ! assert_shell_owner_header_order "$f" "$rel"; then
       continue
     fi
-    if [ ! -f "$SPECS_DIR/$SHELL_OWNER_NAME.spec.md" ]; then
-      fail "$rel: declared owner '$SHELL_OWNER_NAME' has no spec at docs/specs/$SHELL_OWNER_NAME.spec.md"
+    if ! owner_doc_path "$SHELL_OWNER_NAME" "$PROJECT_ROOT" >/dev/null; then
+      fail "$rel: declared owner '$SHELL_OWNER_NAME' has no spec at docs/specs/$SHELL_OWNER_NAME.spec.md or group at docs/groups/$SHELL_OWNER_NAME.md"
     fi
   done < <(
     find "$PROJECT_ROOT/bin" \
@@ -160,8 +161,8 @@ if [ -d "$PROJECT_ROOT/skills" ]; then
       fail "$rel: no 'owner: <spec-name>' key in YAML frontmatter (got: ${owner_line:-<none>})"
       continue
     fi
-    if [ ! -f "$SPECS_DIR/${BASH_REMATCH[1]}.spec.md" ]; then
-      fail "$rel: declared owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md"
+    if ! owner_doc_path "${BASH_REMATCH[1]}" "$PROJECT_ROOT" >/dev/null; then
+      fail "$rel: declared owner '${BASH_REMATCH[1]}' has no spec at docs/specs/${BASH_REMATCH[1]}.spec.md or group at docs/groups/${BASH_REMATCH[1]}.md"
     fi
   done < <(find "$PROJECT_ROOT/skills" -type f -name 'SKILL.md' -print)
 fi

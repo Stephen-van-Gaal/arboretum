@@ -19,6 +19,7 @@
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
+| scripts/lib/owner-doc-resolve.sh | docs/contracts/owner-doc-resolve.contract.md | full |
 | scripts/lib/scrub-control-chars.sh | docs/contracts/scrub-control-chars.contract.md | full |
 | scripts/lib/state-dir.sh | docs/contracts/state-dir.contract.md | full |
 | scripts/lib/token-ledger.sh | docs/contracts/token-ledger.contract.md | full |
@@ -74,6 +75,7 @@
 | scripts/validate-coverage-manifest.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/validate-cross-refs.sh | docs/contracts/validate-cross-refs.contract.md | full |
 | scripts/validate-design-spec.sh | docs/contracts/validate-design-spec.contract.md | full |
+| scripts/validate-group-membership.sh | docs/contracts/validate-group-membership.cli-contract.md | cli |
 | scripts/validate-review-dispositions.sh | docs/contracts/review-dispositions.contract.md | full |
 | scripts/validate-review-manifest.sh | docs/contracts/validate-review-manifest.cli-contract.md | cli |
 | scripts/validate-stage-log-line.sh | docs/contracts/validate-stage-log-line.contract.md | full |

@@ -59,7 +59,7 @@ Invariant #6 of the legacy two-path model ("pick one governance path per slice โ
 
 ## Spec sizing
 
-A spec should have a **single reason to change**. If two behaviours can evolve independently, they should be separate specs. If two pieces of code always change together and share internal state, they belong in the same spec.
+A spec should have a **single reason to change**. If two behaviours can evolve independently, they should be separate specs. If two pieces of code always change together and share internal state, they belong in the same spec. This rule is operationalized by the **Area-vs-split gate** in `docs/specs/document-taxonomy.spec.md` ยง Area-vs-split gate (when to split into sibling specs under a group vs. keep as `areas:` of one spec).
 
 **Signs a spec is too large:**
 - Its Behaviour section has multiple unrelated subsystems

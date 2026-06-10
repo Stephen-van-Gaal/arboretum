@@ -6,6 +6,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
+source "$ROOT/scripts/lib/owner-doc-resolve.sh"   # group-aware # owner: resolution (D7, #681)
 fail=0
 CI_MODE="${ARBORETUM_CI_MODE:-balanced}"
 CI_JOBS="${ARBORETUM_CI_JOBS:-8}"
@@ -118,8 +119,8 @@ smoke_test_applicable() {
   owner_re='^# owner: ([a-z][a-z0-9-]+)$'
   if [[ "$owner_line" =~ $owner_re ]]; then
     owner_name="${BASH_REMATCH[1]}"
-    if [ ! -f "docs/specs/$owner_name.spec.md" ]; then
-      echo "SKIP: $f (owner '$owner_name' spec is not installed in this root)"
+    if ! owner_doc_path "$owner_name" "$ROOT" >/dev/null; then
+      echo "SKIP: $f (owner '$owner_name' has no spec or group installed in this root)"
       return 1
     fi
   fi

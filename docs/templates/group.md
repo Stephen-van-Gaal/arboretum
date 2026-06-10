@@ -2,8 +2,10 @@
 version: 1
 name: {{group-name}}
 status: draft
+document-shape: group
 parent: {{parent-name}}
 contains: []
+owns: []                      # OPTIONAL — thin orchestration-glue files only (D7); never business logic
 ---
 
 # {{Group Name}}
@@ -13,8 +15,15 @@ contains: []
      They organize a coherent sub-system within a project, and document
      what crosses their children's boundaries.
 
-     Groups own NO code directly — that's the children's job. Groups
-     own integration / orchestration / shared contracts / shared schemas.
+     Groups own no business/component logic — that's the children's job —
+     but a group MAY own thin orchestration glue (D7): a dispatcher/router/
+     entry-point whose SOLE reason to change is the child topology (the set or
+     names of subcommands/children). Thinness test: if the file changes for a
+     child's reason, it is too fat — push that logic into the child, leave only
+     the route. Declare such glue in the `owns:` frontmatter; it round-trips
+     against the file's `# owner: {{group-name}}` (validate-group-membership.sh).
+     Groups also document integration / orchestration / shared contracts /
+     shared schemas across their children.
 
      Sections are classified by authorship:
        HUMAN        — written by the human; never overwritten by /consolidate.

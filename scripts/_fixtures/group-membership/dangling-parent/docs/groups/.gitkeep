@@ -1,0 +1,3 @@
+# Tracked placeholder: git cannot track empty dirs; the dangling-parent
+# fixture needs docs/groups/ to exist so the validator runs past its
+# vacuous "no docs/groups/" exit and flags loner.spec.md (#681 B4 correctness).
