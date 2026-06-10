@@ -1,0 +1,20 @@
+{ "nodes": {
+  "516": {"number":516,"title":"Epic: Pipeline Slipstream","stage":null,"labels":["type:epic"],"state":"open","parent":null,"children":[677,665,304],"is_epic":true,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+  "677": {"number":677,"title":"review-stage driver","stage":"/build","labels":[],"state":"open","parent":516,"children":[],"is_epic":false,"has_open_pr":false,"assignees":["stvangaal"],"author":"stvangaal"},
+  "665": {"number":665,"title":"handoff ledger","stage":null,"labels":[],"state":"open","parent":516,"children":[],"is_epic":false,"has_open_pr":false,"assignees":["alice"],"author":"alice"},
+  "304": {"number":304,"title":"WS6 intake","stage":null,"labels":[],"state":"closed","parent":516,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+
+  "701": {"number":701,"title":"Epic: Roadmap In-Flight View","stage":null,"labels":["type:epic"],"state":"open","parent":null,"children":[703,704,706],"is_epic":true,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+  "703": {"number":703,"title":"in-flight classifier","stage":"/build","labels":[],"state":"open","parent":701,"children":[],"is_epic":false,"has_open_pr":false,"assignees":["stvangaal"],"author":"stvangaal"},
+  "704": {"number":704,"title":"in-flight view","stage":null,"labels":[],"state":"open","parent":701,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+  "706": {"number":706,"title":"board-structure cleanup","stage":null,"labels":["blocked"],"state":"open","parent":701,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+
+  "900": {"number":900,"title":"Epic: Idle (no done/active child)","stage":null,"labels":["type:epic"],"state":"open","parent":null,"children":[901,902],"is_epic":true,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+  "901": {"number":901,"title":"idle child a","stage":null,"labels":[],"state":"open","parent":900,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+  "902": {"number":902,"title":"idle child b","stage":null,"labels":["blocked"],"state":"open","parent":900,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+
+  "624": {"number":624,"title":"naked stage","stage":"/design","labels":[],"state":"open","parent":null,"children":[],"is_epic":false,"has_open_pr":false,"assignees":["stvangaal"],"author":"stvangaal"},
+  "305": {"number":305,"title":"naked pr","stage":null,"labels":[],"state":"open","parent":null,"children":[],"is_epic":false,"has_open_pr":true,"assignees":[],"author":"bob"},
+  "671": {"number":671,"title":"naked branch","stage":null,"labels":[],"state":"open","parent":null,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"},
+  "888": {"number":888,"title":"open but no signal","stage":null,"labels":[],"state":"open","parent":null,"children":[],"is_epic":false,"has_open_pr":false,"assignees":[],"author":"stvangaal"}
+} }

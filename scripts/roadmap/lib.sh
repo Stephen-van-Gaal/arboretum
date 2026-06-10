@@ -1703,6 +1703,198 @@ roadmap_epic_graph() {
   esac
 }
 
+# roadmap_inflight_board_graph — board-wide graph builder for the in-flight
+# classifier. Emits {nodes:{<num>:{number,title,stage,labels,state,parent,
+# children,is_epic,has_open_pr,assignees,author}}} (+ "degraded":true when any
+# fetch failed). Backend-dispatched; always exits 0 (fail-soft) — a total
+# failure yields {"nodes":{},"degraded":true}. No per-epic walking: one issues
+# query + one PR query cover the whole board (the #573 fix).
+roadmap_github_inflight_board_graph() {
+  local owner repo prs_raw degraded=false
+  owner=$(gh repo view --json owner -q .owner.login 2>/dev/null) || owner=""
+  repo=$(gh repo view --json name -q .name 2>/dev/null) || repo=""
+  if [ -z "$owner" ] || [ -z "$repo" ]; then
+    printf '%s\n' '{"nodes":{},"degraded":true}'
+    return 0
+  fi
+  local query='
+    query($owner:String!,$repo:String!,$cursor:String){
+      repository(owner:$owner,name:$repo){
+        issues(states:OPEN,first:100,after:$cursor){
+          pageInfo{hasNextPage endCursor}
+          nodes{
+            number title state
+            labels(first:30){nodes{name}}
+            author{login}
+            assignees(first:20){nodes{login}}
+            parent{number}
+            subIssues(first:100){nodes{number state}}
+          }
+        } } }'
+  # Paginate the open-issues query, accumulating each page's nodes JSON array.
+  local cursor="" page has_next end_cursor pages_file
+  pages_file=$(mktemp)
+  while :; do
+    page=$(gh api graphql -f query="$query" -F owner="$owner" -F repo="$repo" -F cursor="$cursor" 2>/dev/null) || { degraded=true; break; }
+    [ -n "$page" ] || { degraded=true; break; }
+    # Pages are (possibly pretty-printed) multi-line JSON; delimit each page
+    # with a sentinel line so python can split and json.loads each whole page.
+    printf '%s\n===ARBO-PAGE===\n' "$page" >> "$pages_file"
+    has_next=$(printf '%s' "$page" | jq -r '.data.repository.issues.pageInfo.hasNextPage' 2>/dev/null) || { degraded=true; break; }
+    end_cursor=$(printf '%s' "$page" | jq -r '.data.repository.issues.pageInfo.endCursor // empty' 2>/dev/null) || { degraded=true; break; }
+    [ "$has_next" = "true" ] || break
+    [ -n "$end_cursor" ] || break
+    cursor="$end_cursor"
+  done
+  # Open-PR → closed-issue map. Failure degrades but keeps the board.
+  prs_raw=$(gh pr list --state open --json number,closingIssuesReferences 2>/dev/null) || { prs_raw="[]"; degraded=true; }
+  [ -n "$prs_raw" ] || prs_raw="[]"
+
+  ARBO_DEGRADED="$degraded" PRS_RAW="$prs_raw" python3 - "$pages_file" <<'PY'
+import json, os, re, sys
+
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
+def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
+
+STAGE_RE = re.compile(r"^stage:(.+)$")
+
+degraded = os.environ.get("ARBO_DEGRADED") == "true"
+
+# has_open_pr map: every issue closed by an open PR.
+pr_issues = set()
+try:
+    for pr in json.loads(os.environ.get("PRS_RAW") or "[]"):
+        for ref in (pr.get("closingIssuesReferences") or []):
+            num = ref.get("number")
+            if num is not None:
+                pr_issues.add(int(num))
+except Exception:
+    degraded = True
+
+def norm_state(s):
+    # GraphQL IssueState is "OPEN"/"CLOSED"; normalize to the board enum.
+    return "closed" if (s or "").strip().upper() == "CLOSED" else "open"
+
+nodes = {}
+# Closed sub-issue children won't appear in the OPEN-only top-level issues list,
+# so capture each child's state here and synthesize the missing (closed) ones in
+# a post-pass — otherwise an epic's done/total counts are always wrong (#703).
+child_states = {}  # child number -> ("open"/"closed", parent epic number)
+with open(sys.argv[1], encoding="utf-8") as fh:
+    raw_pages = fh.read().split("===ARBO-PAGE===")
+for chunk in raw_pages:
+    chunk = chunk.strip()
+    if not chunk:
+        continue
+    try:
+        data = json.loads(chunk)
+    except Exception:
+        degraded = True
+        continue
+    page = (((data.get("data") or {}).get("repository") or {}).get("issues") or {}).get("nodes") or []
+    for issue in page:
+        num = issue.get("number")
+        if num is None:
+            continue
+        num = int(num)
+        labels = [scrub(ln["name"]) for ln in (issue.get("labels") or {}).get("nodes") or []]
+        stage = None
+        for ln in labels:
+            m = STAGE_RE.match(ln)
+            if m:
+                stage = "/" + m.group(1).lstrip("/")
+                break
+        parent = (issue.get("parent") or {}).get("number")
+        sub_nodes = (issue.get("subIssues") or {}).get("nodes") or []
+        children = []
+        for c in sub_nodes:
+            cnum = c.get("number")
+            if cnum is None:
+                continue
+            cnum = int(cnum)
+            children.append(cnum)
+            child_states[cnum] = (norm_state(c.get("state")), num)
+        assignees = [scrub(a["login"]) for a in (issue.get("assignees") or {}).get("nodes") or [] if a.get("login")]
+        author = scrub(((issue.get("author") or {}).get("login")) or None)
+        nodes[num] = {
+            "number": num,
+            "title": scrub(issue.get("title") or ""),
+            "stage": stage,
+            "labels": labels,
+            "state": "open",
+            "parent": int(parent) if parent is not None else None,
+            "children": children,
+            "is_epic": "type:epic" in labels,
+            "has_open_pr": num in pr_issues,
+            "assignees": assignees,
+            "author": author,
+        }
+
+# Synthesize nodes for sub-issue children absent from the OPEN-issues list (i.e.
+# closed children). An open child already has full data — never overwrite it.
+for cnum, (cstate, epic_num) in child_states.items():
+    if cnum in nodes:
+        continue
+    nodes[cnum] = {
+        "number": cnum,
+        "title": "",
+        "stage": None,
+        "labels": [],
+        "state": cstate,
+        "parent": epic_num,
+        "children": [],
+        "is_epic": False,
+        "has_open_pr": cnum in pr_issues,
+        "assignees": [],
+        "author": None,
+    }
+
+out = {"nodes": {str(k): v for k, v in nodes.items()}}
+if degraded:
+    out["degraded"] = True
+print(json.dumps(out, indent=2))
+PY
+  local rc=$?
+  rm -f "$pages_file"
+  return "$rc"
+}
+
+roadmap_ado_inflight_board_graph() {
+  # ADO: reuse the existing relations-based epic graph machinery would require
+  # a board-wide WIQL pass; v1 emits a fail-soft empty board so the classifier
+  # degrades cleanly on Azure DevOps until the ADO board pass lands.
+  printf '%s\n' '{"nodes":{},"degraded":true}'
+  return 0
+}
+
+roadmap_inflight_board_graph() {
+  local out
+  case "${ROADMAP_BACKEND:-$(roadmap_backend)}" in
+    github)
+      if out=$(roadmap_github_inflight_board_graph 2>/dev/null) && [ -n "$out" ]; then
+        printf '%s\n' "$out"
+      else
+        printf '%s\n' '{"nodes":{},"degraded":true}'
+      fi
+      ;;
+    azure-devops)
+      roadmap_ado_inflight_board_graph
+      ;;
+    *) printf '%s\n' '{"nodes":{},"degraded":true}' ;;
+  esac
+}
+
+# roadmap_current_user — backend-local current-user handle, or non-zero when
+# unauthenticated/offline. Identity is non-portable (GitHub login, ADO
+# uniqueName); --me comparisons are within one backend only.
+roadmap_current_user() {
+  case "${ROADMAP_BACKEND:-$(roadmap_backend)}" in
+    github) gh api user --jq '.login' 2>/dev/null || return 1 ;;
+    azure-devops) az account show --query user.name -o tsv 2>/dev/null || return 1 ;;
+    *) return 1 ;;
+  esac
+}
+
 # ── Phase 1.5: Pulse file helpers ─────────────────────────────────────
 # Read/write .arboretum/roadmap-pulse.json.
 # All helpers are fail-silent: missing file → empty return, not error.

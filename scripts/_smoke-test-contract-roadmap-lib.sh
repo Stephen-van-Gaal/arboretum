@@ -836,4 +836,116 @@ else
   fail_case RL-35d "rc=$excl_list_rc log=$(cat "$EXCL_LIST_LOG" 2>/dev/null)"
 fi
 
+# RL-36 — roadmap_inflight_board_graph (GitHub) assembles a board graph from a
+# stubbed GraphQL issues page + a stubbed `gh pr list`: epic flag from
+# type:epic, stage from a stage:* label, has_open_pr from the closing-issues
+# map, and assignees/author normalized to logins.
+rm -f "$FIX/.arboretum.yml"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+YAML
+BG_BIN="$FIX/.bg-bin"; mkdir -p "$BG_BIN"
+cat > "$BG_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+if [ "$1 $2" = "repo view" ]; then
+  case "$*" in
+    *owner*) printf 'octo\n' ;;
+    *name*)  printf 'board\n' ;;
+  esac
+  exit 0
+fi
+if [ "$1 $2" = "api graphql" ]; then
+  cat <<'JSON'
+{"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
+  {"number":516,"title":"Epic: Slipstream","state":"OPEN","labels":{"nodes":[{"name":"type:epic"}]},"author":{"login":"stvangaal"},"assignees":{"nodes":[]},"parent":null,"subIssues":{"nodes":[{"number":677}]}},
+  {"number":677,"title":"child active","state":"OPEN","labels":{"nodes":[{"name":"stage:build"}]},"author":{"login":"stvangaal"},"assignees":{"nodes":[{"login":"stvangaal"}]},"parent":{"number":516},"subIssues":{"nodes":[]}},
+  {"number":305,"title":"naked pr","state":"OPEN","labels":{"nodes":[]},"author":{"login":"bob"},"assignees":{"nodes":[]},"parent":null,"subIssues":{"nodes":[]}}
+]}}}}
+JSON
+  exit 0
+fi
+if [ "$1 $2" = "pr list" ]; then
+  printf '%s' '[{"number":900,"closingIssuesReferences":[{"number":305}]}]'
+  exit 0
+fi
+echo "unexpected gh call: $*" >&2; exit 2
+GH
+chmod +x "$BG_BIN/gh"
+bg_out=$(PATH="$BG_BIN:$PATH" inlib roadmap_inflight_board_graph)
+if printf '%s' "$bg_out" | python3 -c 'import json,sys;n=json.load(sys.stdin)["nodes"];assert "516" in n and n["516"]["is_epic"] is True;assert n["677"]["stage"]=="/build";assert n["677"]["assignees"]==["stvangaal"];assert n["516"]["children"]==[677];assert n["305"]["has_open_pr"] is True;assert n["305"]["author"]=="bob"'; then
+  pass RL-36
+else
+  fail_case RL-36 "out=[$bg_out]"
+fi
+
+# RL-38 — roadmap_inflight_board_graph (GitHub) synthesizes nodes for CLOSED
+# sub-issue children. The top-level issues query is OPEN-only, so a closed child
+# never appears there; without synthesis an epic's done/total are always wrong
+# (#703). Stub one OPEN epic whose subIssues are [991:OPEN, 992:CLOSED] and assert
+# the emitted graph carries node 992 with state=="closed" so done can be counted.
+rm -f "$FIX/.arboretum.yml"
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+YAML
+CG_BIN="$FIX/.cg-bin"; mkdir -p "$CG_BIN"
+cat > "$CG_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+if [ "$1 $2" = "repo view" ]; then
+  case "$*" in
+    *owner*) printf 'octo\n' ;;
+    *name*)  printf 'board\n' ;;
+  esac
+  exit 0
+fi
+if [ "$1 $2" = "api graphql" ]; then
+  cat <<'JSON'
+{"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
+  {"number":990,"title":"Epic","state":"OPEN","labels":{"nodes":[{"name":"type:epic"}]},"author":{"login":"stvangaal"},"assignees":{"nodes":[]},"parent":null,"subIssues":{"nodes":[{"number":991,"state":"OPEN"},{"number":992,"state":"CLOSED"}]}},
+  {"number":991,"title":"open child","state":"OPEN","labels":{"nodes":[{"name":"stage:build"}]},"author":{"login":"stvangaal"},"assignees":{"nodes":[]},"parent":{"number":990},"subIssues":{"nodes":[]}}
+]}}}}
+JSON
+  exit 0
+fi
+if [ "$1 $2" = "pr list" ]; then
+  printf '%s' '[]'
+  exit 0
+fi
+echo "unexpected gh call: $*" >&2; exit 2
+GH
+chmod +x "$CG_BIN/gh"
+cg_out=$(PATH="$CG_BIN:$PATH" inlib roadmap_inflight_board_graph)
+if printf '%s' "$cg_out" | python3 -c 'import json,sys;n=json.load(sys.stdin)["nodes"];assert "992" in n, "closed child missing";assert n["992"]["state"]=="closed", n["992"]["state"];assert n["992"]["parent"]==990;assert n["991"]["state"]=="open";assert n["990"]["children"]==[991,992]'; then
+  pass RL-38
+else
+  fail_case RL-38 "out=[$cg_out]"
+fi
+
+# RL-37 — roadmap_current_user (GitHub) returns the gh api user login;
+# unauthenticated (gh api fails) → non-zero.
+CU_BIN="$FIX/.cu-bin"; mkdir -p "$CU_BIN"
+cat > "$CU_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+if [ "$1" = "api" ] && [ "$2" = "user" ]; then printf 'stvangaal\n'; exit 0; fi
+echo "unexpected gh call: $*" >&2; exit 2
+GH
+chmod +x "$CU_BIN/gh"
+cu_out=$(PATH="$CU_BIN:$PATH" inlib roadmap_current_user)
+if [ "$cu_out" = "stvangaal" ]; then pass RL-37; else fail_case RL-37 "out=[$cu_out]"; fi
+
+CUF_BIN="$FIX/.cuf-bin"; mkdir -p "$CUF_BIN"
+cat > "$CUF_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+exit 1
+GH
+chmod +x "$CUF_BIN/gh"
+if PATH="$CUF_BIN:$PATH" inlib roadmap_current_user >/dev/null 2>&1; then
+  fail_case "RL-37 (unauth should fail)"
+else
+  pass "RL-37 (unauth → non-zero)"
+fi
+
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

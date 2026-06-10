@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner: epic-aware-orientation
+# owner: inflight-work-classifier
 # epic-walk.sh — Read-only epic resolver. Emits epics_in_flight + auto_advance
 # candidate as JSON on stdout. Native sub-issue linkage only (no body parsing).
 #
@@ -47,115 +47,50 @@ fi
 command -v python3 >/dev/null 2>&1 || { echo "epic-walk: python3 required" >&2; exit 2; }
 
 # Run the python core; in live mode any failure degrades to empty result (exit 0).
-_py_out=$(python3 - "$GRAPH_FILE" <<'PY'
-import json, os, re, sys
-
-STAGE_RANK = {"/start":1, "/design":2, "/build":3, "/finish":4, "/pr":5, "/land":6, "/cleanup":7, "/reflect":8}
-ACTIVE_MIN = STAGE_RANK["/design"]
-DEPTH_CAP = 5
-
-_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
-def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
+# The classification primitives are single-sourced in _classify_core.py; the
+# python here runs over stdin (no __file__), so the script dir is bridged via
+# CLASSIFY_CORE_DIR for the import.
+_py_out=$(CLASSIFY_CORE_DIR="$SCRIPT_DIR" python3 - "$GRAPH_FILE" <<'PY'
+import json, os, sys
+sys.path.insert(0, os.environ["CLASSIFY_CORE_DIR"])
+from _classify_core import (  # noqa: E402
+    DEPTH_CAP, scrub, is_active, is_blocked, epic_of, is_epic_complete, classify_epic,
+)
 
 with open(sys.argv[1], encoding="utf-8") as fh:
     g = json.load(fh)
 nodes = {int(k): v for k, v in g["nodes"].items()}
 next_up = g.get("next_up")
 
-def is_active(n):
-    s = n.get("stage")
-    return bool(s) and STAGE_RANK.get(s, 0) >= ACTIVE_MIN
-
-def is_blocked(n):
-    return "blocked" in (n.get("labels") or [])
-
-def epic_of(num):
-    """Walk parent pointers up to the nearest type:epic ancestor."""
-    seen, depth, cur = set(), 0, nodes.get(num)
-    while cur is not None and depth < DEPTH_CAP:
-        if cur["number"] in seen:
-            break
-        seen.add(cur["number"])
-        if cur.get("is_epic"):
-            return cur["number"]
-        p = cur.get("parent")
-        cur = nodes.get(p) if p is not None else None
-        depth += 1
-    return None
-
-def is_epic_complete(num):
-    """True when a sub-epic is open but has no open children (functionally done)."""
-    n = nodes.get(num)
-    if n is None or not n.get("is_epic"):
-        return False
-    kids = [nodes[c] for c in n.get("children", []) if c in nodes]
-    return bool(kids) and all(k["state"] == "closed" for k in kids)
-
-def brief(n):
-    return {"number": n["number"], "title": scrub(n["title"]), "stage": n.get("stage")}
-
-def classify(epic_num):
-    epic = nodes[epic_num]
-    kids = [nodes[c] for c in epic.get("children", []) if c in nodes]
-    closed = [k for k in kids if k["state"] == "closed"]
-    openk = [k for k in kids if k["state"] == "open"]
-    active = [brief(k) for k in openk if is_active(k)]
-    result = {
-        "number": epic_num, "title": scrub(epic["title"]),
-        "done": len(closed), "total": len(kids),
-        "active": active, "next": None, "blocked": [],
-    }
-    if active:
-        return result
-    # No active: readiness-then-native. First ready child = next.
-    # Skip open sub-epics that are functionally complete (all children closed).
-    nxt = None
-    blocked_before = []
-    for k in openk:                       # openk preserves native (children-list) order
-        if is_epic_complete(k["number"]):
-            continue                       # complete sub-epic — treat as done, skip
-        if is_blocked(k):
-            blocked_before.append(brief({**k, "stage": None}))
-            continue
-        nxt = brief({**k, "stage": None})
-        break
-    if nxt is not None:
-        result["next"] = {"number": nxt["number"], "title": nxt["title"]}
-        result["blocked"] = [{"number": b["number"], "title": b["title"]} for b in blocked_before]
-    else:
-        # all-blocked: show the blockers, no false next
-        result["blocked"] = [{"number": k["number"], "title": scrub(k["title"])} for k in openk if is_blocked(k)]
-    return result
-
 # Inclusion: epics with >=1 active child, plus parent-of-next-up.
 in_flight_nums = set()
 for num, n in nodes.items():
     if n["state"] == "open" and is_active(n):
-        e = epic_of(num)
+        e = epic_of(nodes, num)
         if e is not None:
             in_flight_nums.add(e)
 if next_up is not None and next_up in nodes:
-    e = epic_of(next_up)
+    e = epic_of(nodes, next_up)
     if e is not None:
         in_flight_nums.add(e)
 
-epics = [classify(e) for e in sorted(in_flight_nums)]
+epics = [classify_epic(nodes, e) for e in sorted(in_flight_nums)]
 
 # Auto-advance candidate: next-up closed → walk up the epic chain until an epic
 # with a ready next child is found (bounded by DEPTH_CAP + visited-set).
 auto = None
 if next_up is not None and next_up in nodes and nodes[next_up]["state"] == "closed":
     # depth counts climbs (not the initial epic eval), so up to DEPTH_CAP+1 epics are visited.
-    cur, depth, seen = epic_of(next_up), 0, set()
+    cur, depth, seen = epic_of(nodes, next_up), 0, set()
     while cur is not None and depth < DEPTH_CAP and cur not in seen:
         seen.add(cur)
-        ec = classify(cur)
+        ec = classify_epic(nodes, cur)
         if ec["next"] is not None:
             auto = {"from": next_up, "to": ec["next"]["number"], "epic": cur}
             break
         # this epic is complete (or all-blocked) — climb to its parent epic
         parent_num = nodes[cur].get("parent")
-        cur = epic_of(parent_num) if parent_num is not None else None
+        cur = epic_of(nodes, parent_num) if parent_num is not None else None
         depth += 1
 
 print(json.dumps({"epics_in_flight": epics, "auto_advance": auto}, indent=2))
