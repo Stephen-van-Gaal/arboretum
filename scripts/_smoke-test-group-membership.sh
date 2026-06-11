@@ -15,6 +15,10 @@ expect valid 0
 expect orphan-contains 1
 expect missing-parent 1
 expect dangling-parent 1
+# a list-valued parent is a dual-parent violation — strict ownership tree (#742 D1)
+expect dual-parent 1
+# an empty-list parent (parent: []) is also a list form — yaml-lite drops it, raw check catches it (Codex P2)
+expect empty-list-parent 1
 expect glue-ok 0
 expect glue-bad 1
 # block-list frontmatter parsing (yaml-lite; Copilot #1)

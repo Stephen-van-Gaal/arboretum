@@ -3,6 +3,10 @@ version: 1
 name: {{spec-name}}
 status: draft
 owner: {{group-name or "architecture"}}
+# parent: {{group-name}}      # the ONE owning group (ownership-tree edge; single value, never a list).
+#                             # OPTIONAL until the project has groups: uncomment + fill once docs/groups/
+#                             # exists. The corpus reorg (#687) assigns it; mandatory-membership
+#                             # enforcement activates when docs/groups/ is populated. See ARCHITECTURE §4.
 document-shape: governed-spec
 owns: []
 # areas:                       # OPTIONAL — declare intra-spec facets (retrieval-only).

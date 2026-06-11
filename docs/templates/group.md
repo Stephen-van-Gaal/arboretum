@@ -10,9 +10,11 @@ owns: []                      # OPTIONAL — thin orchestration-glue files only 
 
 # {{Group Name}}
 
-<!-- Groups are the optional middle level in the project hierarchy
+<!-- Groups are the mandatory middle level in the project hierarchy
      (Project → Group → Component → Code; see docs/ARCHITECTURE.md §4).
-     They organize a coherent sub-system within a project, and document
+     A group is a coherent SUB-SYSTEM defined by a single reason to change
+     (axis C) — two components share a group iff they change for the same
+     reason. Every component belongs to exactly one group. Groups document
      what crosses their children's boundaries.
 
      Groups own no business/component logic — that's the children's job —
@@ -31,8 +33,9 @@ owns: []                      # OPTIONAL — thin orchestration-glue files only 
        APPEND-AUTO  — /consolidate appends new entries; existing rows preserved.
 
      Frontmatter notes:
-       parent  — either the project name (for top-level groups) or another
-                 group name (for sub-groups; recursive).
+       parent  — exactly one value: the project root (for top-level groups)
+                 or another group name (for sub-groups; recursive). Single
+                 parent only — the ownership tree forbids dual parents.
        contains — children: components (specs / workflows) and/or sub-groups.
                   Bidirectional ownership: each child declares
                   `parent: {{this-group}}`. -->

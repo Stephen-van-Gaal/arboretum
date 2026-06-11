@@ -91,6 +91,13 @@ for doc in "$SPECS_DIR"/*.spec.md "$GROUPS_DIR"/*.md; do
   # doc). Skip it — malformed specs are other validators' concern. Group docs are still
   # parse-checked in the forward loop above.
   ddump="$(parse_fm "$doc")" || continue
+  # no-dual-parent (#742 D1): parent must be a single scalar; a list form means two (or zero) owning groups.
+  # dump_list catches populated lists (flow + block). An empty flow list `parent: []` is dropped silently by
+  # yaml-lite, so also reject any flow-list value from the raw frontmatter (value begins with '[').
+  parent_raw="$(sed -n '/^---[[:space:]]*$/,/^---[[:space:]]*$/p' "$doc" | sed -n 's/^parent:[[:space:]]*//p' | head -1)"
+  if [ -n "$(dump_list "$ddump" parent)" ] || [ "${parent_raw#\[}" != "$parent_raw" ]; then
+    fail "doc '$(basename "$doc")' declares parent as a list — a component has exactly one owning group (no dual parents)"; continue
+  fi
   parent="$(dump_scalar "$ddump" parent)"; [ -z "$parent" ] && continue
   if ! valid_name "$parent"; then fail "doc '$(basename "$doc")' has invalid parent '$parent'"; continue; fi
   pg="$GROUPS_DIR/$parent.md"
