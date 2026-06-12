@@ -8,10 +8,17 @@ export ARBORETUM_STATE_DIR="$work/.arboretum"
 led="$ARBORETUM_STATE_DIR/token-ledger"; mkdir -p "$led"
 printf '{"contributor":"reads","est_tokens":1200}\n{"contributor":"runtime","est_tokens":900}\n' > "$led/session.jsonl"
 
+# token-journey-ledger rotation (#721): seed a per-session push ledger that the
+# same cleanup run must rotate into token-journey-ledger/archive/.
+jled="$ARBORETUM_STATE_DIR/token-journey-ledger"; mkdir -p "$jled"
+printf '{"uuid":"u1","ts":"2026-06-10T10:00:00Z","billed":{"input":1}}\n' > "$jled/s1.jsonl"
+
 out="$(ARBORETUM_RUN_ID=session bash "$ROOT/scripts/token-cleanup.sh")"
 grep -q 'reads' <<<"$out"   || fail "did not print token summary"
 [ ! -f "$led/session.jsonl" ] || fail "ledger not rotated out of the live path"
 ls "$led"/archive/*.jsonl >/dev/null 2>&1 || fail "ledger not archived"
+[ ! -f "$jled/s1.jsonl" ] || fail "journey ledger not rotated out of the live path"
+ls "$jled"/archive/*.jsonl >/dev/null 2>&1 || fail "journey ledger not archived"
 
 # --- consolidate: migrate scattered worktree artifacts into the central store (#673) ---
 (

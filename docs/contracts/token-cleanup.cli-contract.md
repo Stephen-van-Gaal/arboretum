@@ -59,8 +59,12 @@ With no subcommand, behaviour is driven by environment variables:
 Reads the run ledger and (optionally) the transcript. Spawns
 `scripts/token-report.sh` for the summaries. Creates
 `<state>/token-ledger/archive/`, moves the live ledger there with a UTC
-timestamp suffix, and prunes archived ledgers beyond the most recent 20. No
-network calls.
+timestamp suffix, and prunes archived ledgers beyond the most recent 20. As a
+third rotation target (#721), also moves any per-session push ledgers under
+`<state>/token-journey-ledger/` into `<state>/token-journey-ledger/archive/`
+(name suffixed with a UTC timestamp; basename preserved so two sessions never
+collide; pruned to the most recent 20) — independent of the token-ledger
+early-exit, so a journey-only session still rotates. No network calls.
 
 ## Test surface
 

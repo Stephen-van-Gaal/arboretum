@@ -71,6 +71,21 @@ consolidate() {
 
 if [ "${1:-}" = "consolidate" ]; then shift; consolidate "$@"; exit 0; fi
 
+# Rotate per-session token-journey push ledgers (#721) — a third rotation target
+# alongside token-ledger/ and token-journey/. Runs before the token-ledger
+# report/early-exit below so a journey-only session (no spend ledger) is still
+# pruned. Archive name carries the per-session basename, so two sessions rotated
+# in the same second never collide. Prune to the last 20.
+journey_led_dir="$(arboretum_state_dir)/token-journey-ledger"
+if [ -d "$journey_led_dir" ]; then
+  jarch="$journey_led_dir/archive"; mkdir -p "$jarch"
+  for jf in "$journey_led_dir"/*.jsonl; do
+    [ -f "$jf" ] || continue
+    mv "$jf" "$jarch/$(basename "$jf" .jsonl)-$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo rotated).jsonl"
+  done
+  ls -1t "$jarch"/*.jsonl 2>/dev/null | tail -n +21 | while IFS= read -r f; do rm -f "$f"; done
+fi
+
 led_dir="$(arboretum_state_dir)/token-ledger"
 run="${ARBORETUM_RUN_ID:-session}"
 ledger="$led_dir/$run.jsonl"

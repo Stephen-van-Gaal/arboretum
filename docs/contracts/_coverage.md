@@ -22,6 +22,7 @@
 | scripts/lib/owner-doc-resolve.sh | docs/contracts/owner-doc-resolve.contract.md | full |
 | scripts/lib/scrub-control-chars.sh | docs/contracts/scrub-control-chars.contract.md | full |
 | scripts/lib/state-dir.sh | docs/contracts/state-dir.contract.md | full |
+| scripts/lib/token-journey-ledger.sh | docs/contracts/token-journey-ledger.contract.md | full |
 | scripts/lib/token-ledger.sh | docs/contracts/token-ledger.contract.md | full |
 | scripts/lib/token-rates.sh | docs/contracts/token-rates.contract.md | full |
 | scripts/lib/upgrade-classify.sh | docs/contracts/upgrade-classify.contract.md | full |
@@ -52,6 +53,7 @@
 | scripts/refresh-stage-cache.sh | docs/contracts/refresh-stage-cache.contract.md | full |
 | scripts/refresh-update-cache.sh | docs/contracts/refresh-update-cache.contract.md | full |
 | scripts/refresh-workspace-cache.sh | docs/contracts/refresh-workspace-cache.contract.md | full |
+| scripts/render-ledger-journey.sh | docs/contracts/render-ledger-journey.cli-contract.md | cli |
 | scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
 | scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
 | scripts/review-dispatch.sh | docs/contracts/review-dispatch.cli-contract.md | cli |

@@ -1,11 +1,12 @@
 {
-  "description": "Arboretum session-handoff nudges (issue #251).",
+  "description": "Arboretum session-handoff nudges (issue #251) + token-journey push ledger (#721).",
   "hooks": {
     "Stop": [
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-handoff-nudge.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-handoff-nudge.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/token-journey-stop.sh" }
         ]
       }
     ],
@@ -13,7 +14,8 @@
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-handoff-flag.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-handoff-flag.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/token-journey-session-end.sh" }
         ]
       }
     ]
