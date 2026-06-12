@@ -47,6 +47,28 @@ workspace_tree_root() { git rev-parse --show-toplevel 2>/dev/null | scrub_contro
 # Current branch short name; empty on detached HEAD.
 workspace_branch() { git symbolic-ref --quiet --short HEAD 2>/dev/null | scrub_control_chars; }
 
+# Is the current invocation inside a *linked* (session) worktree, as opposed to
+# the primary tree? Authoritative via git's own registration: a linked worktree's
+# --git-dir lives under <main>/.git/worktrees/<name> while --git-common-dir points
+# at the shared <main>/.git; in the primary tree the two resolve to the same path.
+# No stdout (a predicate, not a getter), so nothing author-controlled to scrub.
+# Exit: 0 = linked session worktree, 1 = primary tree, 2 = not in a git work tree.
+workspace_is_session_worktree() {
+  local gd cd
+  # A bare repo (or being inside a .git dir) has no work tree → 2, per contract.
+  # Without this, a bare repo's --git-dir and --git-common-dir compare equal and
+  # would misreport as the primary tree (exit 1). (B4 correctness finding, #716.)
+  [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] || return 2
+  gd="$(git rev-parse --absolute-git-dir 2>/dev/null)" || return 2
+  cd="$(git rev-parse --git-common-dir 2>/dev/null)" || return 2
+  [ -n "$gd" ] && [ -n "$cd" ] || return 2
+  # --git-common-dir may be relative (".git") or absolute; canonicalize both to
+  # absolute physical paths so the comparison is robust across cwd and macOS symlinks.
+  cd="$(cd "$cd" 2>/dev/null && pwd -P)" || return 2
+  gd="$(cd "$(dirname "$gd")" 2>/dev/null && pwd -P)/$(basename "$gd")" || return 2
+  [ "$gd" != "$cd" ]   # differ ⇒ linked (exit 0); equal ⇒ primary (exit 1)
+}
+
 # Handle to the workspace cache (the file may not exist; we neither create nor refresh it).
 workspace_cache_path() { printf '%s/.arboretum/workspace-cache.json' "$(workspace_tree_root)"; }
 

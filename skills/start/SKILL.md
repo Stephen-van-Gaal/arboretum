@@ -142,6 +142,53 @@ the `branch=` claim (see Stage logging). Leave `$SELECTED_BRANCH` unset when
 branch creation is deferred to `/design`/`/build` — the on-disk detector covers
 the issue until a claim is next written.
 
+### 3b. Worktree creation (worktrees-always default, #716)
+
+For **file-changing** work, a worktree is the strong default (L2 of epic #622):
+every session gets its own worktree so git's one-branch-per-worktree enforcement
++ filesystem isolation are the *primary* collision guard. It is a **strong but
+overridable** default — `/start` stays "guidance, not a gate"; the user may
+decline.
+
+First, skip if already isolated:
+
+```bash
+source scripts/workspace-context.sh
+workspace_is_session_worktree; rc=$?
+```
+
+- `rc == 0` — already in a session worktree. **Skip the offer** (already isolated);
+  proceed to triage.
+- `rc == 1` — primary tree. If the work is file-changing and the collision
+  verdict was `clear` (or a `warn-*` the user resolved toward forking fresh),
+  **offer the worktree**: "I'll isolate this in its own worktree so it can't
+  collide with other work — sound good?"
+- `rc == 2` — not in a git tree; do not offer (nothing to isolate).
+
+**On accept**, create and enter the worktree using the 2-step mechanic resolved
+in the design (Task 1 — `EnterWorktree --name` refuses from inside a worktree, so
+the deterministic path is explicit `git worktree add` + `EnterWorktree --path`).
+Branch `feat/<issue>-<slug>`, base `origin/main`, native `.claude/worktrees/`:
+
+```bash
+SLUG="<short-kebab-summary>"
+BRANCH="feat/${ISSUE}-${SLUG}"
+DIR=".claude/worktrees/feat-${ISSUE}-${SLUG}"
+git fetch origin main --quiet 2>/dev/null || true
+git worktree add "$DIR" -b "$BRANCH" origin/main
+SELECTED_BRANCH="$BRANCH"
+```
+
+Then switch the session into it with the harness **`EnterWorktree`** tool
+(`path=<absolute path to $DIR>`). Setting `$SELECTED_BRANCH` makes the exit
+stage-log write the `branch=` claim (Stage logging).
+
+**On decline**, fall through to today's behaviour unchanged (work on a plain
+`feat/` branch in the current tree, or defer branch creation to `/design`/`/build`).
+A declined user ends up on a feature branch, which the downstream create-if-absent
+guard reads as "already handled" — so no worktree is forced later (no extra
+"declined" state needed).
+
 ### 4. Agent-target triage
 
 The unified workflow's only structural fork: classify the request as **agent-target** or **everything-else**.

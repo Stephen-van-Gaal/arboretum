@@ -57,6 +57,29 @@ if [ -n "${ISSUE:-}" ]; then
 fi
 ```
 
+#### Worktree guard (create-if-absent, #716)
+
+`/design` writes durable files (the design spec, the plan), so before that work
+apply the worktrees-always **create-if-absent guard** — the idempotent safety net
+for sessions that entered `/design` directly, skipping `/start`'s creation seam:
+
+```bash
+source scripts/workspace-context.sh
+workspace_is_session_worktree; rc=$?
+```
+
+- `rc == 0` — already in a session worktree → **no-op** (the common case when
+  `/start` already created it; this guard never double-creates).
+- `rc == 1` — primary tree. **If on the default branch**, offer to isolate this
+  work in a worktree (same 2-step mechanic as `/start` Step 3b: `git worktree add
+  .claude/worktrees/feat-<issue>-<slug> -b feat/<issue>-<slug> origin/main` then
+  `EnterWorktree --path`). **If already on a feature branch** (e.g. the user
+  declined a worktree at `/start`), **no-op** — respect the existing branch.
+- `rc == 2` — not a git tree → no-op.
+
+This guard respects a decline by construction: a declined user is on a feature
+branch, so the `rc == 1 && default-branch` condition is false.
+
 ### 1. Survey
 
 Before any design work, read existing governed code that may be relevant to the topic:

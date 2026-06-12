@@ -302,5 +302,9 @@ Skip this step when the active session worktree was removed.
 - **Check before deleting.** Always verify the PR was actually merged before cleaning up.
 - **Spec status is automatic.** The state machine has only three states (`draft / active / stale`); flips happen via `/consolidate` and `/health-check`. No manual promotion step exists.
 - This skill can be auto-invoked by Claude (via SessionStart) if it detects the user is on a branch whose PR was merged.
+- **Worktrees-always interactions (#716).** Under the worktrees-always default, the session worktree this removes was typically created by `/start`'s seam under `.claude/worktrees/`. Two interactions to respect, neither a code change here:
+  - **Removal stays git-based and path-agnostic.** `cleanup-merged-session.sh` enumerates via `git worktree list --porcelain` and removes by resolved path — it already works for `.claude/worktrees/` and legacy `.worktrees/` alike. Do **not** re-implement removal; do **not** assume a fixed path.
+  - **`gh pr merge --delete-branch` from inside a linked worktree is a hazard.** It switches the worktree to `main` and pulls, breaking the active-worktree removal path. Prefer **no** `--delete-branch` when the session is inside the worktree being cleaned; let the helper own branch deletion after its merge proof.
+  - When a worktree was entered via the harness `EnterWorktree` tool, the harness also offers a keep/remove prompt at session exit; the helper's `--remove-active-worktree` is the deterministic in-skill path and should be preferred for the audited terminal action.
 
 $ARGUMENTS

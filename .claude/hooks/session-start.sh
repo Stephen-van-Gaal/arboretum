@@ -317,13 +317,29 @@ else:                                                # C — survey via roadmap
 # on clean `main`, not behind, no dirty/PR/upstream-drift, fetch ok, no
 # next-up. Being on a feature branch or detached HEAD is itself signal.
 on_feature = branch != "main"
+# Worktree map (worktrees-always #716): with N sibling worktrees, render a
+# legible "you are here / siblings" block. >=2 worktrees is itself a signal worth
+# surfacing for orientation. Branch is scrubbed (author-controlled) at this render
+# seam (defense in depth).
+worktrees = [w for w in (ws.get("worktrees") or []) if (w.get("branch") or w.get("path"))]
+multi_wt = len(worktrees) >= 2
 has_signal = (bool(action) or dirty or bool(mb) or bool(ma) or isinstance(pr, dict)
-              or bool(up.get("behind")) or (fetch_ok is False) or on_feature)
+              or bool(up.get("behind")) or (fetch_ok is False) or on_feature or multi_wt)
 if not has_signal:
     sys.exit(0)
 
 lines = [f"[Workspace] {' · '.join(seg)}"]
 if action: lines.append(f"  → {action}")
+if multi_wt:
+    lines.append("  Worktrees:")
+    for w in worktrees:
+        wbr = scrub(w.get("branch")) or "(detached)"
+        is_cur = bool(w.get("branch")) and w.get("branch") == ws.get("current_branch")
+        m = re.match(r"^(?:feat|fix|chore|docs)/(\d+)-", wbr)
+        iss = f"#{m.group(1)} " if m else ""
+        prseg = f" [PR #{pr.get('number')}]" if (is_cur and isinstance(pr, dict)) else ""
+        mark = "▸ you are here" if is_cur else "  ·"
+        lines.append(f"  {mark} {iss}{wbr}{prseg}")
 print("\n".join(lines))
 PY
 )

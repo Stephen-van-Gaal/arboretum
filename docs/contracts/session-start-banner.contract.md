@@ -1,6 +1,6 @@
 ---
 seam: session-start-banner
-version: 1.4
+version: 1.5
 producer-type: hook
 consumer-type: skill
 consumes:
@@ -84,7 +84,7 @@ stdout (echoed once at end): a newline-separated multi-block banner, or empty st
 - **Stable block markers.** The leading markers (`[Next-up]`, `[Workspace]`, `Stage:`, `[Arboretum]`, `[Build cycle]`, `[Spec Status]`, `[Stale]`, `[Draft]`, `[Active Skills]`) are the contract surface; renaming one is a coordinated change with any consumer keying on it.
 - **Scrub invariant — scrubbed blocks.** Author-controlled strings reaching `additionalContext` are control-char scrubbed (`\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f`) at the consumer (this hook) as defense-in-depth, mirroring the producer-side scrub in each cache writer. The hook applies a `scrub()` helper:
   - **Next-up block** — `def scrub` (~line 123) applied to issue title, body lines, handoff next-action/body, url, error. (Source-side scrub is in `refresh-next-cache.sh`.)
-  - **Workspace block** — `scrub()` (~line 211) applied to branch, upstream name, recorded handoff branch. (Source-side in `refresh-workspace-cache.sh`; clause RWC-8.)
+  - **Workspace block** — `scrub()` (~line 211) applied to branch, upstream name, recorded handoff branch, and the worktree-map branch names (#716). (Source-side in `refresh-workspace-cache.sh`; clause RWC-8.)
   - **Pipeline-state block** — `scrub()` (~line 333) applied to stage, last-action fields, summary text, timestamps. (Source-side in `refresh-stage-cache.sh`.)
   - **Update block** — `_CTRL.sub` (~line 456) applied to installed/latest version in the python3 reader, and the shell fallback mirrors that control-char scrub before interpolating version strings; the install-manifest staleness line uses `tr -d` (~lines 496–497).
 - **No unscrubbed passthrough.** Every author-controlled block reaching `additionalContext` is control-char scrubbed (above). The former roadmap-orientation passthrough — the one block appended verbatim from `view.sh --format condensed` *without* scrub — was removed by #705 when the SessionStart roadmap surfaces were retired, closing that author-controlled-content-into-context gap.
@@ -98,9 +98,11 @@ stdout (echoed once at end): a newline-separated multi-block banner, or empty st
 - **SSB-4:** Always-exits-0 + empty-on-no-signal — on a clean fixture with no signal-bearing caches the hook exits 0 (banner may be empty or carry only non-cache blocks); no input degradation aborts it.
 - **SSB-5:** Update-cache diagnostics — `manifest-not-found` renders a plugin-install hint; `gh-call-failed` / `no-release` render a latest-release lookup failure line including the installed version when known; the no-`python3` shell fallback strips control chars before rendering that version.
 - **SSB-7:** No mtime register-staleness emission — even when a `docs/specs/*.spec.md` file is newer than `REGISTER.md` (the condition the removed mtime check fired on), the banner emits no `[Register]` line (#643).
+- **SSB-8:** Worktree-map block (worktrees-always #716) — with ≥2 worktrees in the workspace cache, the `[Workspace]` block renders a `Worktrees:` map: a `▸ you are here` marker on the current worktree (branch == `current_branch`), one `·` line per sibling, the issue number parsed from a `feat|fix|chore|docs/<N>-` branch, and the open PR on the current line. The author-controlled branch names are control-char scrubbed (a raw ESC in a sibling branch is stripped at the render seam).
 
 ## Versioning
 
+- **1.5** (2026-06-12) — added the worktree-map block to `[Workspace]` (worktrees-always #716): a `Worktrees:` map with a `▸ you are here` marker + sibling lines (issue/branch/PR) when ≥2 worktrees exist; branch names scrubbed at the render seam. SSB-8 asserts it. (SSB-8 is a fresh ID; SSB-6 was retired in 1.4.)
 - **1.4** (2026-06-10) — retired the SessionStart roadmap-orientation passthrough + `[roadmap]` diagnostics and the `[Epics in flight]` block (#705). `[roadmap]` dropped from the stable-marker lists; the unscrubbed-passthrough scrub gap is **closed** (the verbatim `view.sh` append is gone); SSB-3 and SSB-6 removed. Roadmap orientation is now delivered only by explicit `/roadmap run`.
 - **1.3** (2026-06-08) — removed the mtime-based `[Register] … may be stale` emission (#643, epic #640); `[Register]` dropped from the parsed-tags list; SSB-7 asserts its absence.
 - **1.2** (2026-06-07) — roadmap orientation producer changed from `render-run.sh --condensed` to `view.sh --format condensed --quiet` (the shared view core; #621). The scrub-gap cross-reference moves to `roadmap-view.contract.md`.

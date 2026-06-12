@@ -178,4 +178,16 @@ fi
     && echo PASS-WSC13 || echo "FAIL-WSC13 before=$before after=$after"
 ) | grep -q PASS-WSC13 && pass "WSC-13 --fetch recovers remote base from local-fallback" || fail_case "WSC-13 --fetch recovery broken"
 
+# ---- WSC-14: is_session_worktree — 1 in primary tree, 0 in a linked worktree, 2 outside git ----
+# Authoritative via git's own registration (--git-dir under .git/worktrees/<n> for a
+# linked tree vs the shared --git-common-dir). $FIX/work is the primary clone; $FIX/wt
+# is the linked worktree added in WSC-1; $FIX itself is not a work tree.
+rc_primary=0; ( cd "$FIX/work" && . "$HELPER" && workspace_is_session_worktree ); rc_primary=$?
+rc_linked=0;  ( cd "$FIX/wt"   && . "$HELPER" && workspace_is_session_worktree ); rc_linked=$?
+rc_outside=0; ( cd "$FIX"      && . "$HELPER" && workspace_is_session_worktree ); rc_outside=$?
+rc_bare=0; ( cd "$FIX/remote.git" && . "$HELPER" && workspace_is_session_worktree ) || rc_bare=$?
+{ [ "$rc_primary" = 1 ] && [ "$rc_linked" = 0 ] && [ "$rc_outside" = 2 ] && [ "$rc_bare" = 2 ]; } \
+  && pass "WSC-14 is_session_worktree (primary=1, linked=0, outside=2, bare=2)" \
+  || fail_case "WSC-14 is_session_worktree wrong" "primary=$rc_primary linked=$rc_linked outside=$rc_outside bare=$rc_bare"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || exit 1

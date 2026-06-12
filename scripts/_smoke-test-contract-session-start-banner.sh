@@ -102,6 +102,37 @@ else
   fail_case SSB-2 "scrubbed title residue not as expected" "$out"
 fi
 
+# ── SSB-8: worktree-map block (worktrees-always #716) ───────────────────
+# Seed a workspace cache with ≥2 worktrees (current = feat/716-x) and a sibling
+# branch carrying a raw ESC byte. The banner must render a legible map with a
+# "you are here" marker on the current worktree, parse the issue number, and
+# scrub the author-controlled branch (defense in depth at the render seam).
+fix=$(new_fixture ssb6)
+python3 -c "
+import json
+d = {
+  'current_branch': 'feat/716-x', 'dirty': False, 'dirty_count': 0,
+  'main': {'behind': 0, 'fresh': True}, 'open_pr': {'number': 99, 'title': 'wt'},
+  'worktrees': [
+    {'path': '/w/main', 'branch': 'main'},
+    {'path': '/w/716', 'branch': 'feat/716-x'},
+    {'path': '/w/701', 'branch': 'feat/701-y\x1bEVIL'}
+  ],
+  'local_branches': [], 'fetch_ok': True, 'error': None
+}
+print(json.dumps(d))
+" > "$fix/.arboretum/workspace-cache.json"
+out=$(run_hook "$fix")
+if ! echo "$out" | grep -q 'you are here'; then
+  fail_case SSB-8 "worktree-map 'you are here' marker absent" "$out"
+elif printf '%s' "$out" | python3 -c "import sys; sys.exit(0 if b'\x1b' in sys.stdin.buffer.read() else 1)"; then
+  fail_case SSB-8 "raw ESC (0x1b) survived into worktree map (render-side scrub failed)" "$out"
+elif echo "$out" | grep -q '#716'; then
+  pass SSB-8   # marker present, issue parsed, ESC stripped
+else
+  fail_case SSB-8 "worktree map issue/marker not as expected" "$out"
+fi
+
 # ── SSB-4: always-exits-0 on a clean no-signal fixture ──────────────────
 fix=$(new_fixture ssb4)
 CLAUDE_PROJECT_DIR="$fix" bash "$fix/.claude/hooks/session-start.sh" >/dev/null 2>&1

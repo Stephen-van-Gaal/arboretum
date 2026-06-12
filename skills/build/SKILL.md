@@ -99,6 +99,25 @@ bash scripts/log-stage.sh "$ISSUE" "/build" entered \
 
 If the helper exits non-zero, surface the error and refuse to proceed — the entry-state write is the precondition for the journey-log invariant.
 
+#### Worktree guard (create-if-absent, #716)
+
+Before dispatching implementation work, apply the worktrees-always
+**create-if-absent guard** — the idempotent safety net for a `/build` invoked
+directly on the primary tree (skipping `/start`/`/design`'s creation seam). Apply
+the **same guard as `/design`** (see `/design`'s "Worktree guard" block for the
+canonical description):
+
+```bash
+source scripts/workspace-context.sh
+workspace_is_session_worktree; rc=$?
+```
+
+`rc == 0` (already in a session worktree) → no-op, the common case. `rc == 1` on
+the **default branch** → offer to isolate via the 2-step mechanic (`git worktree
+add .claude/worktrees/feat-<issue>-<slug> -b feat/<issue>-<slug> origin/main` +
+`EnterWorktree --path`); on a **feature branch** → no-op (respects a decline).
+`rc == 2` → no-op. Never double-create.
+
 ### Step 3: Branch 2 — TDD-tier dispatch
 
 Read the per-tier `test-tiers.<tier>=` lines from `$FRONTMATTER`. **Any tier whose value is not exactly `n/a`** (case-insensitive prefix, since values like `n/a — no shared definitions` carry trailing reason text) is applicable.

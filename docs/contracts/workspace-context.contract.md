@@ -66,7 +66,9 @@ bounded fetch (degrades to best-effort no-timeout fetch if absent).
 (`remote-head|remote-main|remote-master|local-fallback` — remote-agnostic; `ARBO_REMOTE` carries the actual remote name), `ARBO_REMOTE`,
 `ARBO_WORKSPACE_CACHE`. Getters each echo exactly one value for `$(...)` use:
 `workspace_tree_root`, `workspace_branch`, `workspace_default_branch`,
-`workspace_base_ref [--fetch]`, `workspace_cache_path`.
+`workspace_base_ref [--fetch]`, `workspace_cache_path`. One predicate (no stdout):
+`workspace_is_session_worktree` — exit `0` inside a linked (session) worktree, `1`
+in the primary tree, `2` when not in a git work tree.
 
 ### Invariants
 
@@ -106,8 +108,14 @@ glob.
   control byte is stripped from `workspace_remote` / `ARBO_REMOTE`.
 - **WSC-11: fail-closed scrub load.** Sourcing the helper without a reachable
   `scrub-control-chars.sh` returns non-zero (no silent unscrubbed/empty pass-through).
+- **WSC-14: `is_session_worktree` predicate.** `workspace_is_session_worktree` exits
+  `1` in the primary tree, `0` in a linked worktree, `2` when not in a git work tree
+  (outside any repo **or** inside a bare repo / `.git` dir — gated on
+  `--is-inside-work-tree`) — authoritative via git's own `--git-dir`/`--git-common-dir`
+  registration; no stdout.
 
 ## Versioning
 
-v1.0 — initial. Additive variable/getter changes bump minor; a changed
+v1.1 — added the `workspace_is_session_worktree` predicate (additive getter/predicate,
+#716). v1.0 — initial. Additive variable/getter changes bump minor; a changed
 variable meaning or removed getter bumps major.
