@@ -26,6 +26,16 @@ LAYER=$(sed -n 's/^layer:[[:space:]]*\([0-9]\).*/\1/p' "$PROJECT_DIR/.arboretum.
 LAYER="${LAYER:-0}"
 [ "$LAYER" -lt 2 ] && exit 0
 
+# Refresh the per-branch liveness sentinel on every Bash call (#715) — covers
+# autonomous /build runs (no UserPromptSubmit). Run in a subshell so sourcing the
+# lib can't leak functions/vars into the hook, and so it never alters this hook's
+# exit or commit decision.
+(
+  HB="$PROJECT_DIR/scripts/heartbeat.sh"
+  # shellcheck source=/dev/null
+  [ -f "$HB" ] && . "$HB" && heartbeat_touch
+) >/dev/null 2>&1 || true
+
 # Only fire on commands invoking `git commit`. Accepts an optional
 # `-C <dir>` operand between `git` and `commit` so cross-repo shapes
 # (`git -C /tmp/foo commit -m x`) still trigger the gate. The

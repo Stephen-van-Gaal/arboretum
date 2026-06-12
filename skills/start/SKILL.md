@@ -111,9 +111,21 @@ bash scripts/workspace-collision-check.sh --issue "$ISSUE"
 Act on the `VERDICT=` token (the script never blocks — `/start` is guidance):
 
 - `clear` — proceed; select/create the branch as normal.
-- `warn-reattach` — surface the stderr reason to the user and **offer to reattach**
-  to the existing worktree (via `EnterWorktree`) instead of forking a second
-  branch. Proceed with a new branch only if the user confirms they want to fork.
+- `warn-reattach` — a **live** session backs the issue's branch. Surface the
+  stderr reason to the user and **offer to reattach** to the existing worktree
+  (via `EnterWorktree`) instead of forking a second branch. Proceed with a new
+  branch only if the user confirms they want to fork.
+- `warn-reclaim` — the issue's branch exists but **no live session** backs it
+  (heartbeat expired or absent, #715). Surface the stderr reason and offer the
+  user a choice, **conditioned on what the reason actually names**:
+  - If the reason names an **abandoned worktree path**, offer to **reclaim** that
+    work by reattaching to it via `EnterWorktree`, or **fork fresh**.
+  - If the reason names **only a branch** (a recorded claim or a local branch not
+    checked out — the common reclaim case, since a checked-out sibling is handled
+    earlier as `block`), there is **no worktree to attach to**: offer to **reuse
+    the branch** (`git checkout`/create a worktree for it) or **fork fresh**.
+    Do not offer `EnterWorktree` when no worktree path is present.
+  Advisory, never blocking.
 - `warn-crosstool` — a detached **Codex** worktree correlates to this issue's
   branch (#714). Surface the stderr reason to the user and ask whether to
   **proceed anyway** or pause to **coordinate with Codex**. Do **not** offer to

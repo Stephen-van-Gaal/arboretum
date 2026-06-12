@@ -11,3 +11,12 @@
 # is submitted unstamped rather than producing a non-zero hook exit that
 # Claude Code would surface as a warning.
 date '+[%Y-%m-%d %H:%M:%S] user prompt submitted' || true
+
+# Refresh the per-branch liveness sentinel (#715). Run in a subshell so sourcing
+# heartbeat.sh can't leak functions/vars into the hook, and never affects this
+# hook's stdout (additionalContext) or exit — touch writes only to .arboretum/heartbeat/.
+(
+  HB="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../scripts" 2>/dev/null && pwd)/heartbeat.sh"
+  # shellcheck source=/dev/null
+  [ -f "$HB" ] && . "$HB" && heartbeat_touch
+) >/dev/null 2>&1 || true

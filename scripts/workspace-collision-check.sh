@@ -14,6 +14,11 @@ if ! source "$SCRIPT_DIR/workspace-context.sh"; then
   echo "workspace-collision-check: cannot source workspace-context.sh" >&2
   exit 2
 fi
+# Liveness primitive (#715): splits the claim path into reattach(live)/reclaim(dead).
+# Best-effort — if it can't load, the claim path degrades to the live (reattach)
+# branch via the type-guard below, never harder than the L1 verdict.
+# shellcheck source=heartbeat.sh
+source "$SCRIPT_DIR/heartbeat.sh" 2>/dev/null || true
 
 emit() {  # emit <verdict> [reason]
   printf 'VERDICT=%s\n' "$1"
@@ -111,12 +116,17 @@ if [ "$MODE" = issue ]; then
   claim="$(recorded_claim "$ISSUE")"
   [ "$claim" = "$ARBO_BRANCH" ] && claim=""
   # On-disk branches mapping to this issue, other than the current branch.
-  checked_out=""; exists_local=""
+  # local_issue_branches accumulates ALL of them (not just the last) so the
+  # liveness check can scan every candidate, not one arbitrary pick (#715).
+  checked_out=""; exists_local=""; local_issue_branches=""
   while IFS= read -r b; do [ -n "$b" ] || continue
     [ "$(branch_issue "$b")" = "$ISSUE" ] && [ "$b" != "$ARBO_BRANCH" ] && checked_out="$b"
   done < <(worktree_branches)
   while IFS= read -r b; do [ -n "$b" ] || continue
-    [ "$(branch_issue "$b")" = "$ISSUE" ] && [ "$b" != "$ARBO_BRANCH" ] && exists_local="$b"
+    if [ "$(branch_issue "$b")" = "$ISSUE" ] && [ "$b" != "$ARBO_BRANCH" ]; then
+      exists_local="$b"
+      local_issue_branches="$local_issue_branches $b"
+    fi
   done < <(local_branches)
 
   if [ -n "$checked_out" ]; then
@@ -131,7 +141,42 @@ if [ "$MODE" = issue ]; then
     exit 0
   fi
   if [ -n "$claim" ] || [ -n "$exists_local" ]; then
-    emit warn-reattach "issue #$ISSUE already has an in-flight branch (${claim:-$exists_local}) — reattach instead of forking a second branch"
+    inflight="${claim:-$exists_local}"
+    # Liveness split (#715). Reattach when EITHER the heartbeat primitive is
+    # unavailable (degrade to the L1 verdict — never harder than L1) OR any
+    # candidate branch for this issue has a live session. Candidates = the
+    # recorded claim + every local sibling (branch names carry no spaces; the
+    # caller's own branch is already excluded above). Only an all-dead candidate
+    # set reclaims — so the caller's own live session can't mask a dead sibling,
+    # and a live sibling can't be masked by an arbitrary stale pick.
+    live=""; live_branch=""
+    if [ -z "$(type -t heartbeat_branch_is_live)" ]; then
+      live=degraded
+    else
+      for cand in $claim $local_issue_branches; do
+        if heartbeat_branch_is_live "$cand" 2>/dev/null; then live=1; live_branch="$cand"; break; fi
+      done
+    fi
+    if [ "$live" = degraded ]; then
+      # Liveness primitive unavailable (partial install): degrade to L1 reattach,
+      # but say so honestly rather than claiming a verified live session.
+      emit warn-reattach "issue #$ISSUE already has an in-flight branch ($inflight); liveness unknown (heartbeat unavailable) - reattach instead of forking a second branch"
+    elif [ -n "$live" ]; then
+      emit warn-reattach "issue #$ISSUE already has an in-flight branch ($live_branch) with a live session - reattach instead of forking a second branch"
+    else
+      wt="$(git worktree list --porcelain 2>/dev/null \
+            | awk -v b="refs/heads/$inflight" '/^worktree /{p=substr($0,10)} /^branch /{if ($2==b) print p}')"
+      age=""
+      [ -n "$(type -t heartbeat_age_hours_for_branch)" ] && age="$(heartbeat_age_hours_for_branch "$inflight" 2>/dev/null || true)"
+      reason="issue #$ISSUE branch '$inflight' has no live session"
+      [ -n "$age" ] && reason="$reason (last seen ~${age}h ago)"
+      if [ -n "$wt" ]; then
+        reason="$reason; its worktree at $wt looks abandoned - reclaim it or fork fresh"
+      else
+        reason="$reason - reclaim it or fork fresh"
+      fi
+      emit warn-reclaim "$reason"
+    fi
     exit 0
   fi
   emit clear ""

@@ -18,6 +18,7 @@
 | scripts/generate-register.sh | docs/contracts/register-pipeline.contract.md | full |
 | scripts/handoff-commit-wip.sh | docs/contracts/handoff-commit-wip.cli-contract.md | cli |
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
+| scripts/heartbeat.sh | docs/contracts/heartbeat.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
 | scripts/lib/owner-doc-resolve.sh | docs/contracts/owner-doc-resolve.contract.md | full |
 | scripts/lib/scrub-control-chars.sh | docs/contracts/scrub-control-chars.contract.md | full |
