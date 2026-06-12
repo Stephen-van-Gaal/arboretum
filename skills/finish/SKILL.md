@@ -269,6 +269,13 @@ Run **only** `default-command` — never the `opt-in-commands` tiers. If it exit
 non-zero, present the failures and fix them before proceeding — the PR should be
 green from its first push.
 
+This is the **final pre-PR gate**, so run it in the default (repair-enabled)
+mode — do **not** set `ARBORETUM_CI_READONLY=1` here. By this point the branch
+has diverged from main, so a coverage-manifest repair leaves a reviewable,
+committable diff. The read-only mode (`ARBORETUM_CI_READONLY=1`) is for
+*intermediate* green-checks on uncommitted work (see `/design`), not this gate
+(#688).
+
 After local CI passes, run the same readiness check again. If the branch moved
 or the test run generated unexpected files, stop before invoking `/pr`:
 

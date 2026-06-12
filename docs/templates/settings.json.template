@@ -24,6 +24,7 @@
       "Bash(bash scripts/verify-agent-ready.sh *)",
       "Bash(bash scripts/write-escape-hatch.sh *)",
       "Bash(bash scripts/ci-checks.sh *)",
+      "Bash(ARBORETUM_CI_READONLY=1 bash scripts/ci-checks.sh *)",
       "Bash(bash scripts/token-report.sh *)",
       "Bash(bash scripts/read-session-billed.sh *)",
       "Bash(bash scripts/token-scenario.sh *)",

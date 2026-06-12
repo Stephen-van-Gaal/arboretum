@@ -10,6 +10,7 @@ source "$ROOT/scripts/lib/owner-doc-resolve.sh"   # group-aware # owner: resolut
 fail=0
 CI_MODE="${ARBORETUM_CI_MODE:-balanced}"
 CI_JOBS="${ARBORETUM_CI_JOBS:-8}"
+CI_READONLY="${ARBORETUM_CI_READONLY:-0}"   # 1 = zero-mutation verification run (#688)
 smoke_selection_failed=0
 TOKEN_RUNTIME_BYTES=0   # token accounting: replayed smoke-test output bytes
 
@@ -17,6 +18,14 @@ case "$CI_MODE" in
   balanced|full|auto) ;;
   *)
     echo "FAIL: invalid ARBORETUM_CI_MODE '$CI_MODE' (expected balanced, full, or auto)" >&2
+    exit 1
+    ;;
+esac
+
+case "$CI_READONLY" in
+  0|1) ;;
+  *)
+    echo "FAIL: invalid ARBORETUM_CI_READONLY '$CI_READONLY' (expected 0 or 1)" >&2
     exit 1
     ;;
 esac
@@ -215,7 +224,16 @@ run_ci_preflight() {
     return 0
   fi
 
-  if run_capture bash scripts/ci-preflight.sh --apply-safe-repairs; then
+  # Read-only verification mode (#688): drop --apply-safe-repairs so the only
+  # mutating stage in the orchestrator stays read-only. Every other stage is
+  # already read-only, so ARBORETUM_CI_READONLY=1 makes the whole run zero-
+  # mutation. A genuine coverage drift still BLOCKS (preflight without the flag
+  # exits 1 on COVERAGE-MANIFEST-DRIFT) — report, don't repair.
+  if [ "$CI_READONLY" = "1" ]; then
+    if run_capture bash scripts/ci-preflight.sh; then
+      return 0
+    fi
+  elif run_capture bash scripts/ci-preflight.sh --apply-safe-repairs; then
     return 0
   fi
   # Preflight is a hard stop gate (caller does `run_ci_preflight || exit 1`), so

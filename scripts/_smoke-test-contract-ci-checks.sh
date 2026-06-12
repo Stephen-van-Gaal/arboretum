@@ -296,7 +296,9 @@ fi
 # ---------------------------------------------------------------------------
 # CLI-14: Quiet mode (#601)
 # Default-quiet-except-CI output mode: gated on $CI / ARBORETUM_CI_VERBOSE,
-# writes a stable raw log, and is documented in the contract at version 1.12.
+# writes a stable raw log, and is documented in the contract. The contract
+# version is asserted once, by CLI-15d (current: 1.13) — CLI-14d only checks
+# that CLI-14 is still documented, so it survives later version bumps.
 # (CLI-13 is the preflight gate added by #600.)
 # ---------------------------------------------------------------------------
 if grep -q 'ARBORETUM_CI_VERBOSE' "$TARGET" \
@@ -323,10 +325,61 @@ fi
 
 CONTRACT="$SCRIPT_DIR/../docs/contracts/ci-checks.cli-contract.md"
 if [ -f "$CONTRACT" ]; then
-  if grep -q 'CLI-14' "$CONTRACT" && grep -q '^version: 1.12' "$CONTRACT"; then
-    echo "PASS: CLI-14d — contract documents CLI-14 at version 1.12"
+  if grep -q 'CLI-14' "$CONTRACT"; then
+    echo "PASS: CLI-14d — contract documents CLI-14"
   else
-    echo "FAIL: CLI-14d — contract does not document CLI-14 at version 1.12" >&2
+    echo "FAIL: CLI-14d — contract does not document CLI-14" >&2
+    fail=1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# CLI-15: Read-only verification mode (#688)
+# ARBORETUM_CI_READONLY=1 runs the preflight stage WITHOUT --apply-safe-repairs
+# (zero tree mutation); unset/0 retains --apply-safe-repairs; invalid fails
+# closed before stages run. Documented in the contract at version 1.13.
+# ---------------------------------------------------------------------------
+if grep -q 'ARBORETUM_CI_READONLY' "$TARGET"; then
+  echo "PASS: CLI-15a — ARBORETUM_CI_READONLY support is present"
+else
+  echo "FAIL: CLI-15a — ARBORETUM_CI_READONLY support is missing" >&2
+  fail=1
+fi
+
+if grep -q 'invalid ARBORETUM_CI_READONLY' "$TARGET"; then
+  echo "PASS: CLI-15b — invalid ARBORETUM_CI_READONLY fails closed"
+else
+  echo "FAIL: CLI-15b — invalid ARBORETUM_CI_READONLY validation is missing" >&2
+  fail=1
+fi
+
+# The read-only branch must invoke ci-preflight.sh WITHOUT --apply-safe-repairs,
+# while the default branch keeps it (the CLI-2c invariant). A positional-blind
+# "both forms exist" check would pass an INVERTED implementation (read-only mode
+# mutating, default not repairing), so assert the *ordering* that ties the
+# unflagged invocation to the CI_READONLY=1 guard: the readonly guard must appear
+# before the bare ci-preflight invocation, which must appear before the flagged
+# one. awk (not chained grep) so it is robust to grep-variant -v semantics.
+if awk '
+  /CI_READONLY" = "1"/                              { guard=NR }
+  /bash scripts\/ci-preflight\.sh --apply-safe-repairs/ { flagged=NR; next }
+  /bash scripts\/ci-preflight\.sh/                  { bare=NR }
+  END {
+    if (guard && bare && flagged && guard < bare && bare < flagged) exit 0
+    exit 1
+  }
+' "$TARGET"; then
+  echo "PASS: CLI-15c — read-only branch invokes unflagged preflight; default retains --apply-safe-repairs"
+else
+  echo "FAIL: CLI-15c — unflagged preflight is not tied to the CI_READONLY=1 branch (ordering check failed)" >&2
+  fail=1
+fi
+
+if [ -f "$CONTRACT" ]; then
+  if grep -q 'CLI-15' "$CONTRACT" && grep -q '^version: 1.13' "$CONTRACT"; then
+    echo "PASS: CLI-15d — contract documents CLI-15 at version 1.13"
+  else
+    echo "FAIL: CLI-15d — contract does not document CLI-15 at version 1.13" >&2
     fail=1
   fi
 fi

@@ -1,6 +1,6 @@
 ---
 script: scripts/ci-checks.sh
-version: 1.12
+version: 1.13
 invokers:
   - type: skill
     name: /finish
@@ -14,6 +14,7 @@ related-designs:
   - docs/superpowers/specs/2026-06-03-ci-checks-runtime-design.md
   - docs/superpowers/specs/2026-06-06-standard-ci-preflight-design.md
   - docs/superpowers/specs/2026-06-06-ci-checks-quiet-mode-design.md
+  - docs/superpowers/specs/2026-06-12-ci-checks-readonly-mode-design.md
 ---
 <!-- owner: pipeline-contracts-template -->
 
@@ -98,6 +99,32 @@ diagnostics), and the raw-log path is printed at the end of the run. Quiet mode
 requires `mkdir`, `mktemp`, `cat`, and `rm` on `PATH` (already required by the
 parallel smoke runner).
 
+The `ARBORETUM_CI_READONLY` environment variable selects a verification run that
+**makes no version-controlled-file changes**, for callers that use
+`ci-checks.sh` as an intermediate green-check rather than the final pre-PR gate.
+Unset or `0` is the default (repair-enabled). When set to `1`, the preflight
+stage runs `scripts/ci-preflight.sh` **without** `--apply-safe-repairs`; because
+the preflight coverage repair is the only stage that writes a git-tracked file,
+suppressing it means the run touches no version-controlled file — no
+coverage-manifest regeneration, no spec-status flip. A genuine coverage-manifest
+drift therefore **blocks** (preflight without `--apply-safe-repairs` exits 1 on
+`COVERAGE-MANIFEST-DRIFT`) instead of being silently regenerated — read-only
+mode reports, it does not repair.
+
+The guarantee is scoped to **version-controlled files**, not the whole
+filesystem: the quiet-mode raw log (`.arboretum/ci-checks-last.log`) and the
+token-accounting ledger under `.arboretum/` are still written in every run
+regardless of mode. Both paths are gitignored, so they never appear in
+`git status` and are not the working-tree mutation #688 is about (a tracked
+coverage-manifest diff or spec flip). Read-only mode keeps those diagnostics
+intact — a failing verification still gets its raw log.
+
+Any value other than `0` or `1` is a blocking failure before any stage runs,
+validated alongside `ARBORETUM_CI_MODE` and `ARBORETUM_CI_JOBS`. When
+`ARBORETUM_CI_PREFLIGHT_DONE=1` skips the preflight stage entirely,
+`ARBORETUM_CI_READONLY` has no preflight to influence and the rest of the run
+writes no version-controlled file anyway.
+
 The `BASE_REF`, `RELEASE_INTENT_EVENT`, and `RELEASE_INTENT_BODY_FILE` environment variables are consumed transitively by `dev-tools/release/check-version-bump.sh` and the delegated release gate when that dev-only tooling is installed. When called from `.github/workflows/ci.yml`, `BASE_REF` is set to `origin/<base_ref>` for pull-request events or `origin/main` for push events. `RELEASE_INTENT_EVENT` may point at the GitHub event JSON file, and `RELEASE_INTENT_BODY_FILE` may point at a local PR-body draft. When called locally without these variables, the release-gate scripts apply their own fallbacks.
 
 ### Exit codes
@@ -110,18 +137,22 @@ The `BASE_REF`, `RELEASE_INTENT_EVENT`, and `RELEASE_INTENT_BODY_FILE` environme
   reported clean). If `shellcheck` is absent and `REQUIRE_SHELLCHECK` is not
   `1`, the ShellCheck stage is skipped and does not affect the exit code.
 - `1` — preflight failed and stopped the run before expensive work, one or more
-  expensive stages set `fail=1`, or mode/job validation fails before stages
-  run. The failing stage(s) print their own diagnostics to stdout/stderr before
-  the orchestrator exits.
+  expensive stages set `fail=1`, or mode/job/read-only validation fails before
+  stages run. The failing stage(s) print their own diagnostics to stdout/stderr
+  before the orchestrator exits.
 
 ### Side effects
 
 Spawns subprocesses — one per stage:
 
 1. `bash scripts/ci-preflight.sh --apply-safe-repairs` unless
-   `ARBORETUM_CI_PREFLIGHT_DONE=1`. This is the only stage that may modify the
-   working tree, and only through the safe repair policy in
-   `docs/contracts/ci-preflight.cli-contract.md`. Any non-zero preflight exit
+   `ARBORETUM_CI_PREFLIGHT_DONE=1`, or `bash scripts/ci-preflight.sh` (no
+   `--apply-safe-repairs`) when `ARBORETUM_CI_READONLY=1`. This is the only stage
+   that may modify a **version-controlled** file, and only through the safe
+   repair policy in `docs/contracts/ci-preflight.cli-contract.md`; under
+   `ARBORETUM_CI_READONLY=1` the flag is suppressed and the run writes no
+   version-controlled file (gitignored `.arboretum/` scratch — raw log, token
+   ledger — is still written, as in every run). Any non-zero preflight exit
    stops `ci-checks.sh` immediately before expensive stages run.
 2. `command -v shellcheck` gates the ShellCheck stage. If present, `find … -exec shellcheck …` runs ShellCheck against all `*.sh` files under the existing roots among `scripts/`, `.claude/hooks/`, `skills/`, and `dev-tools/`, excluding `_archived/` subtrees; findings remain blocking. Missing roots are not passed to `find`, so consumer repositories without top-level `skills/` or `dev-tools/` do not fail this stage solely because the plugin development tree is absent. If absent, the stage prints `SKIP: shellcheck not found on PATH …` and continues by default, or prints `FAIL: shellcheck is required but was not found on PATH` and sets `fail=1` when `REQUIRE_SHELLCHECK=1`. Read-only.
 3. Selected `scripts/_smoke-test-*.sh` files run after applicability and tier filtering (excluding `_smoke-test-ci-checks.sh` by name to prevent self-referential recursion). If the glob has no matches, the loop continues silently; an unmatched literal `scripts/_smoke-test-*.sh` is never passed to `smoke_test_applicable`. A root is treated as an Arboretum plugin root when it has top-level `skills/`, top-level `hooks/`, `docs/contracts/`, `tests/contracts/`, `scripts/_fixtures/roadmap/`, and `.github/ISSUE_TEMPLATE/agent-ready.md`; plugin roots consider all smoke tests for selection. In non-plugin roots, smoke tests run only when their first eight lines include `# scope: consumer` or `# scope: any`. `# scope: plugin-only`, missing owning specs, or no consumer-applicable scope produce `SKIP` diagnostics. This prevents reserved seeded specs (for example `project-infrastructure`) from making plugin-only smoke tests look consumer-applicable. A smoke test with no `# ci-tier:` header is treated as balanced and runs in both balanced and full modes. A smoke test with `# ci-tier: full` is skipped in balanced mode with a `SKIP` diagnostic and runs in full mode. Unknown tier values are blocking failures. A smoke test with `# ci-parallel: safe` may run in bounded parallel batches when `ARBORETUM_CI_JOBS` is greater than `1`; missing `# ci-parallel:` metadata means serial, and unknown values are blocking failures. Parallel batches capture per-script logs, print them in stable selection order, and aggregate failure status before the next serial smoke test runs. Each smoke-test script may create and clean up its own temporary fixtures; the orchestrator does not manage them.
@@ -157,8 +188,25 @@ for captured logs and statuses.
   absent.
 - **CLI-14: Quiet mode (default-quiet except CI).** The script resolves a `QUIET` flag from `${CI:-}` and `ARBORETUM_CI_VERBOSE`: quiet is the default, disabled when `$CI` is non-empty or `ARBORETUM_CI_VERBOSE=1`. In quiet mode a passing sub-process body is suppressed from stdout and routed to `.arboretum/ci-checks-last.log` via the `run_capture` helper (which prints `  ok` on success and replays the captured slice on failure); the smoke-test stage prints a `N passed · N skipped · N failed` summary; a failing smoke test replays only the failing item; the seven stage banners, the `CI mode:` line, and all `SKIP:`/`FAIL:` diagnostics still print; and the raw-log path is printed at the end. In verbose mode (`$CI` set or `ARBORETUM_CI_VERBOSE=1`) output is byte-for-byte the legacy behaviour and no raw log is written.
 
+- **CLI-15: Read-only verification mode (`ARBORETUM_CI_READONLY`).** With
+  `ARBORETUM_CI_READONLY=1` the preflight stage invokes `scripts/ci-preflight.sh`
+  without `--apply-safe-repairs`, so the only stage that writes a
+  version-controlled file is suppressed and the run makes no version-controlled
+  change (gitignored `.arboretum/` scratch aside); unset or `0` retains
+  `--apply-safe-repairs` (the CLI-2c invariant). An invalid value is a blocking
+  failure before any stage runs, consistent with `ARBORETUM_CI_MODE` /
+  `ARBORETUM_CI_JOBS` validation. A genuine coverage drift still blocks in
+  read-only mode (report, not repair).
+
 ## Versioning
 
+- **1.13** — add `ARBORETUM_CI_READONLY` verification mode (no version-controlled
+  writes): when set, the preflight stage drops `--apply-safe-repairs` so an
+  intermediate green-check makes no git-tracked change (no coverage-manifest
+  regen, no spec flip); gitignored `.arboretum/` scratch is still written as in
+  every run; default (unset/`0`) unchanged; invalid values fail closed. Closes
+  the residual half of #688 left after the
+  preflight v1.2 spec-status fix (#642) (2026-06-12).
 - **1.12** — add default-quiet output mode (`ARBORETUM_CI_VERBOSE`/`CI` trigger, `run_capture` body suppression, per-stage summary, failing-item replay, `.arboretum/ci-checks-last.log` raw log) so agent-invoked local runs do not dump green transcripts into model context; verbose mode unchanged (2026-06-06).
 - **1.11** — add standard CI preflight as the first stop gate, remove the late
   non-blocking health-check tail, and document `ARBORETUM_CI_PREFLIGHT_DONE`

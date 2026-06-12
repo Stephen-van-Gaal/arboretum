@@ -306,5 +306,11 @@ Do not auto-invoke `/build`. The user (or the calling skill) drives the next sta
   directly.
 - If the work is still exploratory, route to the explore workflow before
   producing a design spec.
+- **Intermediate green-checks must be read-only.** If you run
+  `scripts/ci-checks.sh` as a sanity check during design — before the work is
+  committed — invoke it as `ARBORETUM_CI_READONLY=1 bash scripts/ci-checks.sh`
+  (or commit first). The default mode runs the repair-enabled preflight, which
+  can write the working tree (coverage-manifest regen) you did not intend to
+  mutate mid-design. Read-only mode reports drift without repairing it (#688).
 
 $ARGUMENTS
