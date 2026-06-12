@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-health-check.sh — Contract test for
-# docs/contracts/health-check.contract.md. Asserts HC-1..HC-9
+# docs/contracts/health-check.contract.md. Asserts HC-1..HC-10
 # from the contract's ## Test surface against scripts/health-check.sh.
 #
 # Uses the fixture-project pattern: mktemp -d a project skeleton,
@@ -605,28 +605,31 @@ else
   fail_case "HC-5: Check 7 read-only run expected exit 2 (advisory drift), got $readonly_exit"
 fi
 
-# Capture exit code on --reconcile run. Per HC-2 contract:
+# Capture exit code on --reconcile --all run. Per HC-2 contract:
 # "--reconcile does not change exit-code semantics." Check 7 is an advisory
 # check (S2 #641), so even after the auto-flip it still emits a ⚠ drift line
 # and exits 2 (the script doesn't suppress findings just because it mutated).
 # Codex round-3 caught the missing exit-code assertion (the original `|| true`
 # masked any regression where --reconcile dropped the finding along with the
-# flip).
-bash "$HC" --reconcile "$DRIFT_FIXTURE" >/dev/null 2>&1
+# flip). #750: this fixture is a single commit-chain with no feature branch,
+# so HEAD == integration base and the default-scoped --reconcile correctly
+# flips nothing; --all opts into the repo-wide flip to exercise the
+# scope-independent mutation mechanics here (branch-scoping is pinned by HC-10).
+bash "$HC" --reconcile --all "$DRIFT_FIXTURE" >/dev/null 2>&1
 reconcile_exit=$?
 
 RECONCILED_SPEC=$(grep "^status:" "$DRIFT_FIXTURE/docs/specs/zeta.spec.md")
 RECONCILED_REG=$(grep "zeta.spec.md" "$DRIFT_FIXTURE/docs/REGISTER.md")
 
 if echo "$RECONCILED_SPEC" | grep -qE "status:[[:space:]]+stale" && echo "$RECONCILED_REG" | grep -qF "stale"; then
-  pass "HC-5: Check 7 with --reconcile flips spec frontmatter AND REGISTER row to stale"
+  pass "HC-5: Check 7 with --reconcile --all flips spec frontmatter AND REGISTER row to stale"
 else
-  fail_case "HC-5: Check 7 --reconcile did not flip both surfaces" "spec: $RECONCILED_SPEC | register: $RECONCILED_REG"
+  fail_case "HC-5: Check 7 --reconcile --all did not flip both surfaces" "spec: $RECONCILED_SPEC | register: $RECONCILED_REG"
 fi
 if [ "$reconcile_exit" -eq 2 ]; then
-  pass "HC-5: Check 7 --reconcile run still exits 2 (advisory drift findings independent of mutation)"
+  pass "HC-5: Check 7 --reconcile --all run still exits 2 (advisory drift findings independent of mutation)"
 else
-  fail_case "HC-5: Check 7 --reconcile expected exit 2 (per HC-2 contract: --reconcile doesn't change exit-code semantics), got $reconcile_exit"
+  fail_case "HC-5: Check 7 --reconcile --all expected exit 2 (per HC-2 contract: --reconcile doesn't change exit-code semantics), got $reconcile_exit"
 fi
 
 # ── HC-9: Check 7 content-aware — benign diff does NOT flag ───────────
@@ -686,10 +689,134 @@ else
   pass "HC-9: content-aware Check 7 passes a benign diff (no flag, no mutation)"
 fi
 
+# ── HC-10: Check 7 --reconcile branch-scope (#750) ───────────────────
+#
+# Fixture: a local 'main' with TWO active specs (a owns src/a.py, b owns
+# src/b.py), both drifted by a post-spec behaviour-change commit on main; then a
+# feature branch whose only further commit changes src/a.py (b is main-only
+# drift the branch never touched). Asserts: (1) default --reconcile flips only
+# in-scope spec a + surfaces b as an out-of-scope advisory; (2) --reconcile
+# --all flips both; (3) on main (merge-base == HEAD) nothing flips + advises.
+SCOPE_FIXTURE=$(mktemp -d)
+trap 'rm -rf "$FIXTURE" "$MINI_FIXTURE" "$UNRELATED_DIR" "$DRIFT_FIXTURE" "$BENIGN_FIXTURE" "$SCOPE_FIXTURE"' EXIT
+SG() { git -C "$SCOPE_FIXTURE" -c user.email=t@t -c user.name=t "$@"; }
+mkdir -p "$SCOPE_FIXTURE/docs/specs" "$SCOPE_FIXTURE/docs/definitions" "$SCOPE_FIXTURE/src" "$SCOPE_FIXTURE/workflows"
+touch "$SCOPE_FIXTURE/CLAUDE.md" "$SCOPE_FIXTURE/contracts.yaml" "$SCOPE_FIXTURE/workflows/README.md" "$SCOPE_FIXTURE/docs/ARCHITECTURE.md"
+for s in a b; do
+  cat > "$SCOPE_FIXTURE/docs/specs/$s.spec.md" <<INNER
+---
+name: $s
+status: active
+owner: architecture
+owns:
+  - src/$s.py
+---
+
+# $s
+INNER
+  printf '# owner: %s\ndef %s():\n    return 1\n' "$s" "$s" > "$SCOPE_FIXTURE/src/$s.py"
+done
+cat > "$SCOPE_FIXTURE/docs/REGISTER.md" <<'INNER'
+# Project Register
+
+## Definitions Index
+
+(none)
+
+## Spec Index
+
+| Spec | Status | Owner | Owns (files/directories) |
+|------|--------|-------|--------------------------|
+| a.spec.md | active | architecture | src/a.py |
+| b.spec.md | active | architecture | src/b.py |
+
+## Status Summary
+
+| Status | Count |
+|--------|-------|
+| active | 2 |
+
+## Unowned Code
+
+## Dependency Resolution Order
+INNER
+SG init -q
+SG branch -M main
+SG add docs/specs/a.spec.md docs/specs/b.spec.md docs/REGISTER.md src/a.py src/b.py
+SG commit -q -m "specs a,b active"
+# Drift BOTH owned files on main (behaviour change, after the specs' commit).
+printf '# owner: a\ndef a():\n    return 2\n' > "$SCOPE_FIXTURE/src/a.py"
+printf '# owner: b\ndef b():\n    return 2\n' > "$SCOPE_FIXTURE/src/b.py"
+SG add src/a.py src/b.py; SG commit -q -m "drift a and b on main"
+# Feature branch: change ONLY a.py further (b stays main-only drift).
+SG checkout -q -b feat/scope
+printf '# owner: a\ndef a():\n    return 3\n' > "$SCOPE_FIXTURE/src/a.py"
+SG add src/a.py; SG commit -q -m "feature: touch a only"
+
+sc_status() { grep '^status:' "$SCOPE_FIXTURE/docs/specs/$1.spec.md"; }
+sc_reset() { SG checkout HEAD -- docs/specs/a.spec.md docs/specs/b.spec.md docs/REGISTER.md; }
+
+# (1) default --reconcile on the feature branch → only a flips, b surfaced.
+scope_out=$(bash "$HC" --reconcile "$SCOPE_FIXTURE" 2>&1)
+if echo "$(sc_status a)" | grep -qE "status:[[:space:]]+stale" \
+   && echo "$(sc_status b)" | grep -qE "status:[[:space:]]+active" \
+   && printf '%s\n' "$scope_out" | grep -qiE 'outside .*scope|out-of-scope|not flipped'; then
+  pass "HC-10: default --reconcile flips in-scope spec only, surfaces out-of-scope drift"
+else
+  fail_case "HC-10: branch-scope default did not isolate the flip" "a=$(sc_status a) b=$(sc_status b) | $scope_out"
+fi
+
+# (2) --reconcile --all → both flip.
+sc_reset
+bash "$HC" --reconcile --all "$SCOPE_FIXTURE" >/dev/null 2>&1
+if echo "$(sc_status a)" | grep -qE "status:[[:space:]]+stale" && echo "$(sc_status b)" | grep -qE "status:[[:space:]]+stale"; then
+  pass "HC-10: --reconcile --all flips both specs (repo-wide opt-in)"
+else
+  fail_case "HC-10: --reconcile --all did not flip both" "a=$(sc_status a) b=$(sc_status b)"
+fi
+
+# (3) on main (merge-base == HEAD) → nothing flips, advises --all.
+sc_reset
+SG checkout -q main
+mainscope_out=$(bash "$HC" --reconcile "$SCOPE_FIXTURE" 2>&1)
+if echo "$(sc_status a)" | grep -qE "status:[[:space:]]+active" \
+   && echo "$(sc_status b)" | grep -qE "status:[[:space:]]+active" \
+   && printf '%s\n' "$mainscope_out" | grep -qiE 'no branch scope|--reconcile --all|repo-wide|integration branch'; then
+  pass "HC-10: on-base --reconcile flips nothing and advises --all"
+else
+  fail_case "HC-10: on-base --reconcile did not stay read-only / advise" "a=$(sc_status a) b=$(sc_status b) | $mainscope_out"
+fi
+
+# (4) #750 finding A — --all without --reconcile is a reported no-op, no mutation.
+sc_reset
+alln_out=$(bash "$HC" --all "$SCOPE_FIXTURE" 2>&1)
+if echo "$(sc_status a)" | grep -qE "status:[[:space:]]+active" \
+   && printf '%s\n' "$alln_out" | grep -qiE 'no effect without --reconcile|all .*no effect'; then
+  pass "HC-10: --all without --reconcile is a reported no-op (no mutation)"
+else
+  fail_case "HC-10: --all without --reconcile not reported / mutated" "a=$(sc_status a) | $alln_out"
+fi
+
+# (5) #750 finding C / HC-2 — a clean --reconcile on the integration branch
+# exits 0 with no scope roll-up (scope resolution must not, by itself, make a
+# clean run advisory). Touch+commit the specs so they out-date their owned
+# files (no drift), then reconcile on main.
+sc_reset
+printf '\n<!-- reconciled -->\n' >> "$SCOPE_FIXTURE/docs/specs/a.spec.md"
+printf '\n<!-- reconciled -->\n' >> "$SCOPE_FIXTURE/docs/specs/b.spec.md"
+SG add docs/specs/a.spec.md docs/specs/b.spec.md >/dev/null 2>&1
+SG commit -q -m "touch specs to clear drift" >/dev/null 2>&1
+set +e; clean_out=$(bash "$HC" --reconcile "$SCOPE_FIXTURE" 2>&1); clean_rc=$?; set -e
+if [ "$clean_rc" -eq 0 ] && ! printf '%s\n' "$clean_out" | grep -qiE 'not reconciled|outside .*scope|integration branch'; then
+  pass "HC-10: clean --reconcile on integration branch exits 0, no scope roll-up"
+else
+  fail_case "HC-10: clean --reconcile on-base not exit-0/no-roll-up (HC-2, finding C)" "rc=$clean_rc | $clean_out"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 if [ $fail -eq 0 ]; then
-  echo "All health-check contract assertions passed (HC-1..HC-9)."
+  echo "All health-check contract assertions passed (HC-1..HC-10)."
   exit 0
 else
   echo "health-check contract test FAILED" >&2

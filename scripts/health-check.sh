@@ -8,12 +8,19 @@
 # Requires bash 4+ (uses process substitution, arrays, [[ ]]).
 #
 # Usage:
-#   ./scripts/health-check.sh [--reconcile] [project-dir]
+#   ./scripts/health-check.sh [--reconcile [--all]] [project-dir]
 #
-# Flags:
+# Flags (order-independent; precede the positional project-dir):
 #   --reconcile   Write drift findings (flip active → stale in spec files and
 #                 REGISTER.md). Without this flag the run is read-only: drift
-#                 is reported but no files are modified.
+#                 is reported but no files are modified. Branch-scoped by
+#                 default (#750): only specs whose owned files changed on the
+#                 current branch (vs the integration base) are flipped; drift
+#                 outside that scope is reported but not flipped. On the
+#                 integration branch (or when no base resolves) it flips
+#                 nothing and advises --all.
+#   --all         With --reconcile, reconcile repo-wide (every drifted spec),
+#                 not just branch-touched ones. No effect without --reconcile.
 #
 # Runs nine checks:
 #   1. Governed documents exist (ARCHITECTURE, REGISTER, contracts, etc.)
@@ -54,10 +61,19 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 RECONCILE=false
-if [ "${1:-}" = "--reconcile" ]; then
-  RECONCILE=true
-  shift
-fi
+RECONCILE_ALL=false
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --reconcile) RECONCILE=true;     shift ;;
+    --all)       RECONCILE_ALL=true; shift ;;
+    --) shift; break ;;
+    # Distinct usage exit (EX_USAGE); avoids colliding with the script's
+    # advisory-findings exit 2 so an exit-code consumer can't read a flag
+    # typo as "advisory-only" (#750 review).
+    -*) echo "Unknown flag: $1" >&2; exit 64 ;;
+    *)  break ;;
+  esac
+done
 
 PROJECT_DIR="${1:-$(pwd)}"
 REGISTER="$PROJECT_DIR/docs/REGISTER.md"
@@ -1131,6 +1147,13 @@ fi
 
 header "Check 7: Spec drift (auto-flip active → stale)"
 
+# #750: --all is only meaningful with --reconcile. Report it as a no-op modifier
+# rather than silently ignoring it (contract: "reported as a no-op modifier, not
+# an error"). info() is exit-neutral, so this never affects the exit code.
+if [ "$RECONCILE" = false ] && [ "$RECONCILE_ALL" = true ]; then
+  info "--all has no effect without --reconcile"
+fi
+
 # For each spec at status active, check whether any owned file was modified
 # in commits AFTER the spec's most recent commit. If so, the spec is out of
 # sync with its owned code → flip status to stale in REGISTER.md and spec
@@ -1161,6 +1184,39 @@ elif ! git -C "$PROJECT_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
   # The substitutions below would still hit fatal: 128 — same crash.
   info "Skipped — $PROJECT_DIR has no git history yet (drift detection requires at least one commit)"
 else
+# #750: branch-scope for --reconcile. Resolve the set of files changed on the
+# current branch vs the integration base ONCE, before the per-spec loop. With
+# --all (RECONCILE_ALL) scoping is skipped (repo-wide flip). scope_mode:
+#   all        — repo-wide (no --reconcile, or --reconcile --all)
+#   scoped     — flip only specs whose owned files are in the branch diff
+#   on-base    — HEAD is the integration base (merge-base == HEAD): flip nothing
+#   unresolved — no integration base resolves: flip nothing
+# The ( cd "$PROJECT_DIR" ... ) subshell honours the PROJECT_DIR-isolation
+# invariant (explicit project root, never silent caller-CWD) while reusing
+# workspace-context.sh's CWD-relative base resolver. The script's own lib dir is
+# resolved to an ABSOLUTE path first, so the inner `cd` to PROJECT_DIR (a tree
+# that may differ from where this script lives) cannot mis-resolve the source.
+scope_mode=all
+scope_changed_files=""
+out_of_scope_drift=0      # scoped: drifted specs whose drift is outside branch scope
+unflipped_no_scope=0      # on-base/unresolved: drifted specs we declined to flip
+if [ "$RECONCILE" = true ] && [ "$RECONCILE_ALL" = false ]; then
+  scope_mode=scoped
+  _hc_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  scope_changed_files="$(
+    cd "$PROJECT_DIR" || exit 7
+    # shellcheck source=/dev/null
+    source "$_hc_script_dir/workspace-context.sh" 2>/dev/null || exit 7
+    base="$(workspace_base_ref 2>/dev/null)" || exit 7
+    [ -n "$base" ] || exit 7
+    mb="$(git merge-base "$base" HEAD 2>/dev/null)" || exit 7
+    head_sha="$(git rev-parse HEAD 2>/dev/null)" || exit 7
+    # HEAD *is* the integration base → no branch-unique changes → degenerate.
+    [ "$mb" = "$head_sha" ] && exit 8
+    git diff --name-only "$mb" HEAD 2>/dev/null
+  )" || case $? in 8) scope_mode=on-base ;; *) scope_mode=unresolved ;; esac
+fi
+
 # Read order matches the current schema: | _ | spec | status | owner | owns | _ |
 while IFS='|' read -r _ spec status _ owns _; do
   spec=$(echo "$spec" | xargs)
@@ -1182,6 +1238,7 @@ while IFS='|' read -r _ spec status _ owns _; do
 
   drift=false
   drift_file=""
+  in_scope_drift=false   # #750: a drifted owned file that is also in branch scope
 
   for pattern in $(echo "$owns" | tr ',' '\n'); do
     # Strip whitespace and backticks (generate-register.sh wraps each path in
@@ -1217,8 +1274,21 @@ while IFS='|' read -r _ spec status _ owns _; do
       if git -C "$PROJECT_DIR" merge-base --is-ancestor "$spec_last_commit" "$owned_last_commit" 2>/dev/null; then
         if [ "$(classify_post_spec_diff "$spec_last_commit" "$owned_rel")" = drift ]; then
           drift=true
-          drift_file="$owned_rel"
-          break 2
+          [ -z "$drift_file" ] && drift_file="$owned_rel"
+          # #750: branch-scope is decided on the DRIFTED file, not on any owned
+          # file. owned_rel is the concrete file the drift loop already resolved,
+          # so membership is exact-line (no second glob matcher; handles spaces).
+          # Non-scoped modes take the first drift; scoped mode keeps scanning for
+          # a drifted file that is also in this branch's changed-file set.
+          if [ "$scope_mode" = scoped ]; then
+            if printf '%s\n' "$scope_changed_files" | grep -Fxq -- "$owned_rel"; then
+              in_scope_drift=true
+              drift_file="$owned_rel"
+              break 2
+            fi
+          else
+            break 2
+          fi
         fi
       fi
     done
@@ -1232,6 +1302,28 @@ while IFS='|' read -r _ spec status _ owns _; do
       advise "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — no stale_state configured, not flipping"
       ((drift_flipped++)) || true
       continue
+    fi
+
+    # #750: branch-scope gate. Under scoped mode, only flip a spec when one of
+    # its DRIFTED owned files is in this branch's changed-file set (in_scope_drift,
+    # decided in the drift loop). on-base/unresolved modes flip nothing. Drift we
+    # decline to flip is COUNTED here and reported once as a post-loop roll-up
+    # (contract: "a single advisory roll-up") — no per-spec advisory, so a branch
+    # over latent main-drift is not spammed (review finding B). drift_flipped is
+    # still bumped so the "No drift detected" summary stays suppressed when real
+    # drift exists.
+    # (Skipped entirely when scope_mode=all, i.e. read-only or --reconcile --all.)
+    if [ "$RECONCILE" = true ] && [ "$scope_mode" != all ]; then
+      if [ "$scope_mode" != scoped ]; then
+        ((unflipped_no_scope++)) || true
+        ((drift_flipped++)) || true
+        continue
+      fi
+      if [ "$in_scope_drift" = false ]; then
+        ((out_of_scope_drift++)) || true
+        ((drift_flipped++)) || true
+        continue
+      fi
     fi
 
     if [ "$RECONCILE" = true ]; then
@@ -1267,6 +1359,18 @@ s/^${status}\$/${STATUS_STALE_STATE}/
     ((no_drift_count++)) || true
   fi
 done < <(grep -E '^\|.*\.spec' "$REGISTER" 2>/dev/null || true)
+
+# #750: branch-scope roll-up for --reconcile — emitted only when drift was
+# actually declined (count > 0). A clean --reconcile run on the integration
+# branch (no drift) emits nothing here and stays exit 0 per HC-2 (review
+# finding C: scope resolution must not, by itself, turn a clean run advisory).
+if [ "$RECONCILE" = true ]; then
+  case "$scope_mode" in
+    unresolved) if [ "$unflipped_no_scope" -gt 0 ]; then advise "Check 7: $unflipped_no_scope drifted spec(s) not reconciled — no integration base resolved; run --reconcile --all for a repo-wide sweep"; fi ;;
+    on-base)    if [ "$unflipped_no_scope" -gt 0 ]; then advise "Check 7: $unflipped_no_scope drifted spec(s) not reconciled — HEAD is the integration branch; run --reconcile --all for a repo-wide sweep"; fi ;;
+    scoped)     if [ "$out_of_scope_drift" -gt 0 ]; then advise "Check 7: $out_of_scope_drift spec(s) have drift outside this branch's scope — not flipped; run --reconcile --all to reconcile repo-wide"; fi ;;
+  esac
+fi
 
 if [ "$drift_flipped" -eq 0 ]; then
   if [ "$no_drift_count" -gt 0 ]; then

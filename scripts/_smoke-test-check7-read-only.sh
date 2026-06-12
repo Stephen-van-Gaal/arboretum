@@ -123,27 +123,34 @@ REGISTER_ROW_AFTER=$(grep 'foo\.spec\.md' "$FIXTURE/docs/REGISTER.md")
 
 echo "PASS (test 1): drift reported, no mutation without --reconcile"
 
-# ── Test 2: --reconcile → drift reported AND mutation applied ─────────
+# ── Test 2: --reconcile --all → drift reported AND mutation applied ───
+#
+# This test pins the *mutation mechanics* (atomic active→stale in both the spec
+# frontmatter and the REGISTER row), which are scope-independent. The fixture is
+# a single commit-chain with no feature branch, so HEAD is the integration base
+# (merge-base == HEAD) and the #750 default-scoped --reconcile correctly flips
+# nothing. --all opts into the repo-wide flip to exercise the mutation here;
+# branch-scoping itself is pinned by _smoke-test-check7-branch-scope.sh.
 
 set +e
-OUT2=$(bash "$CHECK" --reconcile "$FIXTURE" 2>&1)
+OUT2=$(bash "$CHECK" --reconcile --all "$FIXTURE" 2>&1)
 RC2=$?
 set -e
 
 # Drift should still be detected → non-zero exit
 [ "$RC2" -ne 0 ] \
-  || fail "health-check.sh --reconcile exit 0 despite drift — expected non-zero" "$OUT2"
+  || fail "health-check.sh --reconcile --all exit 0 despite drift — expected non-zero" "$OUT2"
 
 # Spec status must be flipped to stale
 SPEC_STATUS_RECONCILED=$(grep '^status:' "$FIXTURE/docs/specs/foo.spec.md")
 [ "$SPEC_STATUS_RECONCILED" = "status: stale" ] \
-  || fail "health-check.sh --reconcile did not flip spec status to stale" \
+  || fail "health-check.sh --reconcile --all did not flip spec status to stale" \
           "got: $SPEC_STATUS_RECONCILED"
 
 # REGISTER.md must reflect stale
 REGISTER_ROW_RECONCILED=$(grep 'foo\.spec\.md' "$FIXTURE/docs/REGISTER.md")
 echo "$REGISTER_ROW_RECONCILED" | grep -q 'stale' \
-  || fail "health-check.sh --reconcile did not update REGISTER.md to stale" \
+  || fail "health-check.sh --reconcile --all did not update REGISTER.md to stale" \
           "got: $REGISTER_ROW_RECONCILED"
 
-echo "PASS (test 2): --reconcile flips spec and REGISTER to stale"
+echo "PASS (test 2): --reconcile --all flips spec and REGISTER to stale"

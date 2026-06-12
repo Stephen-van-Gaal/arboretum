@@ -263,7 +263,10 @@ second layer, when a fix round touched governed-spec-owned files, re-run
 the post-merge integration preflight green. Never reconcile this drift with a
 bare `scripts/health-check.sh --reconcile` here — it flips specs to `stale`,
 which is not a shippable state mid-`/land`; `/consolidate` is the only sanctioned
-reconciler.
+reconciler. (Since #750 a bare `--reconcile` is branch-scoped, so it no longer
+risks flipping *unrelated* specs — but it still flips this branch's specs to
+`stale`, which is why `/consolidate`, not raw `--reconcile`, remains the only
+sanctioned reconciler mid-`/land`. Never reach for `--reconcile --all` here.)
 
 **`/consolidate` output is part of the fix round, not a trailing step.**
 `/consolidate` writes spec/register changes, so its output must be **committed

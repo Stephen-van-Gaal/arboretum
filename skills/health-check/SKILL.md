@@ -34,7 +34,7 @@ The reader must succeed before interpreting results.
    - Check 4: contracts.yaml vs. spec Requires tables
    - Check 5: contracts.yaml vs. definition versions (staleness)
    - Check 6: Spec status consistency (enum is one of `draft`, `active`, `stale`)
-   - Check 7: Spec drift detection (reports which specs are out of sync with their owned files — **content-aware**: an owned file committed after its spec is only flagged when the *net change* is non-benign; comment/whitespace/frontmatter-only and net-empty changes are not drift. **Read-only by default** — pass `--reconcile` to write `active → stale` flips into `docs/REGISTER.md` and spec frontmatter)
+   - Check 7: Spec drift detection (reports which specs are out of sync with their owned files — **content-aware**: an owned file committed after its spec is only flagged when the *net change* is non-benign; comment/whitespace/frontmatter-only and net-empty changes are not drift. **Read-only by default** — pass `--reconcile` to write `active → stale` flips into `docs/REGISTER.md` and spec frontmatter. `--reconcile` is **branch-scoped by default** (#750): only specs whose owned files changed on the current branch (vs the integration base) flip; out-of-scope drift is surfaced but not flipped; on the integration branch or when no base resolves it flips nothing and advises `--reconcile --all`, the explicit repo-wide opt-in)
    - Check 8: Plan files — Tests section (advisory)
    - Check 9: Strategic Anchor — section present in CLAUDE.md, time horizon future, in/out scope non-empty, cadence not overdue (silent pass when `roadmap.config.yaml` absent)
 3. If the script exits with code 0 (healthy), confirm the project is in good shape
@@ -47,7 +47,7 @@ The reader must succeed before interpreting results.
 
 ## Important
 
-- Check 7 is **read-only by default** — drift is reported but no files are modified. Pass `--reconcile` to write status flips. `/consolidate` passes `--reconcile` automatically.
+- Check 7 is **read-only by default** — drift is reported but no files are modified. Pass `--reconcile` to write status flips. `/consolidate` passes `--reconcile` automatically. `--reconcile` is **branch-scoped** (#750): it flips only specs whose owned files changed on the current branch, so a shared `main`'s latent drift is never written into an unrelated branch's diff. Add `--all` for a deliberate repo-wide sweep.
 - Do NOT auto-fix the *advisory* findings (definition pins, unowned files, missing docs) — the architecture owner approves those changes.
 - If version pins are stale, suggest reviewing the affected specs' Requires tables.
 - If unowned files are found, suggest which spec should own them based on directory location.

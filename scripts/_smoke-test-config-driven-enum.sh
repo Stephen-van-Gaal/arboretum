@@ -132,8 +132,12 @@ bash "$GEN" "$FIXTURE" >/dev/null \
 
 # ── Run health-check and inspect Check 6/7 behaviour ─────────────────
 
+# #750: --reconcile is branch-scoped by default; these single-commit fixtures
+# have no feature branch (HEAD == integration base), so --all is required to
+# exercise the configured-enum flip mechanics this test pins (scope itself is
+# pinned by _smoke-test-check7-branch-scope.sh / HC-10).
 set +e
-HEALTH_OUT=$(bash "$CHECK" --reconcile "$FIXTURE" 2>&1)
+HEALTH_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE" 2>&1)
 HEALTH_RC=$?
 set -e
 
@@ -250,7 +254,7 @@ status_enum:
   active_states: [implemented]
 EOF
 set +e
-SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
 set -e
 # Widget is at canonical 'active' and has drift → must flip to 'stale'
 # (canonical default), proving active_states alone did NOT override.
@@ -270,7 +274,7 @@ status_enum:
   stale_state: stale
 EOF
 set +e
-SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
 set -e
 echo "$SUB_OUT" | grep -qF "status_enum config rejected" \
   || fail "[scalar-states] did not surface rejection message" "$SUB_OUT"
@@ -299,7 +303,7 @@ status_enum:
   active_states: [implemented]
 EOF
 set +e
-SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
 set -e
 # Widget must remain 'implemented' — no stale_state means no flip.
 grep -qE '^status: implemented[[:space:]]*$' "$FIXTURE2/docs/specs/widget.spec.md" \
@@ -326,7 +330,7 @@ status_enum:
   stale_state: "qa/review"
 EOF
 set +e
-SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
 set -e
 echo "$SUB_OUT" | grep -qF "status_enum config rejected" \
   || fail "[invalid-token] did not surface rejection message for 'qa/review'" "$SUB_OUT"
@@ -354,7 +358,7 @@ status_enum:
   stale_state: stale
 EOF
 set +e
-SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
 set -e
 echo "$SUB_OUT" | grep -qF "status_enum config rejected" \
   || fail "[active-not-in-states] did not surface rejection message" "$SUB_OUT"
@@ -380,7 +384,7 @@ status_enum:
   stale_state: archived
 EOF
 set +e
-SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
 set -e
 echo "$SUB_OUT" | grep -qF "status_enum config rejected" \
   || fail "[stale-not-in-states] did not surface rejection message" "$SUB_OUT"
@@ -412,7 +416,7 @@ status_enum:
   stale_state: stale
 EOF
   set +e
-  SUB_OUT=$(bash "$CHECK" --reconcile "$FIXTURE2" 2>&1)
+  SUB_OUT=$(bash "$CHECK" --reconcile --all "$FIXTURE2" 2>&1)
   set -e
   echo "$SUB_OUT" | grep -qF "status_enum config rejected" \
     || fail "[malformed-yaml] did not surface rejection message" "$SUB_OUT"

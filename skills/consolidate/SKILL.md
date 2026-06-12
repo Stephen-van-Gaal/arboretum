@@ -321,7 +321,7 @@ This substep never adds new comments. The bias is toward removing stale ones.
 
 ### Step 6: Verify
 
-1. Run `scripts/health-check.sh --reconcile`.
+1. Run `scripts/health-check.sh --reconcile`. This is **branch-scoped** (#750): on a feature branch (the normal `/finish` context) it reconciles only the specs this branch's changes touched, leaving any latent drift elsewhere on `main` alone. Do **not** add `--all` here — the repo-wide sweep would pull unrelated drift into this branch's diff.
 2. Present results.
 3. Summarise what was done:
 
