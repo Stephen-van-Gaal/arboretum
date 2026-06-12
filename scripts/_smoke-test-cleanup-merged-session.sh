@@ -348,6 +348,82 @@ assert_not_contains "$out" 'active-worktree-needs-flag' "read-only --plan must n
 [ -d "$linked" ] || fail "plan mode removed the active worktree"
 pass "--plan on the active worktree reports ready (active=yes) without the flag"
 
+# --- #741: control worktree selection ---
+
+# CLI-16: primary worktree is the target while an UNRELATED linked worktree
+# exists. The helper must keep the primary in place (control == target) and must
+# never check the default branch out inside the unrelated linked worktree.
+repo="$(setup_repo cli16-primary-target)"
+# An unrelated, in-flight linked worktree on its own (unmerged) branch.
+commit_on_branch "$repo" bystander "bystander work"
+git -C "$repo" checkout -q main
+bystander_wt="$TMP/cli16-bystander"
+git -C "$repo" worktree add -q "$bystander_wt" bystander
+# The branch we actually clean up: merged into main, primary left checked out on it.
+commit_on_branch "$repo" primary-target "primary target"
+primary_target_sha="$(git -C "$repo" rev-parse primary-target)"
+git -C "$repo" checkout -q main
+git -C "$repo" merge -q --no-ff primary-target -m "merge primary-target"
+git -C "$repo" push -q origin main
+git -C "$repo" checkout -q primary-target
+# --plan: the primary tree is un-removable, so remove-worktree must be no.
+out="$(run_helper "$repo" "$primary_target_sha" --branch primary-target --worktree "$repo" --plan 2>&1)" || fail "cli16 plan helper failed: $out"
+assert_contains "$out" 'plan=ready' "cli16 plan ready token missing: $out"
+assert_contains "$out" 'remove-worktree=no' "cli16 primary target must not be scheduled for removal: $out"
+# --execute: in-place keep path, branch deleted, bystander worktree untouched.
+out="$(run_helper "$repo" "$primary_target_sha" --branch primary-target --worktree "$repo" --remove-active-worktree 2>&1)" || fail "cli16 execute helper failed: $out"
+assert_contains "$out" 'worktree=kept reason=main-worktree' "cli16 in-place keep token missing: $out"
+git -C "$repo" rev-parse --verify primary-target >/dev/null 2>&1 && fail "cli16 merged branch still exists"
+[ "$(git -C "$bystander_wt" symbolic-ref --quiet --short HEAD)" = "bystander" ] || fail "cli16 CLOBBERED the unrelated linked worktree (it is no longer on 'bystander')"
+[ -d "$bystander_wt" ] || fail "cli16 removed the unrelated linked worktree"
+pass "primary target with linked worktrees present keeps in place and never clobbers a bystander"
+
+# CLI-17: target is a linked worktree but the control (primary) tree is on a
+# non-default feature branch. The helper must refuse rather than check the
+# default branch out over the primary's in-flight work.
+repo="$(setup_repo cli17-nondefault-control)"
+commit_on_branch "$repo" linked-target "linked target"
+linked_target_sha="$(git -C "$repo" rev-parse linked-target)"
+git -C "$repo" checkout -q main
+git -C "$repo" merge -q --no-ff linked-target -m "merge linked-target"
+git -C "$repo" push -q origin main
+linked="$TMP/cli17-linked"
+git -C "$repo" worktree add -q "$linked" linked-target
+# Park the primary (the control) on a non-default, non-target feature branch.
+git -C "$repo" checkout -q -b keep-here
+# --plan: blocked with the new reason, no mutation.
+out="$(run_helper "$repo" "$linked_target_sha" --branch linked-target --worktree "$linked" --plan 2>&1)" && rc=0 || rc=$?
+[ "$rc" -eq 1 ] || fail "cli17 plan exited $rc (want 1): $out"
+assert_contains "$out" 'plan=blocked reason=control-worktree-not-on-default' "cli17 plan blocked token missing: $out"
+# --execute: skipped with the same reason; primary stays on keep-here, branch survives.
+out="$(run_helper "$linked" "$linked_target_sha" --branch linked-target --worktree "$linked" --remove-active-worktree 2>&1)" && rc=0 || rc=$?
+[ "$rc" -eq 1 ] || fail "cli17 execute exited $rc (want 1): $out"
+assert_contains "$out" 'cleanup=skipped reason=control-worktree-not-on-default' "cli17 execute skip token missing: $out"
+[ "$(git -C "$repo" symbolic-ref --quiet --short HEAD)" = "keep-here" ] || fail "cli17 CLOBBERED the primary control worktree (no longer on 'keep-here')"
+git -C "$repo" rev-parse --verify linked-target >/dev/null 2>&1 || fail "cli17 deleted the target branch despite refusing"
+pass "linked target with a non-default control worktree is refused, not clobbered"
+
+# CLI-18: target is a linked worktree but the control (primary) tree is in
+# DETACHED HEAD. A detached primary is in-flight work too (sitting on a specific
+# commit), so the helper must refuse rather than check the default branch out
+# over it — the empty-branch case must not slip past the guard.
+repo="$(setup_repo cli18-detached-control)"
+commit_on_branch "$repo" detach-target "detach target"
+detach_target_sha="$(git -C "$repo" rev-parse detach-target)"
+git -C "$repo" checkout -q main
+git -C "$repo" merge -q --no-ff detach-target -m "merge detach-target"
+git -C "$repo" push -q origin main
+linked="$TMP/cli18-linked"
+git -C "$repo" worktree add -q "$linked" detach-target
+# Park the primary (the control) in detached HEAD with a clean tree.
+git -C "$repo" checkout -q --detach
+out="$(run_helper "$linked" "$detach_target_sha" --branch detach-target --worktree "$linked" --remove-active-worktree 2>&1)" && rc=0 || rc=$?
+[ "$rc" -eq 1 ] || fail "cli18 detached control exited $rc (want 1): $out"
+assert_contains "$out" 'cleanup=skipped reason=control-worktree-not-on-default' "cli18 detached control skip token missing: $out"
+[ -z "$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" ] || fail "cli18 CLOBBERED the detached primary (it is now on a branch)"
+git -C "$repo" rev-parse --verify detach-target >/dev/null 2>&1 || fail "cli18 deleted the target branch despite refusing"
+pass "linked target with a detached-HEAD control worktree is refused, not clobbered"
+
 # Unsupported backend emits the structured setup-error token (exit 2), not raw stderr.
 # Keep the repo checked out on the target branch so the worktree gates pass and
 # execution reaches the backend guard.

@@ -1,6 +1,6 @@
 ---
 script: scripts/cleanup-merged-session.sh
-version: 1.1
+version: 1.2
 invokers:
   - type: skill
     name: arboretum:/cleanup
@@ -44,6 +44,8 @@ Unknown arguments exit 2. Supplying both `--plan` and `--execute` exits 2.
 - reject target worktrees that are attached to a branch other than `--branch`
 - verify provider merged/completed PR state for the remote default target branch
 - verify the local branch SHA is equal to or an ancestor of the provider PR head/source SHA
+- select the **primary** worktree (git's first `worktree list` entry) as the control worktree; when the target IS the primary, control equals the target and the in-place keep path runs (no worktree removal)
+- when the target is a linked worktree, refuse unless the control (primary) worktree is exactly on the default branch — a non-default branch or detached HEAD both yield `control-worktree-not-on-default`; never check the default branch out over an unrelated worktree's in-flight work
 - try `git branch -d` before `git branch -D`
 - use `git branch -D` only for provider-proven squash merge cleanup
 - remove only the exact clean target worktree
@@ -62,7 +64,7 @@ The script writes one token-oriented status line per decision:
 - `plan=ready branch=<name> worktree=<path> branch-mode=safe|force-squash remove-worktree=yes|no active=yes|no`
 - `plan=blocked reason=<reason>`
 
-Under `--plan`, gate failures (exit 1) emit `plan=blocked reason=<reason>` using the same reason vocabulary as `cleanup=skipped`, and no mutation occurs. Invocation and tool setup failures (exit 2 — `bad-arg`, `mode-conflict`, `missing-roadmap-lib`, `not-git-worktree`, `unsupported-backend`) always emit `cleanup=skipped reason=<reason>` regardless of mode — a setup error never masquerades as a `plan=blocked` safety refusal. `--plan` is read-only for **any** target, including the active worktree, so it never refuses with `active-worktree-needs-flag` (that gate is `--execute`-only). Safety refusals exit `1`. Successful cleanup (or a ready plan) exits `0`.
+Under `--plan`, gate failures (exit 1) emit `plan=blocked reason=<reason>` using the same reason vocabulary as `cleanup=skipped`, and no mutation occurs. That vocabulary includes `control-worktree-not-on-default`: when the target is a linked worktree and the resolved control worktree (the primary tree) is not checked out exactly on the default branch — i.e. it is on a non-default branch *or* in detached HEAD — the helper refuses rather than check the default branch out over the control's in-flight work. Invocation and tool setup failures (exit 2 — `bad-arg`, `mode-conflict`, `missing-roadmap-lib`, `not-git-worktree`, `unsupported-backend`) always emit `cleanup=skipped reason=<reason>` regardless of mode — a setup error never masquerades as a `plan=blocked` safety refusal. `--plan` is read-only for **any** target, including the active worktree, so it never refuses with `active-worktree-needs-flag` (that gate is `--execute`-only). Safety refusals exit `1`. Successful cleanup (or a ready plan) exits `0`.
 
 ## Test surface
 
@@ -81,8 +83,12 @@ Under `--plan`, gate failures (exit 1) emit `plan=blocked reason=<reason>` using
 - **CLI-13: Plan blocked.** `--plan` on a dirty or unproven target emits `plan=blocked reason=<reason>` (exit 1) and mutates nothing.
 - **CLI-14: Mode exclusion.** `--plan --execute` together exits 2.
 - **CLI-15: Execute default.** No mode flag behaves as `--execute` (existing CLI-5…CLI-10 cases).
+- **CLI-16: Primary target with linked worktrees present.** When the target is the primary worktree and ≥1 unrelated linked worktree exists, `--plan` emits `remove-worktree=no` and `--execute` emits `worktree=kept reason=main-worktree`, deletes the merged branch, and leaves every unrelated linked worktree on its original branch (no `checkout` inside a non-target worktree).
+- **CLI-17: Non-default control refusal.** When the target is a linked worktree and the primary (control) worktree is on a non-default branch, the helper emits `cleanup=skipped reason=control-worktree-not-on-default` (`plan=blocked reason=control-worktree-not-on-default` under `--plan`), exits 1, and mutates nothing.
+- **CLI-18: Detached control refusal.** When the target is a linked worktree and the primary (control) worktree is in detached HEAD, the helper refuses with `control-worktree-not-on-default` (exit 1) — a detached control is in-flight work and must not be checked out over.
 
 ## Versioning
 
 - **1.0** - initial provider-proven local branch and worktree cleanup helper contract for issue #490 (2026-06-03).
 - **1.1** - additive read-only `--plan` mode and `plan=ready`/`plan=blocked` tokens for driver dry-run; `--execute` default preserved (issue #644, 2026-06-07).
+- **1.2** - the primary worktree is the deterministic control worktree; when the target is the primary, control equals the target (in-place keep, no removal); refuse a control that is not exactly on the default branch — non-default branch or detached HEAD — (`control-worktree-not-on-default`); fixes the primary-target clobber of unrelated linked worktrees (issue #741, 2026-06-12). Additive: new reason token + CLI-16/CLI-17/CLI-18.

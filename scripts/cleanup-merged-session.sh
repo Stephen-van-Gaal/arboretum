@@ -145,7 +145,12 @@ if current is not None:
     entries.append(current)
 
 target_entry = next((entry for entry in entries if entry["realpath"] == target), None)
-control = next((entry["path"] for entry in entries if entry["realpath"] != target), "")
+# The primary (main) worktree is always git's first worktree-list entry and is
+# the only safe control: checking the default branch out there never clobbers an
+# unrelated linked worktree (issue #741). When the target IS the primary,
+# control == target, which routes --execute to the in-place keep path. Emit the
+# realpath so the bash comparison against TARGET_WORKTREE (pwd -P) is exact.
+control = entries[0]["realpath"] if entries else ""
 print(f"target_found={'yes' if target_entry else 'no'}")
 print(f"target_locked={'yes' if target_entry and target_entry['locked'] else 'no'}")
 print(f"control={control}")
@@ -244,6 +249,21 @@ fi
 if [ "$TARGET_WORKTREE" != "$CONTROL_WORKTREE" ] && [ -n "$(git -C "$CONTROL_WORKTREE" status --porcelain 2>/dev/null || true)" ]; then
   skip "control-worktree-dirty"
   exit 1
+fi
+
+# Defense in depth (#741): when cleaning up a linked worktree, the control is the
+# primary tree. Never check the default branch out over the primary's own
+# in-flight work — proceed only when the control is *exactly* on the default
+# branch. A non-default branch OR a detached HEAD (empty CONTROL_BRANCH, itself
+# in-flight work at a specific commit) both refuse. (When the target IS the
+# primary, control == target and its branch is the just-merged target branch we
+# intend to replace with the default, so this guard is skipped.)
+if [ "$TARGET_WORKTREE" != "$CONTROL_WORKTREE" ]; then
+  CONTROL_BRANCH="$(git -C "$CONTROL_WORKTREE" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  if [ "$CONTROL_BRANCH" != "$DEFAULT_BRANCH" ]; then
+    skip "control-worktree-not-on-default"
+    exit 1
+  fi
 fi
 
 if [ "$MODE" = plan ]; then
