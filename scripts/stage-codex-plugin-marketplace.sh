@@ -75,6 +75,8 @@ git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do
     docs/plans|docs/plans/*) continue ;;
     docs/superpowers|docs/superpowers/*) continue ;;
     docs/reviews|docs/reviews/*) continue ;;
+    docs/analysis|docs/analysis/*) continue ;;
+    docs/walkthrough-outline.md) continue ;;
     docs/dev-contracts|docs/dev-contracts/*) continue ;;
     docs/customer-validation|docs/customer-validation/*) continue ;;
     docs/ARCHITECTURE.md) continue ;;
