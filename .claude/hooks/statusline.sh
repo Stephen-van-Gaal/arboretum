@@ -122,10 +122,18 @@ if cache_path and os.path.exists(cache_path):
             c = json.load(f)
         issue = c.get("issue")
         stage = scrub(c.get("stage") or "")
+        # #763: the active issue's title (user-only — the model never ingests
+        # the statusline, so the author-controlled title is injection-safe
+        # here). Scrubbed for the terminal and truncated to keep the line tight.
+        title = scrub(c.get("title") or "")
+        if len(title) > 40:
+            title = title[:39] + "…"
         if issue and stage:
             chip = f"[#{issue} {stage}]"
         elif issue:
             chip = f"[#{issue}]"
+        if chip and title:
+            chip = f"{chip} {title}"
     except Exception:
         pass
 

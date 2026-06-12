@@ -26,7 +26,7 @@ The seam between `scripts/refresh-next-cache.sh` (the producer of `.arboretum/ne
 
 `scripts/refresh-next-cache.sh` — producer-type: `script`.
 
-Refreshes the cache at `.arboretum/next-cache.json` by making up to two tracker calls through `scripts/roadmap/lib.sh`: one `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` (the primary list call) and, when an issue is found, one follow-up `roadmap_tracker_issue_show <N> --json comments` to extract the latest `arbo-handoff`-marked comment as the current session-handoff note (per `session-handoff` design §4.6). These neutral operations are implemented by the configured roadmap backend (`github` by default, `azure-devops` when selected).
+Refreshes the cache at `.arboretum/next-cache.json` by making up to two tracker calls through `scripts/roadmap/lib.sh`: one `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number` (the primary list call) and, when an issue is found, one follow-up `roadmap_tracker_issue_show <N> --json comments` to extract the latest `arbo-handoff`-marked comment as the current session-handoff note (per `session-handoff` design §4.6). These neutral operations are implemented by the configured roadmap backend (`github` by default, `azure-devops` when selected).
 
 Path resolution uses `PROJECT_DIR` (positional arg, defaults to `git rev-parse --show-toplevel` or `pwd`). The script writes the cache atomically via per-process `mktemp` + `mv` (the `write_cache()` helper at L73-84) — concurrent refreshes never produce truncated or interleaved content.
 
@@ -59,7 +59,7 @@ Reads (under the project-dir root):
 - `git remote` — to detect whether any repo remote is configured at all (`no_gh_remote: true` legacy-field short-circuit when no remote is configured).
 - `roadmap_backend [PROJECT_DIR]` — selects the configured backend (`github` by default).
 - `roadmap_require_backend` — validates local prerequisites. For `github`, `gh` must be installed and authenticated. For `azure-devops`, Azure CLI, the Azure DevOps extension, readable defaults, and `jq` must be available. Absence or auth/setup failure sets a provider-specific whole-cache unavailable error and exits 1.
-- `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number,title,url,body,labels,updatedAt` — the primary list call. Failure (other than "not a GH repo" on the GitHub adapter) sets a provider-specific whole-cache call-failed error and exits 2.
+- `roadmap_tracker_issue_list --label next-up --state open --limit 1 --json number` — the primary list call. Failure (other than "not a GH repo" on the GitHub adapter) sets a provider-specific whole-cache call-failed error and exits 2.
 - `roadmap_tracker_issue_show <N> --json comments` — the secondary comment-fetch call, made only when the primary list returned an item. Failure sets `handoff: {"error": "fetch-failed", "detail": <stderr-first-line>}` and the script continues to exit 0.
 - `python3` — used for body truncation and JSON assembly. Absence triggers the minimal-fallback cache shape with whole-cache `error: "python3 unavailable; issue details omitted in fallback cache"` and exits 0.
 
@@ -71,13 +71,7 @@ Writes to `.arboretum/next-cache.json` (atomic via mktemp + mv). Cache shape:
 {
   "fetched_at": "<ISO-8601 UTC>",
   "issue": null | {
-    "number": <int>,
-    "title": "<string, control-char-stripped>",
-    "url": "<string>",
-    "body_first_lines": ["<line, control-char-stripped>", ...],
-    "body_empty": true | false,
-    "labels": ["<string>", ...],
-    "updated_at": "<ISO-8601 UTC>"
+    "number": <int>
   },
   "handoff": null
             | { "posted_at": "<ISO-8601 UTC | branch-marker timestamp>",
@@ -111,7 +105,7 @@ Exit codes:
 - **Handoff-key discriminated union.** The `handoff` value is one of: `null`, a normal-dict with `{posted_at, branch, next_action, body}` keys, or an error-dict with `{error: "fetch-failed", detail: <string>}` keys. The discriminator between the two object shapes is the presence of an `error` key.
 - **Comment-fetch failure discipline.** When tracker comment fetch exits non-zero, the cache records `handoff: {"error": "fetch-failed", "detail": ...}` — NEVER `handoff: null` (which would be indistinguishable from "no handoff comment exists").
 - **Error-field scope.** The whole-cache `error` field is reserved for failures that invalidate the whole cache. Comment-fetch failure does NOT set this field — it sets the handoff-scoped marker instead.
-- **ANSI-scrub invariant.** Author-controlled string fields scrubbed of `\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f` before being written to the cache: `issue.title`, `issue.body_first_lines[*]`, `handoff.posted_at`, `handoff.branch`, `handoff.next_action`, `handoff.body`, `handoff.detail`. Fields NOT scrubbed in this contract version (pre-existing producer behavior; framework-wide scrub coverage tracked under #249): `issue.url`, `issue.labels[*]`, `issue.updated_at`. Of these, `labels[*]` is the realistic attack surface — consumers should treat label rendering with their own scrub for now.
+- **ANSI-scrub invariant.** Author-controlled string fields scrubbed of `\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f` before being written to the cache: `handoff.posted_at`, `handoff.branch`, `handoff.next_action`, `handoff.body`, `handoff.detail`. (#763: `issue` now carries only `number` — an integer needs no scrub — so the former `issue.title`/`issue.body_first_lines` scrub targets and the `issue.url`/`issue.labels[*]`/`issue.updated_at` not-scrubbed note are removed; the `labels[*]` scrub-gap is closed by field removal.)
 - **Atomic-write invariant.** The cache file is written via per-process `mktemp` + `mv` atomic rename. Concurrent refreshes never produce truncated or interleaved content.
 
 ## Test surface
@@ -123,9 +117,12 @@ Exit codes:
 - **RNC-5: Error-field-scope.** In the comment-fetch-failure case, the whole-cache `error` field MUST be `null` — the failure is scoped to `handoff`, not whole-cache. The smoke test asserts `cache["error"] is None` in the failure case alongside the handoff-scoped error.
 - **RNC-6: ANSI-scrub-invariant.** All author-controlled string fields in the cache are control-char-stripped. The smoke test injects a synthetic ANSI escape (e.g. `\x1b[31m`) into the GitHub-adapter stub's comment-fetch stderr and asserts the cache's `handoff.detail` does not contain the raw escape sequence.
 - **RNC-7: Atomic-write invariant.** The cache file is always valid JSON across rapid back-to-back refreshes. The smoke test asserts in two layers: (1) **behavioural** — runs the script twice in quick succession (sequential, not parallel — parallel would be flaky on shared CI runners) and asserts the final cache file is parseable. (2) **implementation-pattern** — extracts the `write_cache()` function body from the producer source and asserts it still contains both `mktemp "$CACHE_DIR/..."` and `mv "$tmp" "$CACHE_FILE"`. The behavioural layer catches truncation regressions visible under sequential load; the pattern layer catches regressions to a naive `printf > "$CACHE_FILE"` that would silently corrupt the cache when the session-start background refresh races `/handoff` (the actual concurrency hazard the atomic write defends against).
+- **RNC-8: Handoff-author-gate (#763).** `latest_handoff()` selects only `arbo-handoff`-marked comments whose `authorAssociation ∈ {OWNER, MEMBER, COLLABORATOR}`. `gh issue view --json comments` carries a per-comment `authorAssociation`; the gate runs before the newest-wins sort, so a newer untrusted-author marked comment is ignored in favour of an older trusted-author one, and a marked comment whose only author is untrusted yields `handoff: null` (the no-handoff path). **Backend degradation (#249 migration model):** when no marked comment carries an `authorAssociation` key at all (a backend that does not expose it), the gate is skipped permissively rather than dropping every handoff. The smoke test asserts: (G) newer-untrusted/older-trusted → trusted selected; (G2) untrusted-only → `handoff: null`; (G3) no-`authorAssociation` → permissive pass-through. **Known limitation — Azure DevOps (#766):** the ADO adapter (`roadmap_ado_normalize_comments` in `scripts/roadmap/lib.sh`) currently stamps *every* comment `authorAssociation: "MEMBER"`, so this gate is effectively a **no-op on ADO** (every commenter is treated as trusted) — not the permissive-degrade path above (which requires the key to be absent). The gate is **GitHub-effective**; ADO handoff author-trust is tracked as #766. Rationale: the handoff note's `next_action`/prose render into the SessionStart banner's `additionalContext` (the model's context) and its `branch` drives the workspace resume logic — same trust boundary #249 applied to the sibling journey-log path.
 
 ## Versioning
 
+- **1.7** (2026-06-12) — cache hygiene (#763): the `issue` sub-object carries only `{number}`. The banner renders a bare `[Next-up] #N` and the statusline sources its title from the stage cache, so `title`/`url`/`body_first_lines`/`body_empty`/`labels`/`updated_at` have no consumer and are dropped (no hollow fields); the primary list call's projection narrows to `--json number`; the dead body-`truncate()` helper is removed. RNC-6 scrub list narrows to the handoff fields; the `labels[*]` scrub-gap is closed by field removal.
+- **1.6** (2026-06-12) — adds RNC-8: `latest_handoff()` author-gate (#763). Only `OWNER`/`MEMBER`/`COLLABORATOR`-authored `arbo-handoff` comments are honoured; untrusted-author marked comments are ignored (→ `handoff: null`); a backend exposing no `authorAssociation` degrades permissively (#249 model). Neutralises the handoff half of the SessionStart banner prompt-injection surface while preserving the (now trusted-author) narrative-delta render.
 - **1.5** (2026-06-10) — removes `epics_in_flight` and `auto_advanced` keys from the cache shape. Boot-banner consumer no longer reads these keys. Issue #705.
 - **1.4** (2026-06-05) — adds `epics_in_flight` and `auto_advanced` keys to the cache shape. Both keys are present in all cache variants. `auto_advanced` is non-null only in the run that performed a successful one-shot `next-up` label move. Issue #562.
 - **1.3** (2026-06-03) — adds provider-specific Azure DevOps whole-cache errors so SessionStart can render ADO diagnostics instead of GitHub install/auth guidance. Issue #485.

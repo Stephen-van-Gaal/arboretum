@@ -76,30 +76,34 @@ else
 fi
 
 # ── SSB-2: scrub invariant on the [Next-up] block ───────────────────────
-# Seed next-cache.json with a title carrying a raw ESC (0x1b) byte (written
-# via python3 so a real control byte lands in the JSON string), then confirm
-# the rendered [Next-up] block has the ESC byte stripped by the hook's scrub.
+# #763: the issue title/body no longer render into the banner — the only
+# author-controlled free text the [Next-up] block now feeds the model is the
+# (author-gated) handoff note. Seed next-cache.json with a handoff next_action
+# carrying a raw ESC (0x1b) byte (written via python3 so a real control byte
+# lands in the JSON string), then confirm the rendered note has the ESC
+# stripped by the hook's consumer-side scrub. The bare [Next-up] #42 line must
+# also render.
 fix=$(new_fixture ssb2)
 python3 -c "
 import json
 d = {
   'fetched_at': '2026-05-23T14:00:00Z',
-  'issue': {'number': 42, 'title': 'evil\x1b[31mTITLE', 'url': 'u',
-            'body_first_lines': [], 'body_empty': False,
-            'labels': ['next-up'], 'updated_at': '2026-05-23T14:00:00Z'},
-  'handoff': None, 'no_gh_remote': False, 'error': None
+  'issue': {'number': 42},
+  'handoff': {'posted_at': '2026-05-23T14:00:00Z', 'branch': 'feat/x',
+              'next_action': 'evil\x1b[31mACTION', 'body': ''},
+  'no_gh_remote': False, 'error': None
 }
 print(json.dumps(d))
 " > "$fix/.arboretum/next-cache.json"
 out=$(run_hook "$fix")
-if ! echo "$out" | grep -q '\[Next-up\] #42'; then
-  fail_case SSB-2 "[Next-up] #42 block absent" "$out"
+if ! echo "$out" | grep -qE '^\[Next-up\] #42$'; then
+  fail_case SSB-2 "bare [Next-up] #42 line absent" "$out"
 elif printf '%s' "$out" | python3 -c "import sys; sys.exit(0 if b'\x1b' in sys.stdin.buffer.read() else 1)"; then
-  fail_case SSB-2 "raw ESC (0x1b) survived into [Next-up] block (consumer re-scrub failed)" "$out"
-elif echo "$out" | grep -q 'evil\[31mTITLE'; then
-  pass SSB-2   # ESC stripped, printable residue preserved
+  fail_case SSB-2 "raw ESC (0x1b) survived into handoff note (consumer re-scrub failed)" "$out"
+elif echo "$out" | grep -q 'evil\[31mACTION'; then
+  pass SSB-2   # ESC stripped from the handoff next_action, printable residue preserved
 else
-  fail_case SSB-2 "scrubbed title residue not as expected" "$out"
+  fail_case SSB-2 "scrubbed handoff-note residue not as expected" "$out"
 fi
 
 # ── SSB-8: worktree-map block (worktrees-always #716) ───────────────────

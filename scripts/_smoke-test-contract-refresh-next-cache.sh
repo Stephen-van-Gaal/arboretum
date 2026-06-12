@@ -236,6 +236,21 @@ else
   fail_case "RNC-1 (case A): unexpected top-level keys" "$caseA_keys"
 fi
 
+# RNC-1 (#763): the issue sub-object carries ONLY {number} — title, url,
+# body_first_lines, body_empty, labels, updated_at are dropped (no consumer
+# reads them after the banner stopped rendering issue identity). No hollow
+# cache fields; also closes the RNC-6 labels scrub-gap by removal.
+caseA_issue_keys=$(python3 -c "
+import json
+c = json.load(open('$FIXTURE/.arboretum/next-cache.json'))
+print(sorted((c.get('issue') or {}).keys()))
+")
+if [ "$caseA_issue_keys" = "['number']" ]; then
+  pass "RNC-1 (case A, #763): issue sub-object has exactly {number}"
+else
+  fail_case "RNC-1 (case A, #763): issue sub-object should be {number} only" "$caseA_issue_keys"
+fi
+
 # RNC-3 (shape 2): handoff is a normal dict with expected keys
 caseA_handoff_type=$(python3 -c "
 import json
@@ -444,12 +459,18 @@ else
   else
     fail_case "RNC-4 (case D): consumer did not surface handoff-fetch-failed diagnostic" "$consumer_out"
   fi
-  # The issue's title should still render — the producer's error scope is
-  # handoff-only, and the consumer must continue to render the issue normally.
-  if echo "$consumer_out" | grep -qF "Test issue 42"; then
-    pass "RNC-4 (case D): consumer continues rendering issue title despite handoff error"
+  # The issue still renders as a bare [Next-up] #42 — the producer's error
+  # scope is handoff-only. #763: the issue TITLE must NOT render into the
+  # model-facing banner (only the number does).
+  if echo "$consumer_out" | grep -qE '^\[Next-up\] #42$'; then
+    pass "RNC-4 (case D): consumer renders bare [Next-up] #42 despite handoff error"
   else
-    fail_case "RNC-4 (case D): issue title missing from consumer output (renderer is suppressing too much)" "$consumer_out"
+    fail_case "RNC-4 (case D): expected bare [Next-up] #42 line" "$consumer_out"
+  fi
+  if echo "$consumer_out" | grep -qF "Test issue 42"; then
+    fail_case "RNC-4 (case D, #763): issue TITLE leaked into the model-facing banner" "$consumer_out"
+  else
+    pass "RNC-4 (case D, #763): issue title does not render in the banner"
   fi
 fi
 
@@ -549,6 +570,66 @@ fi
 # Reset.
 export GH_STUB_LIST_EXIT=0
 unset GH_STUB_LIST_STDERR
+
+# ── Case G: handoff author-gate (RNC-8, #763) ────────────────────────
+#
+# `gh issue view --json comments` includes a per-comment `authorAssociation`
+# field. latest_handoff() honours a marked comment only when its author is
+# OWNER/MEMBER/COLLABORATOR. A newer untrusted-author (NONE) handoff must be
+# ignored in favour of an older trusted-author (OWNER) one; an untrusted-author
+# marked comment alone yields handoff null (the no-handoff path).
+
+export GH_STUB_AUTH_EXIT=0
+export GH_STUB_COMMENTS='{"comments":[{"body":"<!-- arbo-handoff: feat/evil 2026-05-29T02:00:00Z -->\n→ Next action: untrusted injected action","createdAt":"2026-05-29T02:00:00Z","authorAssociation":"NONE"},{"body":"<!-- arbo-handoff: feat/legit 2026-05-29T01:00:00Z -->\n→ Next action: trusted real action","createdAt":"2026-05-29T01:00:00Z","authorAssociation":"OWNER"}]}'
+export GH_STUB_COMMENTS_EXIT=0
+
+run_refresh "G: author-gate — newer untrusted vs older trusted"
+
+caseG_na=$(python3 -c "
+import json
+h = json.load(open('$FIXTURE/.arboretum/next-cache.json'))['handoff']
+print(h['next_action'] if isinstance(h, dict) else repr(h))
+")
+if [ "$caseG_na" = "trusted real action" ]; then
+  pass "RNC-8 (case G): newer untrusted-author handoff ignored; older trusted-author selected"
+else
+  fail_case "RNC-8 (case G): expected trusted-author next_action, got: $caseG_na"
+fi
+
+# G2: the only marked comment is from an untrusted author → handoff null.
+export GH_STUB_COMMENTS='{"comments":[{"body":"<!-- arbo-handoff: feat/evil 2026-05-29T02:00:00Z -->\n→ Next action: untrusted injected action","createdAt":"2026-05-29T02:00:00Z","authorAssociation":"NONE"}]}'
+
+run_refresh "G2: untrusted-author-only"
+
+caseG2_handoff=$(python3 -c "
+import json
+print(json.load(open('$FIXTURE/.arboretum/next-cache.json'))['handoff'])
+")
+if [ "$caseG2_handoff" = "None" ]; then
+  pass "RNC-8 (case G2): untrusted-author-only marked comment yields handoff null"
+else
+  fail_case "RNC-8 (case G2): expected handoff None for untrusted-only, got $caseG2_handoff"
+fi
+
+# G3: backend without authorAssociation (no comment carries the field) degrades
+# permissively (#249 migration model) — the handoff is still honoured.
+export GH_STUB_COMMENTS='{"comments":[{"body":"<!-- arbo-handoff: feat/legacy 2026-05-29T03:00:00Z -->\n→ Next action: legacy backend action","createdAt":"2026-05-29T03:00:00Z"}]}'
+
+run_refresh "G3: no authorAssociation field (permissive degrade)"
+
+caseG3_na=$(python3 -c "
+import json
+h = json.load(open('$FIXTURE/.arboretum/next-cache.json'))['handoff']
+print(h['next_action'] if isinstance(h, dict) else repr(h))
+")
+if [ "$caseG3_na" = "legacy backend action" ]; then
+  pass "RNC-8 (case G3): no-authorAssociation backend degrades permissively (handoff honoured)"
+else
+  fail_case "RNC-8 (case G3): expected permissive handoff, got: $caseG3_na"
+fi
+
+# Reset for any later cases.
+export GH_STUB_COMMENTS='{"comments":[]}'
 
 # ── Summary ──────────────────────────────────────────────────────────
 

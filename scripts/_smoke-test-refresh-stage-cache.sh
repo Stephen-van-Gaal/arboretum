@@ -39,7 +39,18 @@ case "$1 $2" in
     # --json labels --jq '.labels[].name', so honor that by printing the
     # fixture label set (newline-separated names) from $GH_STUB_LABELS.
     case "$*" in
-      *--json\ labels*) printf '%s\n' ${GH_STUB_LABELS:-}; exit 0 ;;
+      # #767: refresh-stage-cache.sh now fetches labels + title in ONE
+      # `--json labels,title` call (no --jq). Emulate gh by emitting a JSON
+      # object built from the fixture label set ($GH_STUB_LABELS, whitespace-
+      # separated) and title ($GH_STUB_TITLE, preserved verbatim incl. ESC).
+      *--json\ labels,title*|*--json\ labels*)
+        python3 -c "
+import json, os
+names = (os.environ.get('GH_STUB_LABELS') or '').split()
+title = os.environ.get('GH_STUB_TITLE') or ''
+print(json.dumps({'labels': [{'name': n} for n in names], 'title': title}))
+"
+        exit 0 ;;
     esac
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null \
       || echo '{"body":"## Context","number":307,"title":"WS9"}'
@@ -64,8 +75,10 @@ related-issue: 999
 ---
 # foo-bar
 SPEC
-GH_STUB_LABELS="stage:build agent-ready" PATH="$bindir:$PATH" \
-  bash "$REFRESH" "$c1"
+# #763: the active issue's title is fetched for the statusline and stored,
+# control-char scrubbed. Inject a raw ESC to verify the scrub.
+GH_STUB_LABELS="stage:build agent-ready" GH_STUB_TITLE=$'Wire the seam\x1b[31mX' \
+  PATH="$bindir:$PATH" bash "$REFRESH" "$c1"
 cache="$c1/.arboretum/active-stage-cache.json"
 [ -f "$cache" ] || fail "case 1 — cache not written"
 python3 -c "
@@ -74,8 +87,11 @@ c = json.load(open(sys.argv[1]))
 assert c['issue'] == 999, c
 assert c['stage'] == '/build', c
 assert 'ts' in c, c
+# #763: title present, control-char scrubbed (ESC stripped, residue kept).
+assert c.get('title') == 'Wire the seam[31mX', c
+assert '\x1b' not in (c.get('title') or ''), c
 " "$cache" || fail "case 1 — cache shape wrong" "$(cat "$cache")"
-ok "case 1 — branch-matched design spec resolves to that issue"
+ok "case 1 — branch-matched design spec resolves to that issue; title cached + scrubbed"
 
 # ── Case 2: no branch match → falls back to next-up ──────────────────
 c2=$(new_repo case2)

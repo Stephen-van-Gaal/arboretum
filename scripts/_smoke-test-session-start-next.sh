@@ -241,19 +241,23 @@ git -C "$fix" remote add origin "https://github.com/example/repo.git"
 bindir=$(install_gh_stub "$fix" "issue")
 out=$(run_hook "$fix" "PATH=$bindir:$PATH" "GH_STUB_MODE=issue")
 
-echo "$out" | grep -qE '^\[Next-up\] #155: Session handoff' \
-  || fail "case 3 — expected '[Next-up] #155: Session handoff…' line" "$out"
+# #763: the model-facing banner renders only the bare issue number — no
+# author-controlled issue title, body lines, or URL reach additionalContext.
+echo "$out" | grep -qE '^\[Next-up\] #155$' \
+  || fail "case 3 — expected bare '[Next-up] #155' line (no title; #763)" "$out"
+echo "$out" | grep -q 'Session handoff: capture' \
+  && fail "case 3 — issue TITLE must NOT render in the model-facing banner (#763)" "$out"
 echo "$out" | grep -q 'Long-running work spans multiple sessions' \
-  || fail "case 3 — expected body line in banner" "$out"
+  && fail "case 3 — issue BODY must NOT render in the banner (#763)" "$out"
 echo "$out" | grep -q 'github.com/example/repo/issues/155' \
-  || fail "case 3 — expected URL in banner" "$out"
+  && fail "case 3 — issue URL must NOT render in the banner (#763)" "$out"
 
 # Cache should now exist
 [ -f "$fix/.arboretum/next-cache.json" ] \
   || fail "case 3 — cache file not written"
 grep -q '"number": 155' "$fix/.arboretum/next-cache.json" \
   || fail "case 3 — cache JSON missing issue number"
-ok "case 3 — gh stub issue surfaces in banner; cache populated"
+ok "case 3 — gh stub issue surfaces as bare #155 (no title/body/url); cache populated"
 
 # ── Case 4: cache fresh (< 1h), gh tripwire ──────────────────────────
 
@@ -306,11 +310,12 @@ fix=$(new_fixture case6)
 git -C "$fix" remote add origin "https://github.com/example/repo.git"
 bindir=$(install_gh_stub "$fix" "empty-issue")
 out=$(run_hook "$fix" "PATH=$bindir:$PATH" "GH_STUB_MODE=empty-issue")
-echo "$out" | grep -qE '^\[Next-up\] #200' \
-  || fail "case 6 — expected banner line for #200" "$out"
+echo "$out" | grep -qE '^\[Next-up\] #200$' \
+  || fail "case 6 — expected bare '[Next-up] #200' line" "$out"
+# #763: the body is no longer surfaced, so the body-empty annotation is gone.
 echo "$out" | grep -q 'body empty' \
-  || fail "case 6 — expected '(body empty — readiness check would fail)' annotation" "$out"
-ok "case 6 — empty-body issue is annotated"
+  && fail "case 6 — body-empty annotation must NOT render (#763, body no longer surfaced)" "$out"
+ok "case 6 — empty-body issue renders bare #200 (no body annotation; #763)"
 
 # ── Case 7: gh stub returns empty list ───────────────────────────────
 
@@ -364,6 +369,34 @@ if echo "$out" | grep -q 'gh CLI not available'; then
   fail "case 9 — ADO backend failure must not render gh CLI guidance" "$out"
 fi
 ok "case 9 — ADO backend failure renders ADO diagnostic"
+
+# ── Case 10: handoff note renders; issue title never does (#763) ─────
+#
+# Seed a fresh next-cache.json directly (cache-hit path, no gh) carrying a
+# trusted-author handoff and the post-#763 issue shape ({number} only, no
+# title). Assert the bare [Next-up] #300 line + the handoff note both render —
+# the narrative-delta feature is preserved — and that nothing title-shaped
+# leaks into the model-facing banner.
+
+fix=$(new_fixture case10)
+git -C "$fix" remote add origin "https://github.com/example/repo.git"
+cat > "$fix/.arboretum/next-cache.json" <<'JSON'
+{
+  "fetched_at": "2026-06-12T00:00:00Z",
+  "issue": { "number": 300 },
+  "handoff": { "posted_at": "2026-06-12T00:00:00Z", "branch": "feat/x", "next_action": "wire the seam", "body": "watch the contract coupling" },
+  "no_gh_remote": false,
+  "error": null
+}
+JSON
+out=$(run_hook "$fix" "PATH=$PATH")
+echo "$out" | grep -qE '^\[Next-up\] #300$' \
+  || fail "case 10 — expected bare '[Next-up] #300'" "$out"
+echo "$out" | grep -q '→ Next action: wire the seam' \
+  || fail "case 10 — trusted-author handoff next_action must render (narrative delta preserved)" "$out"
+echo "$out" | grep -q 'watch the contract coupling' \
+  || fail "case 10 — handoff prose must render" "$out"
+ok "case 10 — handoff note renders; bare #300, no issue title in the banner"
 
 # ── Done ─────────────────────────────────────────────────────────────
 

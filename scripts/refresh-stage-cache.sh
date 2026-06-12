@@ -12,7 +12,10 @@
 #   3. Else issue:null.
 #
 # Cache shape:
-#   { "issue": <int>|null, "stage": "<name>"|null, "ts": "<ISO-8601 UTC>" }
+#   { "issue": <int>|null, "stage": "<name>"|null,
+#     "title": "<string, control-char-stripped>"|null, "ts": "<ISO-8601 UTC>" }
+#   (#763: `title` is the active issue's title, surfaced on the user-only
+#    statusline — never the model-facing SessionStart banner.)
 #
 # Usage: bash scripts/refresh-stage-cache.sh [project-dir]
 # Exit:  0 always (cache reflects errors via stage:null or issue:null).
@@ -41,7 +44,7 @@ write_cache() {
 }
 
 emit_null() {
-  write_cache "$(printf '{"issue": null, "stage": null, "ts": "%s"}' "$(now_iso)")"
+  write_cache "$(printf '{"issue": null, "stage": null, "title": null, "ts": "%s"}' "$(now_iso)")"
 }
 
 roadmap_probe_backend_access "$ROADMAP_BACKEND" "$PROJECT_DIR" >/dev/null 2>&1 || { emit_null; exit 0; }
@@ -87,34 +90,45 @@ if [ -z "$issue" ]; then
   exit 0
 fi
 
-# ── Step 3: read the stage:* label, derive the stage value ───────────
+# ── Step 3: read labels + title in ONE tracker call ──────────────────
 # Stage lives as an exclusive `stage:<name>` label/tag (#570). Restore the
 # leading slash dropped at write time (stage:design -> /design). The value
 # is still scrubbed of control characters (belt-and-braces; label names are
 # constrained but the scrub matches the defense-in-depth pattern).
-labels_out=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue" --json labels --jq '.labels[].name' 2>/dev/null || true )
-stage=$(LABELS="$labels_out" python3 -c '
-import re, os
-_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
-def scrub(s): return _CTRL.sub("", s)
-stage = ""
-for line in os.environ.get("LABELS", "").splitlines():
-    line = line.strip()
-    if line.startswith("stage:"):
-        stage = "/" + line[len("stage:"):]
-        break
-print(scrub(stage))
-')
+#
+# #763/#767: the active issue's `title` is fetched for the statusline (a
+# user-only display surface — the model never ingests it, so rendering the
+# author-controlled title there is injection-safe; the SessionStart banner
+# renders only the bare issue number). Labels + title are fetched in a SINGLE
+# `roadmap_tracker_issue_show --json labels,title` call (no `--jq`) — folding
+# the title into the existing labels call avoids a second tracker round-trip on
+# this 30s-TTL background refresh (Copilot review on PR #767). Both are parsed
+# from the JSON payload below.
+issue_json=$( cd "$PROJECT_DIR" && roadmap_tracker_issue_show "$issue" --json labels,title 2>/dev/null || echo '{}' )
 
-# Serialize via python3 (not printf) so a stage value containing `"`
+# Serialize via python3 (not printf) so a stage/title value containing `"`
 # or `\` cannot break the JSON shape — printf '%s' just interpolates,
 # leaving downstream `json.load` consumers (statusline.sh + session-
 # start.sh) to silently lose pipeline-state rendering on a malformed
 # cache file. (Codex R2-1.)
-cache_json=$(STAGE="$stage" ISSUE="$issue" TS="$(now_iso)" python3 -c '
-import json, os
-stage = os.environ["STAGE"] or None
-print(json.dumps({"issue": int(os.environ["ISSUE"]), "stage": stage, "ts": os.environ["TS"]}))
+cache_json=$(ISSUE_JSON="$issue_json" ISSUE="$issue" TS="$(now_iso)" python3 -c '
+import json, os, re
+_CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts/lib/scrub-control-chars.sh
+def scrub(s): return _CTRL.sub("", s) if isinstance(s, str) else s
+try:
+    d = json.loads(os.environ.get("ISSUE_JSON") or "{}")
+    if not isinstance(d, dict):
+        d = {}
+except Exception:
+    d = {}
+stage = None
+for lab in d.get("labels") or []:
+    name = lab.get("name", "") if isinstance(lab, dict) else str(lab)
+    if name.startswith("stage:"):
+        stage = scrub("/" + name[len("stage:"):])
+        break
+title = scrub((d.get("title") or "").strip()) or None
+print(json.dumps({"issue": int(os.environ["ISSUE"]), "stage": stage, "title": title, "ts": os.environ["TS"]}))
 ')
 write_cache "$cache_json"
 

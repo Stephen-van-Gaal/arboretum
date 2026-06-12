@@ -75,6 +75,44 @@ expected="Opus 4.7  |  proj_full/ember-thrush  |  ctx 42%  |  5h:24% 7d:27%  |  
 expected: $expected"
 ok "case 1 — full line shape with all segments (ts asserted + stripped)"
 
+# ── Case 1b: issue title appended to the chip (#763, user-only) ──────
+# The statusline is a user-only surface — the model never ingests it — so the
+# author-controlled issue title is safe to render here (unlike the model-facing
+# SessionStart banner, which now renders only the bare issue number).
+fix=$(new_fixture proj_title ember-thrush)
+cat > "$fix/.arboretum/active-stage-cache.json" <<'JSON'
+{"issue": 307, "stage": "/build", "title": "Reframe idea capture", "ts": "2026-05-23T14:05:00Z"}
+JSON
+input='{"model":{"display_name":"Opus 4.7"},"workspace":{"project_dir":"'$fix'","git_worktree":"ember-thrush"},"context_window":{"used_percentage":42.7},"rate_limits":{"five_hour":{"used_percentage":24.5},"seven_day":{"used_percentage":27.1}}}'
+out=$(run_hook "$fix" "$input")
+stripped=$(printf '%s' "$out" | strip_ts)
+expected="Opus 4.7  |  proj_title/ember-thrush  |  ctx 42%  |  5h:24% 7d:27%  |  wt:ember-thrush  |  [#307 /build] Reframe idea capture"
+[ "$stripped" = "$expected" ] || fail "case 1b — chip with title" "got:      $stripped
+expected: $expected"
+ok "case 1b — issue title appended to the statusline chip (#763)"
+
+# ── Case 1c: title control-char scrubbed + long title truncated ──────
+fix=$(new_fixture proj_longtitle main)
+python3 -c "
+import json
+# ESC early so the scrub (not truncation) is what removes it; long enough to
+# exercise the truncation cap.
+d = {'issue': 42, 'stage': '/design',
+     'title': chr(27)+'[31mThis title is definitely longer than forty chars total',
+     'ts': '2026-05-23T14:05:00Z'}
+print(json.dumps(d))
+" > "$fix/.arboretum/active-stage-cache.json"
+input='{"model":{"display_name":"Opus 4.7"},"workspace":{"project_dir":"'$fix'"},"context_window":{"used_percentage":8}}'
+out=$(run_hook "$fix" "$input")
+printf '%s' "$out" | python3 -c "import sys; sys.exit(0 if b'\x1b' in sys.stdin.buffer.read() else 1)" \
+  && fail "case 1c — raw ESC survived into statusline title (scrub failed)" "$out"
+stripped=$(printf '%s' "$out" | strip_ts)
+echo "$stripped" | grep -q '\[#42 /design\] \[31mThis title' \
+  || fail "case 1c — expected scrubbed title prefix in chip" "$stripped"
+echo "$stripped" | grep -q '…' \
+  || fail "case 1c — expected ellipsis on truncated long title" "$stripped"
+ok "case 1c — title ESC-scrubbed and long title truncated with ellipsis"
+
 # ── Case 2: chip omitted when cache absent ───────────────────────────
 fix=$(new_fixture proj_nochip main)
 input='{"model":{"display_name":"Opus 4.7"},"workspace":{"project_dir":"'$fix'"},"context_window":{"used_percentage":8}}'

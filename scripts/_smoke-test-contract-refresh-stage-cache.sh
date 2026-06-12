@@ -57,7 +57,28 @@ case "$1 $2" in
     # fixture label set from $GH_STUB_LABELS (a file of newline-separated
     # names, so control chars / quotes survive byte-for-byte).
     case "$*" in
-      *--json\ labels*) cat "${GH_STUB_LABELS:-/dev/null}" 2>/dev/null; exit 0 ;;
+      # #767: the producer fetches labels + title in ONE `--json labels,title`
+      # call (no --jq). Emulate gh by emitting a JSON object built from the
+      # label file ($GH_STUB_LABELS, newline-separated names — control chars /
+      # quotes survive byte-for-byte) and the title file ($GH_STUB_TITLE_FILE).
+      *--json\ labels,title*|*--json\ labels*)
+        python3 -c "
+import json, os
+labels = []
+try:
+    with open(os.environ.get('GH_STUB_LABELS', '/dev/null')) as fh:
+        labels = [{'name': l.rstrip(chr(10))} for l in fh if l.strip()]
+except Exception:
+    pass
+title = ''
+try:
+    with open(os.environ.get('GH_STUB_TITLE_FILE', '/dev/null')) as fh:
+        title = fh.read().rstrip(chr(10))
+except Exception:
+    pass
+print(json.dumps({'labels': labels, 'title': title}))
+"
+        exit 0 ;;
     esac
     cat "${GH_STUB_BODY:-/dev/null}" 2>/dev/null \
       || echo '{"body":"## Context","number":307,"title":"WS9"}'
@@ -105,14 +126,15 @@ import json
 c = json.load(open('$deg_cache'))
 keys = set(c.keys())
 problems = []
-if keys != {'issue','stage','ts'}: problems.append('keys=%r' % keys)
+if keys != {'issue','stage','title','ts'}: problems.append('keys=%r' % keys)
 if c.get('issue') is not None: problems.append('issue not null: %r' % c.get('issue'))
 if c.get('stage') is not None: problems.append('stage not null: %r' % c.get('stage'))
+if c.get('title') is not None: problems.append('title not null: %r' % c.get('title'))
 if not c.get('ts'): problems.append('ts missing/empty')
 print('OK' if not problems else ' | '.join(problems))
 " 2>&1)
 if [ "$deg_res" = "OK" ]; then
-  pass "RSC-2: degraded cache has exactly {issue,stage,ts}, issue+stage null, ts present"
+  pass "RSC-2: degraded cache has exactly {issue,stage,title,ts}, issue+stage+title null, ts present"
 else
   fail_case "RSC-2: degraded cache shape wrong" "$deg_res"
 fi
@@ -128,7 +150,9 @@ related-issue: 999
 # foo-bar
 SPEC
 printf 'stage:build\nagent-ready\n' > "$c3/labels.txt"
-GH_STUB_LABELS="$c3/labels.txt" PATH="$bindir:$PATH" bash "$REFRESH" "$c3" >/dev/null 2>&1
+printf 'Wire the seam\n' > "$c3/title.txt"
+GH_STUB_LABELS="$c3/labels.txt" GH_STUB_TITLE_FILE="$c3/title.txt" \
+  PATH="$bindir:$PATH" bash "$REFRESH" "$c3" >/dev/null 2>&1
 c3_res=$(python3 -c "
 import json
 c = json.load(open('$c3/.arboretum/active-stage-cache.json'))
@@ -136,11 +160,12 @@ problems = []
 if c.get('issue') != 999: problems.append('issue=%r (expected 999 int)' % c.get('issue'))
 if not isinstance(c.get('issue'), int): problems.append('issue not an int')
 if c.get('stage') != '/build': problems.append('stage=%r (expected /build)' % c.get('stage'))
+if c.get('title') != 'Wire the seam': problems.append('title=%r (expected Wire the seam; #763)' % c.get('title'))
 if 'ts' not in c: problems.append('ts missing')
 print('OK' if not problems else ' | '.join(problems))
 " 2>&1)
 if [ "$c3_res" = "OK" ]; then
-  pass "RSC-3/RSC-4: branch feat/foo-bar-build resolves design spec → issue:999(int), stage:/build"
+  pass "RSC-3/RSC-4: branch feat/foo-bar-build resolves design spec → issue:999(int), stage:/build, title cached (#763)"
 else
   fail_case "RSC-3/RSC-4: branch resolution wrong" "$c3_res"
 fi

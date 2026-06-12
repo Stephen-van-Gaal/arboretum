@@ -65,8 +65,10 @@ Reads:
 Writes `.arboretum/active-stage-cache.json` (atomic via mktemp + mv). Shape:
 
 ```json
-{ "issue": <int> | null, "stage": "<name, control-char-stripped>" | null, "ts": "<ISO-8601 UTC>" }
+{ "issue": <int> | null, "stage": "<name, control-char-stripped>" | null, "title": "<title, control-char-stripped>" | null, "ts": "<ISO-8601 UTC>" }
 ```
+
+(#763: `title` is the active issue's title, fetched via `roadmap_tracker_issue_show "$issue" --json title --jq '.title'`, control-char scrubbed, surfaced on the user-only statusline — never the model-facing SessionStart banner. `null` when no issue is resolved or the title is empty.)
 
 When an issue is resolved, also writes `.arboretum/log-comments-cache.json` (atomic). Shape:
 
@@ -82,9 +84,10 @@ Exit codes:
 
 ### Invariants
 
-- **Main-cache JSON shape.** `.arboretum/active-stage-cache.json` is valid JSON with exactly the top-level keys `{issue, stage, ts}`. No other keys. Adding or removing a key is a contract change requiring a coordinated `statusline.sh` update.
-- **Always-exits-0 contract.** The script exits 0 even on degraded paths (tracker unavailable, auth failure, `python3` absent, no issue). The cache carries the degraded state via `issue: null` / `stage: null`; the exit code carries only "did the cache write succeed."
-- **Always-writes-valid-JSON contract.** The main cache is never empty and always valid JSON — including every degraded path, which writes `{"issue": null, "stage": null, "ts": "<ts>"}`.
+- **Main-cache JSON shape.** `.arboretum/active-stage-cache.json` is valid JSON with exactly the top-level keys `{issue, stage, title, ts}`. No other keys. Adding or removing a key is a contract change requiring a coordinated `statusline.sh` update.
+- **Always-exits-0 contract.** The script exits 0 even on degraded paths (tracker unavailable, auth failure, `python3` absent, no issue). The cache carries the degraded state via `issue: null` / `stage: null` / `title: null`; the exit code carries only "did the cache write succeed."
+- **Always-writes-valid-JSON contract.** The main cache is never empty and always valid JSON — including every degraded path, which writes `{"issue": null, "stage": null, "title": null, "ts": "<ts>"}`.
+- **`title` is string-or-null (#763).** Resolved issue with a non-empty title → the scrubbed title string; unresolved issue or empty title → `null`. Surfaced only on the user-only statusline, never the model-facing banner.
 - **`issue` is int-or-null.** When resolved, `issue` is a JSON integer (`int(...)` cast), not a string. Unresolved → `null`.
 - **`stage` is string-or-null.** Present marker → the scrubbed stage token (a non-empty string); absent marker → `null`.
 - **`ts` always present.** Every cache write carries `ts` as an ISO-8601 UTC timestamp (`%Y-%m-%dT%H:%M:%SZ`), including the degraded null cache.
@@ -95,16 +98,18 @@ Exit codes:
 
 ## Test surface
 
-- **RSC-1:** Producer always exits 0 and writes a parseable `active-stage-cache.json` with top-level keys exactly `{issue, stage, ts}` — including the fully-degraded path (tracker unavailable) which writes `{"issue": null, "stage": null, "ts": ...}`.
-- **RSC-2:** Degraded path — default GitHub adapter unavailable because `gh` is absent (shadowed off PATH) → `issue: null`, `stage: null`, `ts` present, exit 0.
+- **RSC-1:** Producer always exits 0 and writes a parseable `active-stage-cache.json` with top-level keys exactly `{issue, stage, title, ts}` — including the fully-degraded path (tracker unavailable) which writes `{"issue": null, "stage": null, "title": null, "ts": ...}`.
+- **RSC-2:** Degraded path — default GitHub adapter unavailable because `gh` is absent (shadowed off PATH) → `issue: null`, `stage: null`, `title: null`, `ts` present, exit 0.
 - **RSC-3:** Branch-resolution happy path — branch `feat/<slug>` matching a design spec with `related-issue: <N>`, a stubbed tracker issue body carrying the current-stage marker → `issue: <N>` (integer), `stage: "<name>"`.
 - **RSC-4:** Build-branch convention — branch `feat/<slug>-build` resolves the same `<slug>-design.md` spec (trailing `-build` stripped).
 - **RSC-5:** Issue resolved but current-stage marker absent in body → `issue: <N>`, `stage: null`.
 - **RSC-6:** ANSI-scrub — a stage value carrying a control char (via the stubbed issue body marker) is control-char-stripped in the written cache, readable content preserved.
 - **RSC-7:** JSON-safety — a stage value containing a `"` does not break the cache JSON (file remains parseable); serialized via `json.dumps`.
 - **RSC-8:** Atomic-write — `write_cache()` uses `mktemp` + `mv` (pattern assertion against the script source).
+- **RSC-9 (#763):** Title — a resolved issue's title (fetched via `--json title --jq '.title'`) is stored in `title`, control-char scrubbed (a raw ESC is stripped, printable residue preserved); the degraded path writes `title: null`.
 
 ## Versioning
 
+- **1.2** (2026-06-12) — adds the `title` field (#763): the active issue's title is fetched and cached for the user-only statusline chip (the SessionStart banner now renders only the bare issue number, so the human reads the title on the statusline, which the model never ingests). Top-level key set becomes `{issue, stage, title, ts}`; RSC-1/RSC-2 updated; RSC-9 added.
 - **1.1** (2026-05-31) — issue body/list/comment reads flow through backend-neutral tracker helpers; cache schema unchanged.
 - **1.0** (2026-05-30) — initial contract. Producer shape as of `scripts/refresh-stage-cache.sh` and consumer `.claude/hooks/statusline.sh` on `main`. Issue #303 (WS5 PR 7a).

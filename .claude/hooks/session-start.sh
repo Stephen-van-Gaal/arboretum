@@ -157,13 +157,13 @@ elif err:
 elif issue is None:
     lines.append("[Next-up] (no issue queued — run /handoff to set one)")
 else:
+    # #763: render only the bare issue number into additionalContext (the
+    # model's context). The next-up issue title/body are author-controlled
+    # (any GitHub user can author the queued issue) and are NOT rendered here
+    # — an integer cannot carry a natural-language injection. The human reads
+    # the title on the user-only statusline, which the model never ingests.
     n = issue.get("number")
-    title = scrub(issue.get("title", ""))
-    lines.append(f"[Next-up] #{n}: {title}")
-    if issue.get("body_empty"):
-        lines.append("  (body empty — readiness check would fail)")
-    for ln in issue.get("body_first_lines", [])[:5]:
-        lines.append(f"  {scrub(ln)}")
+    lines.append(f"[Next-up] #{n}")
     handoff = cache.get("handoff")
     # The handoff field is a discriminated three-way union (per
     # docs/contracts/refresh-next-cache.contract.md RNC-3): null,
@@ -171,6 +171,10 @@ else:
     # Check the error case FIRST — without this, an error dict would
     # fall through to .get("next_action", "") returning "" and skip
     # silently, re-introducing the bug at the consumer (PR 4 design D3).
+    # The handoff note IS rendered: it is author-gated at the producer
+    # (RNC-8) to OWNER/MEMBER/COLLABORATOR, so its next_action/prose is
+    # trusted-author content — session-handoff v2's narrative delta to the
+    # resuming model (#155/#574), preserved behind the gate (#763).
     if isinstance(handoff, dict) and handoff.get("error") == "fetch-failed":
         lines.append("  → (handoff fetch failed — see .arboretum/next-cache.err)")
     elif handoff:
@@ -180,9 +184,6 @@ else:
         prose = scrub(handoff.get("body", ""))
         if prose:
             lines.append(f"  {prose}")
-    url = issue.get("url", "")
-    if url:
-        lines.append(f"  → {scrub(url)}")
 
 print("\n".join(lines))
 PY
@@ -199,9 +200,9 @@ PY
       elif grep -q '"issue":[[:space:]]*null' "$NEXT_CACHE"; then
         next_block="[Next-up] (no issue queued — run /handoff to set one)"
       else
+        # #763: bare number only — the title is not rendered into the banner.
         n=$(sed -n 's/.*"number":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$NEXT_CACHE" | head -1)
-        t=$(sed -n 's/.*"title":[[:space:]]*"\([^"]*\)".*/\1/p' "$NEXT_CACHE" | head -1)
-        next_block="[Next-up] #${n}: ${t}"
+        next_block="[Next-up] #${n}"
       fi
     fi
 

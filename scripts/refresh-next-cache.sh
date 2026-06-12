@@ -10,14 +10,10 @@
 #   {
 #     "fetched_at": "<ISO-8601 UTC>",
 #     "issue": null | {
-#       "number": <int>,
-#       "title": "<string, control-char-stripped>",
-#       "url": "<string>",
-#       "body_first_lines": ["<line, control-char-stripped>", ...],
-#       "body_empty": true | false,
-#       "labels": ["<string>", ...],
-#       "updated_at": "<ISO-8601 UTC>"
-#     },
+#       "number": <int>
+#     },   # #763: number only — the banner renders a bare [Next-up] #N and the
+#          # statusline sources its title from the stage cache, so title/body/
+#          # url/labels are no longer cached (no hollow fields).
 #     "handoff": null | { posted_at, branch, next_action, body }   # success — see below
 #                    | { "error": "fetch-failed", "detail": "<string>" }  # comment-fetch failure
 #     "no_gh_remote": true | false,
@@ -42,11 +38,11 @@
 #                          failure is recorded *in* the cache, not *about* the cache.
 #                          Replaces the pre-#264 silent-null-on-failure behaviour.
 #
-# Title and body lines are stripped of ASCII control characters
-# (including \x1b ANSI escape introducers) when stored, so the
-# session-start banner can render them as-is without risk of
-# remote-controlled terminal-escape injection (issue text is
-# author-controlled tracker content).
+# The handoff fields (next_action/body/branch/posted_at) are stripped of
+# ASCII control characters (including \x1b ANSI escape introducers) when
+# stored, so the session-start banner can render the (author-gated) handoff
+# note without risk of remote-controlled terminal-escape injection. The
+# handoff comment is author-gated to OWNER/MEMBER/COLLABORATOR (RNC-8).
 #
 # Usage:
 #   bash scripts/refresh-next-cache.sh [project-dir]
@@ -163,7 +159,7 @@ tracker_stderr=$(mktemp "$CACHE_DIR/tracker.stderr.XXXXXX")
 tracker_exit=0
 ( cd "$PROJECT_DIR" && \
   roadmap_tracker_issue_list --label next-up --state open --limit 1 \
-     --json number,title,url,body,labels,updatedAt \
+     --json number \
      >"$tracker_stdout" 2>"$tracker_stderr" ) || tracker_exit=$?
 
 if [ "$tracker_exit" -ne 0 ]; then
@@ -285,38 +281,8 @@ _CTRL = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])  # env bridge — scripts
 def scrub(s):
     return _CTRL.sub("", s) if isinstance(s, str) else s
 
-def truncate(body):
-    """First non-empty paragraph after any leading H1/H2, capped at
-    5 lines / 400 chars total. Each line is control-char-scrubbed."""
-    if not body:
-        return []
-    lines = body.replace("\r\n", "\n").split("\n")
-    out, total = [], 0
-    in_body = False
-    for raw in lines:
-        line = scrub(raw.rstrip())
-        # Skip leading H1/H2 if present at the very top.
-        if not in_body and line.startswith(("# ", "## ")):
-            continue
-        if not in_body and line.strip() == "":
-            continue
-        in_body = True
-        if line.strip() == "" and out:
-            break
-        if line.strip() == "":
-            continue
-        # Skip HTML comments
-        if line.lstrip().startswith("<!--"):
-            continue
-        if total + len(line) > 400:
-            line = line[: 400 - total] + "..."
-            out.append(line)
-            break
-        out.append(line)
-        total += len(line)
-        if len(out) >= 5:
-            break
-    return out
+# (#763: the body-truncation helper was removed — the cache no longer carries
+# issue body lines; only the issue number is written.)
 
 def latest_handoff(comments_path):
     """The newest comment whose body starts with the arbo-handoff
@@ -331,6 +297,19 @@ def latest_handoff(comments_path):
               if isinstance(c, dict)
               and isinstance(c.get("body"), str)
               and c["body"].lstrip().startswith("<!-- arbo-handoff:")]
+    # Author gate (#763, RNC-8): the handoff note (next_action + prose) is
+    # rendered into the SessionStart banner's additionalContext — the model's
+    # context — and its branch drives the workspace resume logic. Honour only
+    # marked comments from a trusted author (OWNER/MEMBER/COLLABORATOR), the
+    # same boundary #249 applied to the sibling journey-log path. `gh issue
+    # view --json comments` carries a per-comment `authorAssociation`.
+    # Backend-degradation (#249 migration model): when NO comment carries an
+    # `authorAssociation` key at all (e.g. a backend that doesn't expose it),
+    # skip the gate permissively rather than dropping every handoff.
+    _TRUSTED_ASSOC = {"OWNER", "MEMBER", "COLLABORATOR"}
+    if any("authorAssociation" in c for c in marked):
+        marked = [c for c in marked
+                  if (c.get("authorAssociation") or "") in _TRUSTED_ASSOC]
     if not marked:
         return None
     marked.sort(key=lambda c: c.get("createdAt", ""))
@@ -392,17 +371,16 @@ if issue is None:
         "error": None,
     }
 else:
-    body = issue.get("body") or ""
+    # #763: the cache carries only the issue number. The SessionStart banner
+    # renders a bare `[Next-up] #N` (no title/body/url) and the statusline
+    # sources its title from the stage cache, so title/body_first_lines/
+    # body_empty/url/labels/updated_at have no consumer — dropping them avoids
+    # hollow populated-but-unread fields (and closes the RNC-6 labels
+    # scrub-gap by removal).
     cache = {
         "fetched_at": os.environ["FETCHED_AT"],
         "issue": {
             "number": issue["number"],
-            "title": scrub(issue["title"]),
-            "url": issue["url"],
-            "body_first_lines": truncate(body),
-            "body_empty": len(body.strip()) == 0,
-            "labels": [l["name"] for l in issue.get("labels", [])],
-            "updated_at": issue.get("updatedAt", ""),
         },
         "handoff": handoff,
         "no_gh_remote": False,
