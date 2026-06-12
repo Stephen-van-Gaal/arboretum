@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # _smoke-test-contract-roadmap-lib.sh — Contract test for
-# docs/contracts/roadmap-lib.contract.md. Asserts RL-1..RL-9 against
+# docs/contracts/roadmap-lib.contract.md. Asserts RL-1..RL-40f against
 # scripts/roadmap/lib.sh.
 #
 # The library resolves the project root via `git rev-parse --show-toplevel`,
@@ -946,6 +946,164 @@ if PATH="$CUF_BIN:$PATH" inlib roadmap_current_user >/dev/null 2>&1; then
   fail_case "RL-37 (unauth should fail)"
 else
   pass "RL-37 (unauth → non-zero)"
+fi
+
+# RL-39 — epic_list delegates to gh issue list filtered to open type:epic and
+# returns [{number,title}]. Uses a dedicated stub so the shaped query is pinned.
+EPIC_BIN="$FIX/.epic-bin"; mkdir -p "$EPIC_BIN"
+cat > "$EPIC_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+printf '%s\n' "$*" >> "${GH_STUB_LOG:?}"
+if [ "$1 $2" = "issue list" ]; then
+  printf '[{"number":516,"title":"Epic: Pipeline Slipstream"}]'
+  exit 0
+fi
+echo "unexpected gh call: $*" >&2
+exit 2
+GH
+chmod +x "$EPIC_BIN/gh"
+: > "$GH_STUB_LOG"
+epic_out=$(PATH="$EPIC_BIN:$PATH" inlib roadmap_tracker_epic_list)
+if [ "$epic_out" = '[{"number":516,"title":"Epic: Pipeline Slipstream"}]' ]    && grep -q 'issue list --label type:epic --state open --json number,title --limit 200' "$GH_STUB_LOG"; then
+  pass RL-39
+else
+  fail_case RL-39 "out=[$epic_out] log=$(cat "$GH_STUB_LOG" 2>/dev/null)"
+fi
+
+# RL-39b — epic_list degrades to [] on azure-devops without ever calling the
+# tracker. Reuse the sibling ADO az stub ($AZ_BIN) so roadmap_require_backend
+# passes its guard; the ADO branch only printf '[]' and never invokes az.
+ado_epic_out=$(PATH="$AZ_BIN:$PATH" ROADMAP_BACKEND=azure-devops inlib roadmap_tracker_epic_list)
+if [ "$ado_epic_out" = '[]' ]; then pass RL-39b; else fail_case RL-39b "got=[$ado_epic_out]"; fi
+
+# RL-39c — epic_list scrubs control chars from author-controlled epic titles
+# at the source (titles feed Claude context in later /idea-reframe slices).
+# The stub emits \u0007 as a JSON unicode escape (matching real gh API output).
+# Without scrubbing, the passthrough preserves the \u0007 escape in output.
+# With scrubbing, python decodes and strips the bell; visible text must remain.
+SCRUB_BIN="$FIX/.scrub-epic-bin"; mkdir -p "$SCRUB_BIN"
+cat > "$SCRUB_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+if [ "$1 $2" = "issue list" ]; then
+  printf '[{"number":516,"title":"Epic:\\u0007 Slipstream"}]'
+  exit 0
+fi
+exit 2
+GH
+chmod +x "$SCRUB_BIN/gh"
+scrub_out=$(PATH="$SCRUB_BIN:$PATH" inlib roadmap_tracker_epic_list)
+# \u0007 JSON unicode escape must be absent from output (scrub decoded and removed it);
+# visible text must remain. Use $'\\u0007' (ANSI-C quoting) for the literal 6-char
+# escape sequence, since bash 5.x interprets '\u0007' as a BEL byte.
+_scrub_escape_pat=$'\\u0007'
+if printf '%s' "$scrub_out" | grep -qF "$_scrub_escape_pat"; then
+  fail_case RL-39c "control char unicode escape survived in output: [$scrub_out]"
+elif printf '%s' "$scrub_out" | grep -q 'Epic: Slipstream'; then
+  pass RL-39c
+else
+  fail_case RL-39c "unexpected output: [$scrub_out]"
+fi
+
+# RL-40 — link_subissue (GitHub): resolve child database id, POST it to the
+# parent's sub_issues collection. Gated on sub_issues_enabled=true.
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+sub_issues_enabled: true
+YAML
+LINK_BIN="$FIX/.link-bin"; mkdir -p "$LINK_BIN"
+cat > "$LINK_BIN/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+printf '%s\n' "$*" >> "${GH_STUB_LOG:?}"
+case "$*" in
+  "api repos/{owner}/{repo}/issues/748 --jq .id") printf '4649261078'; exit 0 ;;
+esac
+case "$1 $2" in
+  "api -X") exit 0 ;;
+esac
+echo "unexpected gh call: $*" >&2
+exit 2
+GH
+chmod +x "$LINK_BIN/gh"
+: > "$GH_STUB_LOG"
+PATH="$LINK_BIN:$PATH" inlib roadmap_tracker_issue_link_subissue 516 748
+rc=$?
+if [ "$rc" = 0 ] \
+   && grep -q 'api repos/{owner}/{repo}/issues/748 --jq .id' "$GH_STUB_LOG" \
+   && grep -q 'api -X POST repos/{owner}/{repo}/issues/516/sub_issues -F sub_issue_id=4649261078' "$GH_STUB_LOG"; then
+  pass RL-40
+else
+  fail_case RL-40 "rc=$rc log=$(cat "$GH_STUB_LOG" 2>/dev/null)"
+fi
+
+# RL-40b — Azure DevOps unsupported for the writer (nonzero + stderr note).
+# AZ_BIN must be on PATH so roadmap_require_backend passes and we reach the
+# azure-devops) case that emits the "not supported" diagnostic.
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+sub_issues_enabled: true
+YAML
+err40b=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_link_subissue 516 748 2>&1 >/dev/null)
+rc=$?
+if [ "$rc" != 0 ] && printf '%s' "$err40b" | grep -qi 'not supported'; then
+  pass RL-40b
+else
+  fail_case RL-40b "rc=$rc err=[$err40b]"
+fi
+
+# RL-40c — gate: sub_issues_enabled not true → soft no-op (return 0, no POST).
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+sub_issues_enabled: false
+YAML
+: > "$GH_STUB_LOG"
+PATH="$LINK_BIN:$PATH" inlib roadmap_tracker_issue_link_subissue 516 748 2>/dev/null
+rc=$?
+if [ "$rc" = 0 ] && ! grep -q 'sub_issues' "$GH_STUB_LOG"; then
+  pass RL-40c
+else
+  fail_case RL-40c "rc=$rc log=$(cat "$GH_STUB_LOG" 2>/dev/null)"
+fi
+
+# RL-40d — argument guard: missing child → return 2, no tracker call.
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: github
+sub_issues_enabled: true
+YAML
+: > "$GH_STUB_LOG"
+PATH="$LINK_BIN:$PATH" inlib roadmap_tracker_issue_link_subissue 516 2>/dev/null
+rc=$?
+if [ "$rc" = 2 ] && [ ! -s "$GH_STUB_LOG" ]; then
+  pass RL-40d
+else
+  fail_case RL-40d "rc=$rc log=$(cat "$GH_STUB_LOG" 2>/dev/null)"
+fi
+
+# RL-40e — argument guard: missing parent → return 2, no tracker call.
+: > "$GH_STUB_LOG"
+PATH="$LINK_BIN:$PATH" inlib roadmap_tracker_issue_link_subissue "" 748 2>/dev/null
+rc=$?
+if [ "$rc" = 2 ] && [ ! -s "$GH_STUB_LOG" ]; then
+  pass RL-40e
+else
+  fail_case RL-40e "rc=$rc log=$(cat "$GH_STUB_LOG" 2>/dev/null)"
+fi
+
+# RL-40f — gate precedence on ADO: sub_issues_enabled false soft-no-ops on
+# azure-devops too (return 0), never reaching the "not supported" diagnostic.
+# Pins the gate-before-backend ordering for the ADO path (RL-40c covers github).
+cat > "$FIX/roadmap.config.yaml" <<'YAML'
+backend: azure-devops
+sub_issues_enabled: false
+YAML
+err40f=$(PATH="$AZ_BIN:$PATH" inlib roadmap_tracker_issue_link_subissue 516 748 2>&1 >/dev/null)
+rc=$?
+if [ "$rc" = 0 ] && ! printf '%s' "$err40f" | grep -qi 'not supported'; then
+  pass RL-40f
+else
+  fail_case RL-40f "rc=$rc err=[$err40f]"
 fi
 
 [ "$fail" = 0 ] && echo "roadmap-lib contract: ALL PASS" || exit 1

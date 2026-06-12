@@ -1389,6 +1389,75 @@ roadmap_tracker_pr_closure_status() {
   esac
 }
 
+# roadmap_github_issue_link_subissue <parent> <child> — attach <child> as a
+# native GitHub sub-issue of <parent>. The sub-issues API keys on the child's
+# database id, not its issue number, so resolve that first.
+roadmap_github_issue_link_subissue() {
+  local parent="$1" child="$2" child_id
+  child_id="$(gh api "repos/{owner}/{repo}/issues/${child}" --jq .id)" || return $?
+  [ -n "$child_id" ] || { echo "roadmap_github_issue_link_subissue: could not resolve database id for #$child" >&2; return 1; }
+  gh api -X POST "repos/{owner}/{repo}/issues/${parent}/sub_issues" -F sub_issue_id="${child_id}" >/dev/null
+}
+
+# roadmap_tracker_issue_link_subissue <parent> <child> — link <child> under
+# parent epic <parent> through the vendor-neutral seam. Gated on the
+# sub_issues_enabled config flag: when it is not "true" the call is a soft
+# no-op (return 0, stderr note) so a project that disables sub-issues does not
+# fail capture. GitHub uses the native sub-issues API; Azure DevOps is not yet
+# supported (returns nonzero with a controlled diagnostic).
+roadmap_tracker_issue_link_subissue() {
+  local parent="${1:-}" child="${2:-}"
+  [ -n "$parent" ] && [ -n "$child" ] || {
+    echo "roadmap_tracker_issue_link_subissue: parent and child are required" >&2
+    return 2
+  }
+  local enabled
+  # Fail-safe: an absent/empty/false flag all soft-no-op (return 0) so capture never fails when sub-issues are off or unconfigured.
+  enabled="$(roadmap_config_get sub_issues_enabled 2>/dev/null)"
+  if [ "$enabled" != "true" ]; then
+    echo "roadmap_tracker_issue_link_subissue: sub_issues_enabled is not true; skipping link of #$child under #$parent" >&2
+    return 0
+  fi
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) roadmap_github_issue_link_subissue "$parent" "$child" ;;
+    azure-devops) echo "roadmap_tracker_issue_link_subissue: sub-issue linking is not supported on azure-devops" >&2; return 1 ;;
+    *) echo "roadmap_tracker_issue_link_subissue: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
+# roadmap_github_epic_list — open epics as [{number,title}] JSON on stdout.
+# Epic titles are author-controlled GitHub content; scrub control chars at the
+# source via ARBO_CTRL_CHAR_CLASS (env-bridged from scrub-control-chars.sh) so
+# consumers rendering titles into Claude context inherit the source scrub layer.
+roadmap_github_epic_list() {
+  gh issue list --label type:epic --state open --json number,title --limit 200 \
+    | python3 -c '
+import json, os, re, sys
+ctrl = re.compile(os.environ["ARBO_CTRL_CHAR_CLASS"])
+data = json.load(sys.stdin)
+for e in data:
+    if isinstance(e.get("title"), str):
+        e["title"] = ctrl.sub("", e["title"])
+print(json.dumps(data, separators=(",", ":")), end="")
+'
+}
+
+# roadmap_tracker_epic_list — backend-neutral list of open epics as
+# [{number,title}] JSON. GitHub queries the type:epic label; Azure DevOps
+# degrades to an empty array (parity with roadmap_tracker_pr_list) so scout
+# flows that consume it surface no epic candidates rather than erroring.
+roadmap_tracker_epic_list() {
+  local backend="${ROADMAP_BACKEND:-$(roadmap_backend)}"
+  roadmap_require_backend "$backend" || return $?
+  case "$backend" in
+    github) roadmap_github_epic_list ;;
+    azure-devops) printf '[]' ;;
+    *) echo "roadmap_tracker_epic_list: unsupported backend: $backend" >&2; return 1 ;;
+  esac
+}
+
 # True if a label with the given name exists in the current repo. Makes one
 # round-trip per call; use a cached override (as install-labels.sh does) for
 # bulk checks.

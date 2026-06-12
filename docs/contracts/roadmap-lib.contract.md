@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.14
+version: 1.15
 producer-type: script
 consumer-type: script
 consumes:
@@ -91,6 +91,8 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
   - `verification=supported|unsupported|unknown`
   - `evidence=<controlled string>`
   For GitHub, `Closes #N` / `Fixes #N` / `Resolves #N` variants classify as `intent=close`; a bare `#N` classifies as `intent=reference`; no mention classifies as `intent=none`. For Azure DevOps, the helper lists PR-linked work items, finds the requested issue/work-item, reads its current state, and returns `intent=close` / `verification=supported` only when that work item is already in the configured closed-state set. Linked-but-open work items return `intent=unknown` / `verification=unknown`; absent links and provider read failures also return non-close results with controlled evidence.
+- **`roadmap_tracker_epic_list`** — one line of JSON: an array `[{number,title}]` of open epics. For GitHub, queries the `type:epic` label with `--state open` (200-item window); epic titles are scrubbed of ASCII control chars at the source via `ARBO_CTRL_CHAR_CLASS` before leaving the helper. For Azure DevOps, degrades to `[]` (parity with `roadmap_tracker_pr_list`). Returns nonzero when the backend check fails (missing tools, auth, or unsupported backend).
+- **`roadmap_tracker_issue_link_subissue PARENT CHILD`** — no stdout on success; returns 0. Returns 2 with a stderr diagnostic when either argument is missing. Gated on `sub_issues_enabled`: when it is not `true`, the call is a soft no-op (return 0, stderr note, no tracker mutation). For GitHub, resolves the child's database id and POSTs it to the parent's `sub_issues` collection. Azure DevOps is not yet supported (returns nonzero with a controlled diagnostic).
 - **`roadmap_pulse_path`** — one line: the pulse JSON path; empty when root unknown.
 - **`roadmap_pulse_get_field KEY`** / **`roadmap_pulse_get_nag NAME`** — one line: the field/nag value; empty string when absent, null, or file missing. Always returns 0.
 - **`roadmap_pulse_set_nag_fired` / `roadmap_pulse_update_field`** — no stdout; side effect is an atomic rewrite of the pulse JSON. Always returns 0 (fail-silent).
@@ -119,6 +121,9 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **Pulse fail-silence.** All pulse readers return 0 with empty stdout when the file/field is missing; writers are atomic (`.tmp` + `mv`) and never error out the caller.
 - **Global label exclusivity.** `roadmap_set_globally_exclusive_label` MUST remove the label from every open holder except the target, MUST ensure the label exists before applying, and MUST apply it to the target. The target is never cleared. `DRY_RUN=1` MUST perform no tracker mutation (no remove, no create, no add) and instead print the planned operations. Rich label metadata (description/color) is the caller's responsibility; the helper's ensure-exists is bare.
 - **Tooling parity.** The `yq`/`jq` paths and the `python3` fallbacks are intended to produce equivalent output regardless of which tool is installed. `roadmap_config_list` captures `yq` output first and falls through to the python3 parser if the installed `yq` rejects the expression dialect, so runners with mikefarah `yq` and machines without `yq` keep the same list protocol.
+- **Epic-list is read-only and bounded.** `roadmap_tracker_epic_list` performs no mutation, filters to open `type:epic` issues, and caps the GitHub query at a 200-item window. Azure DevOps returns an empty array so downstream consumers degrade gracefully.
+- **Epic titles are scrubbed at the source.** Author-controlled epic titles are control-char-scrubbed at the source via `ARBO_CTRL_CHAR_CLASS` before leaving the helper, so consumers rendering them into Claude context inherit the source layer of the scrub-at-source-and-consumer invariant.
+- **Sub-issue linking is gated and GitHub-first.** `roadmap_tracker_issue_link_subissue` MUST treat a non-`true` `sub_issues_enabled` as a soft no-op (return 0, no mutation), MUST require both parent and child (return 2 otherwise), and MUST link via the native GitHub sub-issues API keyed on the child's database id. Azure DevOps linking is unsupported in this version and returns nonzero with a controlled diagnostic — never a silent success. When `sub_issues_enabled` is not true, Azure DevOps projects also soft-no-op rather than returning the not-supported diagnostic.
 
 ## Test surface
 
@@ -157,9 +162,19 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-35b:** the same helper with `DRY_RUN=1` performs no tracker mutation and prints the exact plan lines (`would remove 'next-up' from #11`, `would add 'next-up' to #574`).
 - **RL-35c:** when a holder's `--remove-label` fails, the helper still applies the label to the target (best-effort) but returns nonzero — a failed clear is surfaced, never silently swallowed.
 - **RL-35d:** when the holder enumeration (`roadmap_tracker_issue_list`) fails, the helper attempts no clear, still applies the label to the target, and returns nonzero — an unverifiable sweep is not reported as success.
+- **RL-39:** `roadmap_tracker_epic_list` on `backend: github` delegates to `gh issue list --label type:epic --state open --json number,title --limit 200` and returns the `[{number,title}]` array unchanged.
+- **RL-39b:** `roadmap_tracker_epic_list` on `backend: azure-devops` degrades to `[]` — the dispatch branch emits a static `[]` and issues no `az boards` tracker query.
+- **RL-39c:** `roadmap_tracker_epic_list` strips ASCII control chars (e.g. ``) from author-controlled epic titles at the source — the `` JSON unicode escape is absent from the output, and visible title text is preserved.
+- **RL-40:** `roadmap_tracker_issue_link_subissue 516 748` on `backend: github` with `sub_issues_enabled: true` resolves the child database id (`gh api .../issues/748 --jq .id`) and POSTs `sub_issue_id` to the parent's `sub_issues` collection.
+- **RL-40b:** the same helper on `backend: azure-devops` returns nonzero with a `not supported` diagnostic (no silent success).
+- **RL-40c:** with `sub_issues_enabled: false` the helper is a soft no-op — return 0, no `sub_issues` POST.
+- **RL-40d:** missing child argument returns 2 with no tracker call.
+- **RL-40e:** missing/empty parent argument returns 2 with no tracker call.
+- **RL-40f:** with `sub_issues_enabled: false` on `backend: azure-devops`, the helper soft-no-ops (return 0) and does NOT emit the not-supported diagnostic — pinning the gate-before-backend ordering on the ADO path.
 
 ## Versioning
 
+- **1.15** (2026-06-12) — adds `roadmap_tracker_epic_list` (open `type:epic` issues as `[{number,title}]`, GitHub-first, ADO→`[]`; RL-39/RL-39b) and `roadmap_tracker_issue_link_subissue` (native GitHub sub-issue link, gated on `sub_issues_enabled`, ADO unsupported; RL-40/40b/40c/40d/40e/40f). First slice of the `/idea` capture reframe. Issue #751.
 - **1.14** (2026-06-06) — adds `roadmap_set_globally_exclusive_label`, the cross-issue exclusive-label helper extracted from `/handoff` Step 4–5, with RL-35/35b/35c/35d pinning the clear-others / bare ensure-exists / apply-to-target sequence, the `DRY_RUN` plan output, and nonzero-return on failed clear or failed holder-enumeration (no silent exclusivity breach). Issue #574.
 - **1.13** (2026-06-04) — renders Arboretum-authored Markdown bodies to HTML for Azure DevOps `System.Description` create/update writes, preserves existing ADO HTML during read-modify-write updates, and keeps GitHub raw Markdown unchanged. Issue #540.
 - **1.12** (2026-06-03) — pins raw Azure DevOps `System.Tags` merge output so ADO labels created through `/idea` and roadmap helper paths do not store JSON quote characters. Issue #506.
