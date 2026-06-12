@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # Smoke test for docs/contracts/pre-commit-branch-check.cli-contract.md.
-# Exercises CLI-1..CLI-7 via nine fixture scenarios (A-I) driving the
+# Exercises CLI-1..CLI-9 via fixture scenarios (A–O) driving the
 # hook directly with stdin JSON. Picked up automatically by
 # ci-checks.sh's === Smoke tests === loop.
 
@@ -238,6 +238,28 @@ else
   fail=1
 fi
 rm -f "$n_out" "$n_err"; rm -rf "$WARN"
+
+# Scenario O — #390 worktrees-always permit case via the CLI-3 $PWD fallback.
+# A session whose cwd is its own feature-branch tree issues a BARE `git commit`
+# (no `git -C`, no `cd &&`) and must be PERMITTED, silently. This is the exact
+# false-block #390 reported, now structurally prevented: under worktrees-always
+# (#716) the session cwd is the feature-branch tree, so CLI-3's $PWD fallback
+# resolves that tree's branch rather than the main tree's protected branch.
+# #390's named `git -C`/`cd &&` shapes are already pinned by D/E; this locks the
+# bare-commit case so the false-block cannot silently return.
+#
+# Fixture note: $HOST is a plain checkout switched to a feature branch, NOT a
+# linked `git worktree`. That is deliberate and sufficient — the hook resolves
+# the branch with `git -C "$PWD" rev-parse --abbrev-ref HEAD`, which reads a
+# feature-branch checkout and a linked worktree identically, so the plain
+# checkout faithfully exercises the worktrees-always $PWD-fallback path without
+# the cost of a real worktree fixture. The branch has no issue number, so the
+# CLI-8 collision read-back stays `clear` and stderr remains empty per
+# run_permitted. (Host is on main from H/M.)
+( cd "$HOST" && git checkout -q -b feat/scenario-o )
+run_permitted "O: bare git commit on feature-branch checkout — \$PWD-fallback permits (worktrees-always, #390)" \
+  '{"tool_input":{"command":"git commit -am fix"}}' \
+  0
 
 if [ "$fail" -ne 0 ]; then
   echo "SMOKE TEST FAILED" >&2
