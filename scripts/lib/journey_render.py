@@ -69,48 +69,50 @@ def process(path, FAM):
     seen=set(); stage='(pre-workflow)'; skill='(direct)'
     tree=OrderedDict(); uuid_root={}; tooluse={}; intakes=[]; turn_no=0
     fam_ctx={}  # context-$ per model family → session-dominant family (intake pricing, D2)
-    for line in open(path):
-        try: o=json.loads(line)
-        except: continue
-        u=o.get('uuid')
-        msg=o.get('message') or {}; usage=msg.get('usage'); mid=msg.get('id')
-        content=msg.get('content'); skill_invoked=None
-        if isinstance(content,list):
-            for c in content:
-                if not isinstance(c,dict): continue
-                if c.get('type')=='tool_use':
-                    tooluse[c.get('id')]=source_label(c)
-                    if c.get('name')=='Skill':
-                        skill_invoked=scrub((c.get('input',{}) or {}).get('skill','?'))
-                if c.get('type')=='tool_result':
-                    intakes.append((turn_no, len(str(c.get('content',''))),
-                                    tooluse.get(c.get('tool_use_id'),'context/system')))
-        if skill_invoked:
-            short=skill_invoked.split(':')[-1]
-            if short in STAGE_SKILLS: stage=short; skill=f"{short} (direct)"
-            else: skill=skill_invoked
-        if u is not None: uuid_root[u]=(stage,skill)
-        if isinstance(usage,dict) and mid and mid not in seen and 'input_tokens' in usage:
-            seen.add(mid); turn_no+=1
-            c,p=cost_of(usage,msg.get('model'),FAM)
-            fam_ctx[fam(msg.get('model'))]=fam_ctx.get(fam(msg.get('model')),0.0)+c
-            a=tree.setdefault(stage,OrderedDict()).setdefault(skill,acc())
-            a['ctx']+=c; a['op']+=p; a['turns']+=1
+    with open(path) as f:
+        for line in f:
+            try: o=json.loads(line)
+            except (json.JSONDecodeError, RecursionError): continue
+            u=o.get('uuid')
+            msg=o.get('message') or {}; usage=msg.get('usage'); mid=msg.get('id')
+            content=msg.get('content'); skill_invoked=None
+            if isinstance(content,list):
+                for c in content:
+                    if not isinstance(c,dict): continue
+                    if c.get('type')=='tool_use':
+                        tooluse[c.get('id')]=source_label(c)
+                        if c.get('name')=='Skill':
+                            skill_invoked=scrub((c.get('input',{}) or {}).get('skill','?'))
+                    if c.get('type')=='tool_result':
+                        intakes.append((turn_no, len(str(c.get('content',''))),
+                                        tooluse.get(c.get('tool_use_id'),'context/system')))
+            if skill_invoked:
+                short=skill_invoked.split(':')[-1]
+                if short in STAGE_SKILLS: stage=short; skill=f"{short} (direct)"
+                else: skill=skill_invoked
+            if u is not None: uuid_root[u]=(stage,skill)
+            if isinstance(usage,dict) and mid and mid not in seen and 'input_tokens' in usage:
+                seen.add(mid); turn_no+=1
+                c,p=cost_of(usage,msg.get('model'),FAM)
+                fam_ctx[fam(msg.get('model'))]=fam_ctx.get(fam(msg.get('model')),0.0)+c
+                a=tree.setdefault(stage,OrderedDict()).setdefault(skill,acc())
+                a['ctx']+=c; a['op']+=p; a['turns']+=1
     return tree, uuid_root, intakes, turn_no, fam_ctx
 
 def child_summary(path, FAM):
     seen=set(); ctx=op=0.0; turns=0; puid=None; own=[]; label="subagent"; model=""
-    for line in open(path):
-        try: o=json.loads(line)
-        except: continue
-        if puid is None: puid=o.get('parentUuid')
-        if o.get('uuid'): own.append(o['uuid'])
-        lbl=o.get('attributionAgent') or o.get('attributionSkill')
-        if lbl: label=scrub(lbl)
-        msg=o.get('message') or {}; u=msg.get('usage'); mid=msg.get('id')
-        if isinstance(u,dict) and mid and mid not in seen and 'input_tokens' in u:
-            seen.add(mid); c,p=cost_of(u,msg.get('model'),FAM); ctx+=c; op+=p; turns+=1
-            model=msg.get('model',model)
+    with open(path) as f:
+        for line in f:
+            try: o=json.loads(line)
+            except (json.JSONDecodeError, RecursionError): continue
+            if puid is None: puid=o.get('parentUuid')
+            if o.get('uuid'): own.append(o['uuid'])
+            lbl=o.get('attributionAgent') or o.get('attributionSkill')
+            if lbl: label=scrub(lbl)
+            msg=o.get('message') or {}; u=msg.get('usage'); mid=msg.get('id')
+            if isinstance(u,dict) and mid and mid not in seen and 'input_tokens' in u:
+                seen.add(mid); c,p=cost_of(u,msg.get('model'),FAM); ctx+=c; op+=p; turns+=1
+                model=msg.get('model',model)
     return dict(ctx=ctx,op=op,turns=turns,parent=puid,own=own,label=label,model=model)
 
 def add_children(session_path, tree, uuid_root, FAM, fam_ctx=None):
@@ -283,8 +285,9 @@ def render_json(tree, intakes, total_turns, dom_fam='opus', dom_rate=0.0,
 
 def last_ts(path):
     ts=None
-    for line in open(path):
-        try: o=json.loads(line)
-        except: continue
-        if o.get('timestamp'): ts=o['timestamp']
+    with open(path) as f:
+        for line in f:
+            try: o=json.loads(line)
+            except (json.JSONDecodeError, RecursionError): continue
+            if o.get('timestamp'): ts=o['timestamp']
     return ts or '0000-00-00T000000Z'
