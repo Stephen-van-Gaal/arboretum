@@ -72,7 +72,7 @@ def process(path, FAM):
     with open(path) as f:
         for line in f:
             try: o=json.loads(line)
-            except (json.JSONDecodeError, RecursionError): continue
+            except (ValueError, RecursionError): continue  # ValueError subsumes JSONDecodeError + the 3.11+ int-digit-limit ValueError (#776); both non-BaseException, so the py/catch-base-exception fix holds
             u=o.get('uuid')
             msg=o.get('message') or {}; usage=msg.get('usage'); mid=msg.get('id')
             content=msg.get('content'); skill_invoked=None
@@ -104,7 +104,7 @@ def child_summary(path, FAM):
     with open(path) as f:
         for line in f:
             try: o=json.loads(line)
-            except (json.JSONDecodeError, RecursionError): continue
+            except (ValueError, RecursionError): continue  # ValueError subsumes JSONDecodeError + the 3.11+ int-digit-limit ValueError (#776); both non-BaseException, so the py/catch-base-exception fix holds
             if puid is None: puid=o.get('parentUuid')
             if o.get('uuid'): own.append(o['uuid'])
             lbl=o.get('attributionAgent') or o.get('attributionSkill')
@@ -288,6 +288,6 @@ def last_ts(path):
     with open(path) as f:
         for line in f:
             try: o=json.loads(line)
-            except (json.JSONDecodeError, RecursionError): continue
+            except (ValueError, RecursionError): continue  # ValueError subsumes JSONDecodeError + the 3.11+ int-digit-limit ValueError (#776); both non-BaseException, so the py/catch-base-exception fix holds
             if o.get('timestamp'): ts=o['timestamp']
     return ts or '0000-00-00T000000Z'
