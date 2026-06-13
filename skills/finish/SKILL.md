@@ -157,40 +157,73 @@ Skip this step entirely for documentation-only changes (no source files in the d
 
 ### Step 5: Review dispatch (B4)
 
-The B4 review stage is a **dispatch** over replaceable, fresh-context lanes
-(`docs/specs/review-stage.spec.md`). It is **mandatory**.
+The B4 review stage is a **registry-driven section dispatch** over replaceable,
+fresh-context reviewers (`docs/specs/review-stage.spec.md`, instantiating
+`docs/specs/section-dispatch.spec.md`). It is **mandatory**. Reviewers are declared in
+`reviewers.yml` (the registry — a sibling to `.arboretum.yml review:`, which configures
+the *post-PR* bots); add, swap, or disable a reviewer by editing one row — never this step.
 
-1. Compute the lane plan deterministically:
+1. Build the request and select reviewers deterministically:
 
    ```bash
    source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
    BASE="$(workspace_base_ref)"
-   bash scripts/review-dispatch.sh "$BASE"
+   # Pipe the changed-file list (regenerated NOW, not carried from an earlier stage)
+   # straight into the filter — no shared temp path that a concurrent session/worktree
+   # could clobber between generation and read.
+   git diff "$BASE"...HEAD --name-only \
+     | bash scripts/review-registry-filter.sh reviewers.yml \
+         --altitude finish --artifact diff --base "$BASE" --files-from -
    ```
 
-2. For each planned lane, in the printed order, dispatch a **generic
-   `general-purpose` subagent** (per `docs/specs/skill-and-agent-authoring.spec.md`
-   § "Fresh-context driver dispatch") and instruct it to **invoke the lane's
-   skill**, passing a brief carrying `diff_scope` (the `git diff $BASE...HEAD
-   --name-only` output, regenerated **now** — not carried from an earlier stage),
-   the `lane`, and (for `ai-surface`) the matched `surface`, the CLAUDE.md scrub
-   invariant, and the risk categories:
-   - `ai-surface` → instruct the subagent to invoke `/ai-surface-review` — via the Skill tool as `arboretum:ai-surface-review` (homegrown injection + data-flow). The slash form is the user-facing command; the plugin-prefixed form is the Skill-tool name the subagent resolves.
-   - `general-security` → instruct it to invoke the configured general backend (default: the built-in `/security-review`).
-   - `correctness` → instruct it to invoke the configured correctness backend (default: `/code-review`).
+   The filter emits one JSONL record per selected reviewer — `{id, type, invoke, gate,
+   normalizer}` — in registry (dispatch) order, with `{base}` already shell-quoted in
+   runtime `invoke`s. `altitude`/`artifact` are **data**: they change the fan-out *width*,
+   not this mechanism.
 
-   **Invariant:** the lane name and skill name are *what the subagent invokes* —
-   never pass them as `subagent_type`; the subagent type is always
-   `general-purpose`. Arboretum skills resolve under their plugin-prefixed Skill
-   name (e.g. `arboretum:ai-surface-review`); the bare name does not. The subagent
-   returns only the coverage manifest.
+2. Fan out over the selected reviewers in **one batch, one level only** (a reviewer never
+   dispatches reviewers), dispatching each by its `type`:
 
-   Validate each returned manifest with `scripts/validate-review-manifest.sh`; relay it.
+   - **`type: skill`** — dispatch a **generic `general-purpose` subagent** (per
+     `docs/specs/skill-and-agent-authoring.spec.md` § "Fresh-context driver dispatch") and
+     instruct it to **invoke** the row's skill, passing a brief carrying `diff_scope`, the
+     reviewer `id`, and (for `ai-surface`) the matched `surface`, the CLAUDE.md scrub
+     invariant, and the risk categories. The default registry's skill rows are:
+     - `ai-surface` → invoke `/ai-surface-review` — via the Skill tool as `arboretum:ai-surface-review` (homegrown injection + data-flow).
+     - `general-security` → invoke `/security-review` (the built-in general backend).
+     - `correctness` → invoke `/code-review` (the correctness backend).
 
-3. **Degradation:** if a lane's backend is unavailable in this environment, emit
-   "&lt;lane&gt; deferred to /land reviewers (Copilot/Codex)" — never a silent skip.
+     **Invariant:** the reviewer/skill name is *what the subagent invokes* — never pass it
+     as `subagent_type`; the subagent type is always `general-purpose`. Arboretum skills
+     resolve under their plugin-prefixed Skill name (e.g. `arboretum:ai-surface-review`);
+     the bare name does not. The subagent returns only the manifest.
 
-4. A Critical finding is surfaced for the user to act on (no auto-halt this slice).
+   - **`type: runtime`** — run the row's `invoke` command via Bash and pipe its stdout
+     through the row's adapter (for `normalizer: codex`, `scripts/review-adapter-codex.sh`),
+     which **scrubs control chars at the boundary** and maps the CLI output onto the shared
+     manifest. No subagent — wrapping a JSON-emitting CLI in a Claude context would violate
+     the deterministic / LLM-free principle.
+
+3. Validate each returned manifest with `scripts/validate-review-manifest.sh`. A manifest
+   that fails is **dropped with an explicit notice** — never merged silently.
+
+4. **Merge:** reconcile the produced manifests into one `ReviewResult` with:
+
+   ```bash
+   bash scripts/merge-review-manifests.sh --degraded "<deferred-ids>" <manifest>...
+   ```
+
+   Merge is deterministic and LLM-free (dedupe by `(location, recommendation)`, max
+   severity on collision, lane provenance). **Skip merge only when exactly one reviewer ran
+   AND none deferred** — then relay that lone manifest directly. If *any* reviewer deferred
+   or was dropped, run the merge even for a single surviving manifest, so the `ReviewResult`
+   still carries `reviewers_degraded` (Step 5's degradation notice depends on it).
+
+5. **Degradation:** a reviewer whose backend is unavailable emits
+   "&lt;id&gt; deferred to /land reviewers (Copilot/Codex)" — never a silent skip — and its
+   id is passed to `--degraded` so the `ReviewResult` names who deferred.
+
+6. A Critical finding is surfaced for the user to act on (no auto-halt this slice).
 
 ### Step 5.4: Template taxonomy advisory gate
 
@@ -368,7 +401,7 @@ orchestrates:
 
 - Step 2's "specs affected by this branch" list will, for everything-else changes, always include the design spec at `docs/superpowers/specs/`; that spec drives `/consolidate`'s behaviour but is not itself a governed spec.
 - Step 4's `/consolidate` invocation is the reconciler for generated/evidence sections and built-state updates. The "If any affected spec is at `draft` or `stale`" check still applies — `/consolidate` flips `draft → active` when reconciliation succeeds.
-- Step 5's review dispatch is mandatory — run `scripts/review-dispatch.sh` and dispatch each planned lane (`/ai-surface-review`, general-security, correctness) rather than offering review optionally. Lanes degrade to the `/land` reviewers when a backend is absent.
+- Step 5's review dispatch is mandatory — select reviewers with `scripts/review-registry-filter.sh reviewers.yml` and fan out each selected reviewer (skill rows → `/ai-surface-review`, general-security, correctness; runtime rows → their adapter) rather than offering review optionally. Reviewers degrade to the `/land` reviewers when a backend is absent.
 
 These notes explain the current release pipeline; the procedure steps above
 remain authoritative.

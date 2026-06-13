@@ -7,6 +7,7 @@
 |---|---|---|
 | scripts/backfill-stage-labels.sh | docs/contracts/backfill-stage-labels.cli-contract.md | cli |
 | scripts/bootstrap-project.sh | docs/contracts/bootstrap-project.cli-contract.md | cli |
+| scripts/build-review-request.sh | docs/contracts/build-review-request.cli-contract.md | cli |
 | scripts/check-section-dispatch.sh | docs/contracts/check-section-dispatch.cli-contract.md | cli |
 | scripts/ci-checks.sh | docs/contracts/ci-checks.cli-contract.md | cli |
 | scripts/ci-preflight.sh | docs/contracts/ci-preflight.cli-contract.md | cli |
@@ -31,6 +32,7 @@
 | scripts/lib/yaml-lite.sh | docs/contracts/yaml-lite.contract.md | full |
 | scripts/log-stage.sh | docs/contracts/s9-stage-to-log-helper.contract.md | full |
 | scripts/manage-trust.sh | docs/contracts/trust-config.contract.md | full |
+| scripts/merge-review-manifests.sh | docs/contracts/merge-review-manifests.cli-contract.md | cli |
 | scripts/parse-plan-checkboxes.sh | docs/contracts/parse-plan-checkboxes.contract.md | full |
 | scripts/post-handoff-comment.sh | docs/contracts/post-handoff-comment.contract.md | full |
 | scripts/post-review-closeout.sh | docs/contracts/review-closeout.contract.md | full |
@@ -58,7 +60,9 @@
 | scripts/render-ledger-journey.sh | docs/contracts/render-ledger-journey.cli-contract.md | cli |
 | scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
 | scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
+| scripts/review-adapter-codex.sh | docs/contracts/review-adapter-codex.cli-contract.md | cli |
 | scripts/review-dispatch.sh | docs/contracts/review-dispatch.cli-contract.md | cli |
+| scripts/review-registry-filter.sh | docs/contracts/review-registry-filter.cli-contract.md | cli |
 | scripts/roadmap/audit-board.sh | docs/contracts/roadmap-audit-board.cli-contract.md | cli |
 | scripts/roadmap/inflight.sh | docs/contracts/inflight-classifier.contract.md | full |
 | scripts/roadmap/install-labels.sh | docs/contracts/roadmap-install-labels.cli-contract.md | cli |

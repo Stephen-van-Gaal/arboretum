@@ -1,0 +1,46 @@
+# reviewers.yml — the review-stage reviewer registry (section-dispatch instantiation, #791).
+#
+# A declarative registry of in-session review workers, selected by altitude + artifact,
+# each invoked through a skill or runtime adapter and emitting the shared review-manifest.
+# Edit one row to add/swap/disable a reviewer — the dispatcher never changes.
+#
+# Sibling to .arboretum.yml `review:` (which configures POST-PR async bots — Copilot/Codex
+# on an open PR). This file is the PRE-PR, in-session, any-altitude fan-out. Do not conflate.
+#
+# Conforms to the section-dispatch canonical shape (docs/specs/section-dispatch.spec.md),
+# validated by scripts/check-section-dispatch.sh. Required per worker: id, type
+# (skill|runtime), invoke; runtime workers require scrub: true. The altitudes/artifact/gate/
+# normalizer fields drive the dispatcher's registry.filter(altitude, artifact) and are
+# ignored by the conformance checker. List order = dispatch order.
+
+manifest_contract: docs/contracts/review-manifest.contract.md
+degradation: explicit-deferral-to-land-reviewers
+
+workers:
+  - id: ai-surface
+    type: skill
+    invoke: arboretum:ai-surface-review
+    altitudes: [finish]
+    artifact: [diff, tree]
+    gate: ai-surface
+
+  - id: general-security
+    type: skill
+    invoke: security-review
+    altitudes: [finish]
+    artifact: [diff, tree]
+
+  - id: correctness
+    type: skill
+    invoke: code-review
+    altitudes: [finish]
+    artifact: [diff]
+    gate: code
+
+  - id: codex
+    type: runtime
+    invoke: "node codex-companion.mjs review --json --base {base} --scope branch"
+    scrub: true
+    altitudes: [design, finish]
+    artifact: [doc, diff]
+    normalizer: codex
