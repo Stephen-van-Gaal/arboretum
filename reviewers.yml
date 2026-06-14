@@ -37,9 +37,15 @@ workers:
     artifact: [diff]
     gate: code
 
+  # The live codex lane requires the codex plugin to be installed. Its companion
+  # (codex-companion.mjs) lives in the plugin's versioned cache, not on the repo
+  # node path, so the invoke resolves the real path version-independently via
+  # scripts/resolve-codex-companion.sh (#800). When the codex plugin is absent the
+  # resolver exits non-zero, the invoke fails, and the row degrades to the /land
+  # reviewers (the section-dispatch "codex deferred" path) — unchanged behaviour.
   - id: codex
     type: runtime
-    invoke: "node codex-companion.mjs review --json --base {base} --scope branch"
+    invoke: node "$(bash scripts/resolve-codex-companion.sh)" review --json --base {base} --scope branch
     scrub: true
     altitudes: [design, finish]
     artifact: [doc, diff]
