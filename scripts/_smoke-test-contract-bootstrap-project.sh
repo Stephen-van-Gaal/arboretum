@@ -193,6 +193,23 @@ else
   fail_msg "CLI-9: expected non-zero exit with a missing-source diagnostic, got exit $orphan_rc: $orphan_out"
 fi
 
+# ── CLI-11: Dogfood mirror symlinks are skipped (design D5) ──────────────────
+# The arboretum-dev .claude/skills/ tree carries the web-session mirror — symlinks
+# into ../../skills/<name>. The bootstrap skill scan must skip them, or a fresh
+# project gets a half-populated skill set (a callable /start that hands off to
+# uninstalled commands). $TARGET was bootstrapped from the real repo above, so a
+# surviving mirror name proves the skip is missing. (Guard the assertion on the
+# source actually having a mirror entry, so this stays meaningful pre-mirror too.)
+if [ -L "$SCRIPT_DIR/../.claude/skills/start" ]; then
+  if [ ! -e "$TARGET/.claude/skills/start" ]; then
+    pass "CLI-11: mirror symlink (start) skipped — not copied into bootstrapped project"
+  else
+    fail_msg "CLI-11: mirror symlink (start) was copied into the bootstrapped project"
+  fi
+else
+  pass "CLI-11: no mirror entry present in source — skip-assertion vacuously holds"
+fi
+
 # ── Final result ─────────────────────────────────────────────────────────────
 if [ "$fail" -ne 0 ]; then
   echo "SMOKE TEST FAILED" >&2

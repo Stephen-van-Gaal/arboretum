@@ -220,6 +220,14 @@ if [ -d "$SKILLS_DIR" ]; then
   for skill_dir in "$SKILLS_DIR"/*/; do
     [ ! -d "$skill_dir" ] && continue
     skill_name="$(basename "$skill_dir")"
+    # Skip dogfood web-session mirror entries (symlinks into ../../skills). They
+    # are a dev-repo-only turn-1 workaround (design D5); following them here would
+    # copy a partial skill set into a bootstrapped project, leaving a callable
+    # /start that hands off to commands that were never installed.
+    if [ -L "${skill_dir%/}" ]; then
+      echo "  skipped (mirror symlink: $skill_name)"
+      continue
+    fi
     # Skip dev-prefixed and archived skills
     if [[ "$skill_name" == dev-* || "$skill_name" == _archived ]]; then
       echo "  skipped ($skill_name)"

@@ -26,9 +26,15 @@
 # installs from it. The result is the exact in-development skills on the
 # current branch (verified: copied, no .git, no github clone).
 #
-# Runs synchronously at SessionStart so the install completes before skills
-# are enumerated — the skills are therefore available in the same session.
-# Fires for both `startup` and `resume` (a resumed web container is just as
+# Runs synchronously at SessionStart, but a long-running web CLI enumerates its
+# skill registry once at launch — before this hook's install runs — so the
+# freshly installed plugin does not reliably register in the same session (it
+# appears unpredictably later, if at all within a short session; see #757).
+# Turn-1 availability in the dogfood repo comes instead from the committed
+# `.claude/skills/` mirror (scripts/generate-web-skill-mirror.sh), which is
+# present in the clone before launch. This hook is retained as the
+# local/persistent install path and as belt-and-braces for non-dogfood remote
+# use. Fires for both `startup` and `resume` (a resumed web container is just as
 # fresh: ~/.claude is ephemeral either way).
 #
 # Gates (no-op unless both hold):
@@ -96,9 +102,10 @@ if ! timeout 90 claude plugin install "arboretum@$MKT_NAME" --scope user >/dev/n
 fi
 
 # One concise line for Claude's context (SessionStart stdout → additionalContext).
-# Sets turn-2 expectations: a SessionStart hook installs the plugin *after* the
-# CLI has already enumerated skills for turn 1, so the skills register on the
-# next message, not the first. See docs/superpowers/specs/2026-06-07-web-session-boot-skill-load-design.md.
-echo "[web-setup] Arboretum skills installed for this web session. In a fresh web session they register after your first message — if an arboretum command (/start, /design, …) returns \"Unknown command\" on your first try, just resend it."
+# Turn-1 availability comes from the committed `.claude/skills/` mirror, not this
+# install (the CLI enumerated skills at launch, before this hook ran). This line
+# records that the persistent/local install path also completed.
+# See docs/superpowers/specs/2026-06-16-web-session-boot-skill-load-design.md.
+echo "[web-setup] Arboretum plugin install refreshed (local/persistent path). Turn-1 commands are served by the committed .claude/skills/ mirror."
 
 exit 0

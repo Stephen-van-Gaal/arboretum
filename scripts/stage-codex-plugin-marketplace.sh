@@ -89,7 +89,15 @@ git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do
     README.public.md) continue ;;
     .agents/skills|.agents/skills/*) continue ;;
     .claude/skills/dev-*) continue ;;
+    .claude/skills/reflect-dev|.claude/skills/reflect-dev/*) continue ;;
     .claude/skills/_archived|.claude/skills/_archived/*) continue ;;
+    # Dogfood web-session mirror entries are symlinks into ../../skills (#757);
+    # dev-only, must never reach the staged marketplace (cf. sync-public.yml's
+    # find -type l strip). Real dev dirs above are matched first and skipped.
+    .claude/skills/*) [ -L "$ROOT/$path" ] && continue ;;
+    scripts/generate-web-skill-mirror.sh) continue ;;
+    scripts/_smoke-test-contract-web-skill-mirror.sh) continue ;;
+    docs/contracts/generate-web-skill-mirror.cli-contract.md) continue ;;
     .claude/projects|.claude/projects/*) continue ;;
     scripts/_archived|scripts/_archived/*) continue ;;
     scripts/prepare-customer-testbed.sh) continue ;;
