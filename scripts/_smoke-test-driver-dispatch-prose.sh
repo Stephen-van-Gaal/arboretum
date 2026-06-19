@@ -18,6 +18,13 @@ ok() { echo "PASS: $1"; }
 SPEC="docs/specs/skill-and-agent-authoring.spec.md"
 FINISH="skills/finish/SKILL.md"
 
+# In a non-dev checkout (public sync / marketplace staging) the governed spec
+# this guard protects is excluded — docs/specs/ is dev-only — so there is
+# nothing to guard. Skip cleanly rather than fail when the spec is absent; in
+# arbo-dev the spec is always present and every assertion runs in full. (#667
+# Codex review — applied to both prose guards co-owned by this spec.)
+[ -f "$SPEC" ] || { echo "SKIP: $0 — $SPEC absent (dev-only governed spec not in this checkout)"; exit 0; }
+
 # Prose wraps across lines; flatten newlines to spaces so multi-token phrases
 # are not held hostage to the column at which an author happened to wrap.
 flat() { tr '\n' ' ' < "$1"; }
