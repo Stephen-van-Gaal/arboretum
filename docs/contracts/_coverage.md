@@ -73,6 +73,7 @@
 | scripts/roadmap/nag.sh | docs/contracts/roadmap-nag.contract.md | full |
 | scripts/roadmap/view.sh | docs/contracts/roadmap-view.contract.md | full |
 | scripts/seed-settings.sh | docs/contracts/seed-settings.cli-contract.md | cli |
+| scripts/spec-uplift-diagnose.sh | docs/contracts/spec-uplift-diagnose.contract.md | full |
 | scripts/stage-codex-plugin-marketplace.sh | docs/contracts/stage-codex-plugin-marketplace.cli-contract.md | cli |
 | scripts/sync-contracts.sh | docs/contracts/sync-contracts.contract.md | full |
 | scripts/token-cleanup.sh | docs/contracts/token-cleanup.cli-contract.md | cli |
