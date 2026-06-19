@@ -167,6 +167,16 @@ mandatory for everything-else work; never skip it.
 
 ### 4. Plan fold-in
 
+**Shaping-doc guard (skip plan fold-in).** If this session produced an
+epic/shaping design doc (`kind: shaping` — no build of its own; its children
+build individually, never this doc), **skip plan fold-in entirely**: do not
+invoke `superpowers:writing-plans`, and **omit the build-targeted fields**
+(only `related-issue` + `kind: shaping` are required — see the shaping schema in
+Step 6), then proceed directly to `design-package` / exit. A plan for a doc
+that will never build is wasted work, and `/build` refuses such a doc anyway
+(read-s2 exit 3). The unconditional `writing-plans` invocation below applies only
+to `kind: buildable` (the default) sessions.
+
 Planning is part of `/design`, not a separate workflow stage. After the design
 spec is written, invoke `superpowers:writing-plans` with a brief that includes:
 
@@ -225,15 +235,21 @@ overview, plan, and durable-doc diff.
 Sequence summary:
 
 - `/start` -> `/design` is the issue/request intake seam.
-- `design` writes the session document, folds in the plan, then invokes
-  `design-package` to produce the human review packet and durable-doc diff.
+- `design` writes the session document, folds in the plan (skipped for
+  `kind: shaping` sessions), then invokes `design-package` to produce the human
+  review packet and durable-doc diff.
 - `/design` -> `/build` remains the strict S2 contract seam.
 - `/build` refuses to self-heal invalid S2 input and returns to `/design` on
   design contradictions.
 
-### 6. Exit to `/build`
+### 6. Exit
 
-Both the design spec and the plan now exist. **Before exiting**, run the S2 producer self-check:
+For a `kind: buildable` session, both the design spec and the plan now exist and
+the exit hands off to `/build`. For a `kind: shaping` session, only the design
+spec exists (build-targeted fields omitted) and the exit is **terminal at human
+review** — there is no `/build` handoff, because its children are filed and built
+as separate issues, never this doc. **Before exiting**, run the S2 producer
+self-check:
 
 ```bash
 bash scripts/validate-design-spec.sh <design-spec-path>
@@ -241,7 +257,8 @@ bash scripts/validate-design-spec.sh <design-spec-path>
 
 If the validator exits non-zero, the spec is malformed against the S2 contract — fix the named field(s) and re-run before handing off. Per the S2 contract's D4 single-source-of-truth property, this is the same validator `/build` invokes at its entry step; passing it here guarantees `/build` will accept the spec.
 
-Before exiting to `/build`, stop for human review of the design package.
+Before exiting (to `/build` for a buildable session, or terminally for a shaping
+session), stop for human review of the design package.
 Everything-else work must not proceed into implementation until the user
 approves the goals, requirements, done criteria, design decisions, test
 approach, and plan. The only no-review exception is work that entered the
@@ -257,7 +274,12 @@ if [ -n "${ISSUE:-}" ]; then
 fi
 ```
 
-After approval, hand off to `/build` with the design spec path:
+For a `kind: shaping` session the exit is terminal here: there is no `/build`
+handoff. Stop after the human approves the design package; the doc's children are
+filed and built as separate issues. The buildable handoff below does not apply.
+
+After approval (buildable sessions), hand off to `/build` with the design spec
+path:
 
 ```
 /build docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md

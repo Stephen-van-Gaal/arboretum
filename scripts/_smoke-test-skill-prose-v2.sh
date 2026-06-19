@@ -428,7 +428,7 @@ ok "case 36 - tool entrypoints point to ARBORETUM.md and repeat the tripwire"
 # Case 37: stage prose states the review-before-build pause
 grep -q 'Only verified `agent-ready` work may skip the review-before-build pause.' "$START" \
   || fail "case 37 - /start missing verified agent-ready review-pause rule"
-grep -q 'Before exiting to `/build`, stop for human review of the design package.' "$DESIGN" \
+grep -q 'stop for human review of the design package.' "$DESIGN" \
   || fail "case 37 - /design missing design-package review pause"
 grep -q 'Do not log `/design exited` or hand off to `/build` until that approval has' "$DESIGN" \
   || fail "case 37 - /design does not keep stage exit logging behind human approval"
