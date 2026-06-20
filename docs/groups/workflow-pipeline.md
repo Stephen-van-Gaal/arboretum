@@ -83,6 +83,58 @@ build, e.g. `extract-component` #630; a spec-altitude arrangement that is docs-o
 e.g. this very document) are ordinary lookups under "altitude picks the arrangement,
 arrangement determines code/no-code," not contradictions.
 
+Under the **per-rung diagram convention** (each altitude doc carries its own diagram),
+this group doc shows the **whole ladder**; each workflow spec shows only its own rung.
+Every emit-seam boundary is annotated with the shared implementation-mechanism
+vocabulary **■ FILE / ◇ CONTEXT / ◈ TRACKER / ◎ FRONTMATTER** (glossary defined once
+in `orchestrator-workflow.spec` § Behaviour) plus the `brief-payload` schema name,
+which points back to `§ Shared Schemas` (the canonical home; never restated here):
+
+```
+                          THE WHOLE LADDER  (arch → group → spec → build)
+        Each rung shapes, then emits the rung below through the one emit-seam.
+        Seam boundaries: ■ FILE / ◇ CONTEXT / ◈ TRACKER / ◎ FRONTMATTER  + schema.
+
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │  ARCH ALTITUDE — orchestrator arrangement                  (no build)    │
+ │     shape architecture ──▶ emit groups ──▶ sequence                      │
+ │     provider: /architect                                                 │
+ └────────────────────────────────────────────────────────────────────────┘
+        │  emit-seam (arch → group)
+        │  brief  ◈ TRACKER (epic issue)  +  ◇ CONTEXT (/start → /design)
+        │  schema: brief-payload ──▶ § Shared Schemas
+        ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │  GROUP ALTITUDE — orchestrator arrangement                 (no build)    │
+ │     shape epic ──▶ emit sibling specs ──▶ sequence                       │
+ │     shape     /roadmap shape         TODO(#808)  [stub]                  │
+ │     emit      tracker ops            TODO(#808)  [unorchestrated]        │
+ │     sequence  epic-body prose        TODO(#831)  [no contract]           │
+ │     provider: emergent / partial  (see orchestrator-workflow.spec)       │
+ │     internal: arrangement-record ◎ FRONTMATTER ·                         │
+ │               pipeline-state ■ FILE / ◈ TRACKER                          │
+ └────────────────────────────────────────────────────────────────────────┘
+        │  emit-seam (group → spec)   ◀ first concrete instance: epic→slice (#645 canary)
+        │  brief  ◈ TRACKER (sub-issue)
+        │  schema: brief-payload ──▶ § Shared Schemas
+        ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │  SPEC ALTITUDE (leaf) — conductor arrangement              (BUILDS)      │
+ │     shape design spec ──▶ build via drivers ──▶ ship                     │
+ │     provider: /design · /build · /finish                                 │
+ │     internal: one stage = driver (fresh context) ·                       │
+ │               pipeline-state ■ FILE / ◈ TRACKER                          │
+ └────────────────────────────────────────────────────────────────────────┘
+        │  emit-seam (spec → build)
+        │  brief  ◎ FRONTMATTER (S2 design-spec)  +  ◇ CONTEXT (/design → /build)
+        │  fast lane (agent-ready / patch): ■ FILE .arboretum/{agent,patch}-briefs/<issue>.md
+        │  schema: brief-payload ──▶ § Shared Schemas
+        ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │  CODE — the leaf's output (the ground; not an altitude)                  │
+ └────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Orchestration
 
 <!-- HUMAN -->
@@ -137,17 +189,46 @@ beginners, reachable by a future Full-profile adopter.
 ## Shared Schemas
 
 <!-- HUMAN -->
-Two data shapes are shared across the children and **specified by them** (named here
-as the group's shared schemas, defined downstream — not restated):
+Two data shapes are shared across the children and **specified here** — this group
+doc is their canonical home. The children (#817 / #818 / #819) **reference** these
+schemas; none restate them. (Single-sourcing the fields upward structurally enforces
+the emit-seam's "specify once, reuse everywhere" rule — the same physical-location
+discipline the diagram glossary obeys.)
 
-- **The brief payload** — the emit-seam's data shape (the fields a parent hands a
-  child: `related-issue`, plan pointer, scope). Authoritatively specified by
-  `orchestrator-workflow` (#818) and `conductor-workflow` (#819); the #645 fix
-  (resolve the active slice's `plan` / `related-issue` through the brief without
-  mutating epic-level frontmatter) is its first test.
-- **The arrangement record** — the per-stage `dispatch-mode` / `default-model`
-  composition (#516 slice-2). The override surface for D4's deferred separate-axes
-  capability.
+### brief-payload
+
+The emit-seam's data shape — the fields a parent altitude hands a child. The carrying
+**mechanism** varies by boundary (◈ TRACKER sub-issue + ■ FILE brief at group→spec;
+◎ FRONTMATTER S2 at spec→build); the **field set** is one:
+
+| Field | Meaning |
+|---|---|
+| `related-issue` | The child's own tracker issue (sub-issue) number; positive integer. `/build`'s S2 gate (`read-s2-frontmatter.sh`) requires it. |
+| _scope_ (not a frontmatter key) | The child's job: what to change and where. Carried as the brief's prose body / the S2 Behaviour pointer the child implements — **not** a `scope:` YAML key. |
+| `plan` | Pointer to the child's plan (relative path \| `null`). **Resolved through the brief**, never by mutating the parent epic's frontmatter — the #645 fix and the seam's first test. |
+| `triage` | The child's routing class: `agent-target` \| `everything-else`. |
+| `implementation-mode` | `direct` \| `executing-plans` \| `subagent-driven-development`. |
+| `test-tiers` | `unit` / `contract` / `integration`, each `yes` \| `n/a — <reason>`. |
+| `kind` _(optional)_ | Closed enum `{buildable, shaping}`; **absent ⇒ `buildable`**. `kind: shaping` marks a non-buildable epic/shaping doc whose children build individually — `read-s2-frontmatter.sh` refuses it (exit 3) so `/build` never runs it (#692). |
+
+The `code`-styled fields manifest as YAML keys at the ◎ FRONTMATTER spec→build
+boundary (the S2 frontmatter `read-s2-frontmatter.sh` enforces:
+`related-issue` / `triage` / `implementation-mode` / `plan` / `test-tiers`, plus the
+optional `kind` shaping marker). _scope_ is the exception — it travels as the brief's
+prose body (the agent-brief task statement, or the sub-issue body at group→spec),
+never as a `scope:` key.
+
+### arrangement-record
+
+The per-stage `dispatch-mode` / `default-model` composition (#516 slice-2) — the
+override surface for D4's deferred separate-axes capability. Largely forward-looking;
+named here as the canonical home so children reference it as it fills in. Keyed per
+pipeline stage:
+
+| Field | Meaning |
+|---|---|
+| `dispatch-mode` | How a stage runs (the conductor arrangement's dispatch vocabulary). |
+| `default-model` | The arrangement-level model-routing floor. **Distinct** from a skill-local subagent `model` parameter — the child specs carry the arrangement-level name. |
 
 ## Implementation Notes
 
@@ -167,6 +248,23 @@ as the group's shared schemas, defined downstream — not restated):
   group-layer validator); #692 (`kind: shaping`, promoted toward "interior-altitude
   arrangement"); #645 (epic→slice mismatch = first emit-seam instance); #630
   (`extract-component`, the canonical group+code off-diagonal).
+
+### Open items
+
+<!-- HUMAN -->
+The group altitude is the **least-provided** rung (see the diagram's `TODO(#…)`
+markers and `orchestrator-workflow.spec` § Behaviour's punch-list). Each gap is
+tracked:
+
+- **shape** — `/roadmap shape` is stubbed ("not yet implemented") → **#808**
+- **emit** — tracker ops (`epic_list` / `link_subissue`) shipped but unorchestrated;
+  no group-emit skill drives them as one act yet → **#808**
+- **sequence** — build order is epic-body prose with no machine-checkable contract →
+  **#831**
+- **conductor-workflow** — the leaf/spec-altitude child spec is unwritten → **#819**
+- **`workflow-unification` migration (precursor D2)** — the active spec still governs
+  all three altitudes; its content migrates into the per-altitude children
+  incrementally (not split in one move).
 
 ### Design record
 
