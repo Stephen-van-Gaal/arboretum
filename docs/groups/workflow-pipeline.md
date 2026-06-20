@@ -6,6 +6,7 @@ document-shape: group
 parent: arboretum
 contains:
   - architecture-workflow
+  - orchestrator-workflow
 owns: []
 ---
 
@@ -55,7 +56,7 @@ remaining rows are planned membership, not yet in the frontmatter.
 | Name | Kind | One-line purpose | Status |
 |------|------|------------------|--------|
 | `architecture-workflow` | component (spec) | Arch altitude: `/architect` shapes groups + their boundaries; emits group-level work. | in `contains:` (#817) |
-| `orchestrator-workflow` | component (spec) | Group altitude (the current gap): shape → emit sibling specs → sequence them; the recursive interior arrangement. | planned (#818) |
+| `orchestrator-workflow` | component (spec) | Group altitude (the current gap): shape → emit sibling specs → sequence them; the recursive interior arrangement. | in `contains:` (#818) |
 | `conductor-workflow` | component (spec) | Spec altitude / leaf: shape → build (via drivers) → ship; one issue's journey. The machine #516 builds. | planned (#819) |
 
 `workflow-unification.spec.md` currently governs all three altitudes and is
