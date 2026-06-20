@@ -102,3 +102,4 @@
 | .claude/hooks/session-start.sh | docs/contracts/session-start-banner.contract.md | full |
 | .claude/hooks/statusline.sh | docs/contracts/statusline.contract.md | full |
 | .claude/hooks/web-setup.sh | docs/contracts/web-setup.cli-contract.md | cli |
+| .claude/hooks/worktree-write-guard.sh | docs/contracts/worktree-write-guard.cli-contract.md | cli |

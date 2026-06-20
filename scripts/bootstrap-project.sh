@@ -165,9 +165,10 @@ echo ""
 echo "Copying hooks..."
 # Session-start hook: always (Layer 0+)
 copy_if_missing "$HOOKS_DIR/hooks/session-start.sh" "$TARGET_DIR/.claude/hooks/session-start.sh"
-# Pre-commit branch check: Layer 2+ only
+# Pre-commit branch check + worktree write-guard: Layer 2+ only
 if [ "$MAX_LAYER" -ge 2 ]; then
   copy_if_missing "$HOOKS_DIR/hooks/pre-commit-branch-check.sh" "$TARGET_DIR/.claude/hooks/pre-commit-branch-check.sh"
+  copy_if_missing "$HOOKS_DIR/hooks/worktree-write-guard.sh" "$TARGET_DIR/.claude/hooks/worktree-write-guard.sh"
 fi
 chmod +x "$TARGET_DIR/.claude/hooks"/*.sh 2>/dev/null || true
 
