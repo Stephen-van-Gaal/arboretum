@@ -7,6 +7,7 @@ parent: arboretum
 contains:
   - architecture-workflow
   - orchestrator-workflow
+  - conductor-workflow
 owns: []
 ---
 
@@ -50,14 +51,16 @@ cost them nothing until a project grows enough to need them.
 Authored **incrementally** (precursor D2): the group doc lands first (#816) with
 `contains: []`; each child below joins `contains:` — and declares
 `parent: workflow-pipeline` — in the PR that authors its spec, as a paired
-round-trip update. `architecture-workflow` has joined `contains:` (#817); the
-remaining rows are planned membership, not yet in the frontmatter.
+round-trip update. All three children have now joined `contains:` —
+`architecture-workflow` (#817), `orchestrator-workflow` (#818), and
+`conductor-workflow` (#819) — completing the incremental authoring; ongoing work is
+the `workflow-unification` content migration into them (precursor D2).
 
 | Name | Kind | One-line purpose | Status |
 |------|------|------------------|--------|
 | `architecture-workflow` | component (spec) | Arch altitude: `/architect` shapes groups + their boundaries; emits group-level work. | in `contains:` (#817) |
 | `orchestrator-workflow` | component (spec) | Group altitude (the current gap): shape → emit sibling specs → sequence them; the recursive interior arrangement. | in `contains:` (#818) |
-| `conductor-workflow` | component (spec) | Spec altitude / leaf: shape → build (via drivers) → ship; one issue's journey. The machine #516 builds. | planned (#819) |
+| `conductor-workflow` | component (spec) | Spec altitude / leaf: shape → build (via drivers) → ship; one issue's journey. The machine #516 builds. | in `contains:` (#819) |
 
 `workflow-unification.spec.md` currently governs all three altitudes and is
 migrated into these children over time (precursor D2) — not split in one move, and
@@ -261,7 +264,9 @@ tracked:
   no group-emit skill drives them as one act yet → **#808**
 - **sequence** — build order is epic-body prose with no machine-checkable contract →
   **#831**
-- **conductor-workflow** — the leaf/spec-altitude child spec is unwritten → **#819**
+- **conductor-workflow** — the leaf/spec-altitude child spec is authored (#819, in
+  `contains:`); the thin-conductor / driver-per-stage refactor it governs as a target
+  continues to ship as #516 slices
 - **`workflow-unification` migration (precursor D2)** — the active spec still governs
   all three altitudes; its content migrates into the per-altitude children
   incrementally (not split in one move).
