@@ -4,7 +4,8 @@ name: workflow-pipeline
 status: active
 document-shape: group
 parent: arboretum
-contains: []
+contains:
+  - architecture-workflow
 owns: []
 ---
 
@@ -48,12 +49,12 @@ cost them nothing until a project grows enough to need them.
 Authored **incrementally** (precursor D2): the group doc lands first (#816) with
 `contains: []`; each child below joins `contains:` — and declares
 `parent: workflow-pipeline` — in the PR that authors its spec, as a paired
-round-trip update. **None are in `contains:` yet** — the table is the planned
-membership, not the current frontmatter.
+round-trip update. `architecture-workflow` has joined `contains:` (#817); the
+remaining rows are planned membership, not yet in the frontmatter.
 
 | Name | Kind | One-line purpose | Status |
 |------|------|------------------|--------|
-| `architecture-workflow` | component (spec) | Arch altitude: `/architect` shapes groups + their boundaries; emits group-level work. | planned (#817) |
+| `architecture-workflow` | component (spec) | Arch altitude: `/architect` shapes groups + their boundaries; emits group-level work. | in `contains:` (#817) |
 | `orchestrator-workflow` | component (spec) | Group altitude (the current gap): shape → emit sibling specs → sequence them; the recursive interior arrangement. | planned (#818) |
 | `conductor-workflow` | component (spec) | Spec altitude / leaf: shape → build (via drivers) → ship; one issue's journey. The machine #516 builds. | planned (#819) |
 
