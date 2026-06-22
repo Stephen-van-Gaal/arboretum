@@ -4,6 +4,18 @@
 
 set -uo pipefail
 
+# Hermetic fixtures (#842): the script-under-test reads its config from
+# RELEASE_CANDIDATE_* env vars. In the nightly workflow the `Capture preflight
+# base` step exports RELEASE_CANDIDATE_BASE_SHA=<real main HEAD> into $GITHUB_ENV,
+# which leaks into this test and makes update-release-candidate.sh resolve a base
+# commit that does not exist in the /tmp fixture repos → exit 2 on every case
+# (passed locally, failed only in the nightly). Clear the whole namespace up front
+# so the test controls exactly what each invocation sees; cases that need a value
+# (e.g. pinned-base) pass it explicitly per run.
+unset RELEASE_CANDIDATE_BASE_SHA RELEASE_CANDIDATE_BRANCH RELEASE_CANDIDATE_TITLE \
+  RELEASE_CANDIDATE_STALE_DAYS RELEASE_CANDIDATE_BOT_AUTHOR RELEASE_CANDIDATE_BOT_EMAIL \
+  RELEASE_CANDIDATE_PREPARE RELEASE_CANDIDATE_GH
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$ROOT/dev-tools/release/update-release-candidate.sh"
