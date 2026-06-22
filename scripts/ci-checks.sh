@@ -8,6 +8,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 source "$ROOT/scripts/lib/owner-doc-resolve.sh"   # group-aware # owner: resolution (D7, #681)
 fail=0
+# Failing-stage rollup (#839): record the stage where `fail` first flips so a
+# failed run can name the failing stage in $GITHUB_STEP_SUMMARY at a glance.
+# `fail` is monotonic 0->1, so this attributes the FIRST failing stage (the
+# actionable root cause); rollup_mark is a no-op once a stage has been recorded.
+ROLLUP_FAILED=()
+_rollup_prev_fail=0
+rollup_mark() {
+  if [ "$fail" != "$_rollup_prev_fail" ]; then
+    ROLLUP_FAILED+=("$1")
+    _rollup_prev_fail="$fail"
+  fi
+}
 CI_MODE="${ARBORETUM_CI_MODE:-balanced}"
 CI_JOBS="${ARBORETUM_CI_JOBS:-8}"
 CI_READONLY="${ARBORETUM_CI_READONLY:-0}"   # 1 = zero-mutation verification run (#688)
@@ -524,6 +536,8 @@ else
   echo "SKIP: shellcheck not found on PATH (set REQUIRE_SHELLCHECK=1 to require it)"
 fi
 
+rollup_mark "ShellCheck"
+
 echo "=== Smoke tests ==="
 selected_smoke_tests=()
 for f in scripts/_smoke-test-*.sh; do
@@ -553,17 +567,23 @@ if [ "$QUIET" = "1" ]; then
   echo "  ${smoke_pass} passed · ${smoke_skip} skipped · ${smoke_fail} failed"
 fi
 
+rollup_mark "Smoke tests"
+
 echo "=== Declared test command ==="
 run_declared_default_command
+rollup_mark "Declared test command"
 
 echo "=== Cross-reference validation ==="
 run_capture bash scripts/validate-cross-refs.sh || fail=1
+rollup_mark "Cross-reference validation"
 
 echo "=== Contract coverage validation ==="
 run_contract_coverage_check_if_available
+rollup_mark "Contract coverage validation"
 
 echo "=== Release gate ==="
 run_plugin_check_if_available "dev-tools/release/check-version-bump.sh"
+rollup_mark "Release gate"
 
 if [ "$QUIET" = "1" ]; then
   if [ "$fail" = "0" ]; then
@@ -580,6 +600,23 @@ fi
 if [ -f scripts/lib/token-ledger.sh ]; then
   source scripts/lib/token-ledger.sh
   ARBORETUM_BUCKET=on-demand ledger_append runtime "ci-checks" "${TOKEN_RUNTIME_BYTES:-0}" 2>/dev/null || true
+fi
+
+# Failing-stage rollup (#839): on failure, name the failing stage(s) in the
+# GitHub step summary so a red run is legible at a glance. Side output only —
+# never touches stdout or the exit code (CLI-3: script still ends with exit $fail).
+if [ "$fail" != "0" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    echo "### ❌ ci-checks failed"
+    echo ""
+    if [ "${#ROLLUP_FAILED[@]}" -gt 0 ]; then
+      echo "First failing stage: **${ROLLUP_FAILED[0]}**"
+      echo ""
+      echo "<sub>Subsequent stages may also have failed; see the full log. Stage attribution is monotonic (first flip).</sub>"
+    else
+      echo "Failing stage could not be attributed (failure occurred outside a tracked stage); see the full log."
+    fi
+  } >> "$GITHUB_STEP_SUMMARY"
 fi
 
 exit $fail

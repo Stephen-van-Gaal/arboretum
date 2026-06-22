@@ -14,12 +14,47 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail=0
 
+# Diagnostic surfacing (#839): truncate the reused, non-$TMP capture paths up
+# front so a pre-invocation assertion failure (e.g. the contract-doc checks
+# below, which run before any script call) can never replay a prior run's
+# leftover output. They are overwritten by each real invocation thereafter.
+# FAILURES_LOG accumulates each failing case's capture at the moment it fails, so
+# the offline artifact carries the FAILED case's output even though later cases
+# overwrite /tmp/update-rc.* (the workflow gathers this file, not the volatile
+# /tmp captures) — see review #840.
+FAILURES_LOG=/tmp/update-rc-failures.log
+: >/tmp/update-rc.out
+: >/tmp/update-rc.err
+: >"$FAILURES_LOG"
+
+# Every real-execution case redirects the script's
+# stdout/stderr to these reused capture paths and is checked immediately after.
+# On a failed assertion, replay them so the script's real precondition diagnostic
+# (e.g. "not a git worktree" vs "provider command not found") reaches the
+# already-verbose-in-CI Actions log instead of being silently discarded, AND
+# snapshot them into FAILURES_LOG before a later case can overwrite them. Passing
+# runs call this never, so green stays quiet. Manual side-effect branches that set
+# fail=1 directly must call this too (review #840), else their helper output is
+# swallowed.
+dump_script_capture() {
+  local label="${1:-unnamed assertion}"
+  local cap
+  for cap in /tmp/update-rc.out /tmp/update-rc.err; do
+    if [ -s "$cap" ]; then
+      echo "  --- ${cap} (captured script output) ---" >&2
+      sed 's/^/  | /' "$cap" >&2
+      { echo "=== FAILED: ${label} — ${cap} ==="; cat "$cap"; echo; } >>"$FAILURES_LOG"
+    fi
+  done
+}
+
 check() {
   local name="$1" expected="$2" actual="$3"
   if [ "$expected" = "$actual" ]; then
     echo "PASS: $name"
   else
     echo "FAIL: $name expected '$expected' got '$actual'" >&2
+    dump_script_capture "$name"
     fail=1
   fi
 }
@@ -30,6 +65,7 @@ contains() {
     echo "PASS: $name"
   else
     echo "FAIL: $name" >&2
+    dump_script_capture "$name"
     fail=1
   fi
 }
@@ -206,6 +242,7 @@ run_helper "$NO_PENDING" '[]' none "$TMP/gh-no-pending.log" >/tmp/update-rc.out 
 check "no pending with no PR exits 0" "0" "$rc"
 if grep -q 'pr create' "$TMP/gh-no-pending.log"; then
   echo "FAIL: no-pending run should not create PR" >&2
+  dump_script_capture "no-pending run should not create PR"
   fail=1
 else
   echo "PASS: no-pending run does not create PR"
@@ -222,6 +259,7 @@ if git -C "$CREATE" show-ref --verify --quiet refs/heads/automation/release-cand
   echo "PASS: release branch committed and pushed"
 else
   echo "FAIL: release branch was not committed and pushed" >&2
+  dump_script_capture "release branch was not committed and pushed"
   fail=1
 fi
 check "release branch commit uses bot identity" \
@@ -257,6 +295,7 @@ if [ "$(git -C "$PINNED_BASE" rev-parse automation/release-candidate^)" = "$pinn
   echo "PASS: release branch uses preflighted base"
 else
   echo "FAIL: release branch did not use preflighted base" >&2
+  dump_script_capture "release branch did not use preflighted base"
   fail=1
 fi
 
