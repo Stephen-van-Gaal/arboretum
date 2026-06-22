@@ -129,4 +129,80 @@ else
   fail_case "YL-8" "rc=$rc out=$out err=$(cat "$FIX/err")"
 fi
 
+cat > "$FIX/block.md" <<'MD'
+---
+name: delta-tables
+description: >
+  Current, version-pinned guidance for Delta tables.
+  Covers liquid clustering and predictive optimization.
+owner: reference-surfaces
+literal: |
+  line one
+  line two
+---
+# Body
+MD
+out=$(bash "$HELPER" frontmatter "$FIX/block.md" 2>"$FIX/err"); rc=$?
+if [ "$rc" = 0 ] \
+  && assert_has_line "$out" "name=delta-tables" \
+  && assert_has_line "$out" "description=Current, version-pinned guidance for Delta tables. Covers liquid clustering and predictive optimization." \
+  && assert_has_line "$out" "owner=reference-surfaces" \
+  && assert_has_line "$out" "literal=line one line two"; then
+  pass "YL-13: block scalars (folded > and literal |) fold to single-line values; following keys still parse"
+else
+  fail_case "YL-13" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
+cat > "$FIX/list-block.md" <<'MD'
+---
+invokers:
+  - role: >
+      multi line
+      role text
+    name: design
+flow: ok
+---
+# Body
+MD
+out=$(bash "$HELPER" frontmatter "$FIX/list-block.md" 2>"$FIX/err"); rc=$?
+if [ "$rc" = 0 ] \
+  && assert_has_line "$out" "invokers[0].role=multi line role text" \
+  && assert_has_line "$out" "invokers[0].name=design" \
+  && assert_has_line "$out" "flow=ok"; then
+  pass "YL-14: block scalar as first key of a list-of-mapping item folds; sibling and following keys still parse"
+else
+  fail_case "YL-14" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
+printf 'desc: >\n  ok line\n\t bad tab line\n' > "$FIX/tab-block.yaml"
+out=$(bash "$HELPER" file "$FIX/tab-block.yaml" 2>"$FIX/err"); rc=$?
+if [ "$rc" -ne 0 ] && grep -q "tabs are not supported" "$FIX/err"; then
+  pass "YL-15: a tab in block-scalar continuation indentation is rejected"
+else
+  fail_case "YL-15" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
+printf 'desc: >\n\t\n  ok line\n' > "$FIX/tab-blank-block.yaml"
+out=$(bash "$HELPER" file "$FIX/tab-blank-block.yaml" 2>"$FIX/err"); rc=$?
+if [ "$rc" -ne 0 ] && grep -q "tabs are not supported" "$FIX/err"; then
+  pass "YL-16: a tab-only blank line inside a block scalar is rejected"
+else
+  fail_case "YL-16" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
+cat > "$FIX/chomp.md" <<'MD'
+---
+desc: >-
+  folded text
+key: ok
+---
+# Body
+MD
+out=$(bash "$HELPER" frontmatter "$FIX/chomp.md" 2>"$FIX/err"); rc=$?
+if [ "$rc" = 0 ] && assert_has_line "$out" "desc=folded text" && assert_has_line "$out" "key=ok"; then
+  pass "YL-17: a block scalar header with a chomping indicator (>-) is accepted and folded"
+else
+  fail_case "YL-17" "rc=$rc out=$out err=$(cat "$FIX/err")"
+fi
+
 [ "$fail" = 0 ] && echo "yaml-lite contract: ALL PASS" || exit 1

@@ -1,6 +1,6 @@
 ---
 seam: yaml-lite
-version: 1.2
+version: 1.3
 producer-type: script
 consumer-type: script
 consumes:
@@ -41,6 +41,7 @@ Supported syntax:
 - Inline comments, preserving `#` characters inside single-quoted or double-quoted strings.
 - Bounded double-quoted spans inside plain scalars, preserving `#` characters in shell-command fragments such as `pytest -k "unit#fast"`.
 - Simple quoted scalar unwrapping.
+- Block scalars (`>` folded and `|` literal), including chomping/indent indicators. Content is folded to a single-line value (newlines collapsed to spaces) so the `key=value` line protocol stays one line per key; keys that follow a block scalar parse normally. Supported both as the value of a block-mapping key and as the first key of a list-of-mapping item; a tab in a continuation line's indentation is rejected like anywhere else.
 
 Unsupported or unsafe syntax exits non-zero with a `yaml-lite:` stderr
 diagnostic. The helper does not silently repair syntax it cannot safely
@@ -113,9 +114,13 @@ Exit codes:
 - **YL-10:** `#` inside a bounded double-quoted span within a plain scalar is preserved.
 - **YL-11:** flow-style lists emit the same line protocol as block lists and list-of-mapping entries.
 - **YL-12:** an indented key below a scalar parent exits non-zero with `yaml-lite:`.
+- **YL-13:** block scalars (`>` folded and `|` literal) fold to single-line values, and keys following a block scalar (e.g. `owner:` after a `description: >`) still parse.
+- **YL-14:** a block scalar as the first key of a list-of-mapping item folds, and the item's sibling key plus the following top-level key still parse.
+- **YL-15:** a tab in block-scalar continuation indentation exits non-zero with `yaml-lite:`.
 
 ## Versioning
 
+- **1.3** (2026-06-22) - support block scalars (`>` folded, `|` literal), folded to single-line values so keys after a block-scalar `description:` (e.g. in SKILL.md frontmatter) parse instead of aborting the whole document. Issue #837.
 - **1.2** (2026-06-01) - preserve quoted hashes inside command scalars, normalize flow-style lists, and reject indented keys without mapping parents. Issue #437.
 - **1.1** (2026-06-01) - treat apostrophes inside plain scalars as literal content. Issue #437.
 - **1.0** (2026-06-01) - initial contract. Issue #437.

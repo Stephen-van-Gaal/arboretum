@@ -257,11 +257,61 @@ def parse_flow_sequence(parent_path, value, source_line):
     return rows
 
 
+def block_scalar_style(value):
+    # YAML block scalar header: '>' (folded) or '|' (literal), with at most one
+    # chomping indicator ('+'/'-') and at most one explicit indentation digit
+    # (1-9), in either order. yaml-lite folds every block scalar to a single-line
+    # value (the key=value line protocol cannot carry newlines), so the indicators
+    # are accepted but not separately honored. A malformed header like '>++' is
+    # not treated as a block scalar (and so fails normal parsing) rather than
+    # being silently accepted.
+    return bool(re.match(r"^[|>]([1-9][+-]?|[+-][1-9]?|)$", value))
+
+
+def render_block_scalar(block_lines):
+    # Fold block-scalar content to one line: strip each line, drop blank lines,
+    # join with single spaces. Lossy for literal '|' newlines by design — the
+    # output is a flat key=value line protocol.
+    parts = [line.strip() for line in block_lines if line.strip() != ""]
+    return " ".join(parts)
+
+
+def consume_block_scalar(lines, start, min_indent):
+    # Consume a block scalar's continuation lines: blanks are kept (folded out
+    # later), a line whose leading whitespace contains a tab is rejected to match
+    # the parser's no-tab-indentation rule, and the block ends at the first line
+    # indented at or below min_indent. Returns (folded_value, next_index).
+    collected = []
+    i = start
+    while i < len(lines):
+        nxt = lines[i]
+        # Reject tabs in leading whitespace BEFORE the blank-line branch, so a
+        # tab-only "blank" line (e.g. "\t") is rejected too — matching YL-15 and
+        # the parser's global no-tab-indentation rule. Spaces-only blanks pass.
+        lead = nxt[: len(nxt) - len(nxt.lstrip())]
+        if "\t" in lead:
+            die(f"tabs are not supported for indentation on line {i + 1}")
+        if nxt.strip() == "":
+            collected.append("")
+            i += 1
+            continue
+        if len(nxt) - len(nxt.lstrip(" ")) <= min_indent:
+            break
+        collected.append(nxt)
+        i += 1
+    return render_block_scalar(collected), i
+
+
 rows = []
 contexts = []
 list_indexes = {}
 
-for lineno, raw in enumerate(text.splitlines(), start=1):
+source_lines = text.splitlines()
+line_index = 0
+while line_index < len(source_lines):
+    raw = source_lines[line_index]
+    lineno = line_index + 1
+    line_index += 1
     if "\t" in raw[: len(raw) - len(raw.lstrip())]:
         die(f"tabs are not supported for indentation on line {lineno}")
     if raw.strip() == "" or raw.lstrip().startswith("#"):
@@ -299,7 +349,10 @@ for lineno, raw in enumerate(text.splitlines(), start=1):
             list_indexes[parent_path] = index + 1
             item_path = f"{parent_path}[{index}]"
             key, value = split_key_value(item, lineno)
-            if value.startswith("{"):
+            if block_scalar_style(value):
+                value_text, line_index = consume_block_scalar(source_lines, line_index, indent + 2)
+                rows.append((append_path(item_path, key), value_text))
+            elif value.startswith("{"):
                 for row in parse_flow_mapping(append_path(item_path, key), value, lineno):
                     rows.append(row)
             elif value.startswith("["):
@@ -316,6 +369,10 @@ for lineno, raw in enumerate(text.splitlines(), start=1):
     path_key = append_path(parent_path, key)
     if value == "":
         contexts.append({"indent": indent, "path": path_key})
+        continue
+    if block_scalar_style(value):
+        value_text, line_index = consume_block_scalar(source_lines, line_index, indent)
+        rows.append((path_key, value_text))
         continue
     if value.startswith("{"):
         for row in parse_flow_mapping(path_key, value, lineno):
