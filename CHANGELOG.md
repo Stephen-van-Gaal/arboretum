@@ -1,5 +1,7 @@
 # Changelog
 
+- [v0.29.0](docs/releases/v0.29.0.md) - minor release package with 8 changes.
+
 - [v0.28.0](docs/releases/v0.28.0.md) - minor release package with 67 changes.
 
 - [v0.27.0](docs/releases/v0.27.0.md) - minor release package with 4 changes.
