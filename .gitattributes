@@ -1,0 +1,21 @@
+# owner: cross-platform-support
+# Enforce LF line endings on checkout across platforms (cross-platform-support
+# spec). Prevents CRLF from entering working files on Windows checkouts, which
+# would break CRLF-sensitive parsers (e.g. generate-register.sh frontmatter
+# fences) and produce spurious diffs. text=auto lets git auto-detect text vs
+# binary; eol=lf forces LF for detected text files on checkout.
+* text=auto eol=lf
+
+# Binary safelist: never apply eol normalization to these, in case git's
+# auto-detection mis-classifies one as text (which would corrupt it on
+# checkout). Extend this list when a new binary file type enters the repo.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary

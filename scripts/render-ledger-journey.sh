@@ -31,7 +31,7 @@ for fam in opus sonnet haiku; do
 "
 done
 
-python3 - "$ledger" "$to_stdout" "$output_dir" "$descriptor" "$fmt" "$rates" "$ROOT" <<'PY'
+PYTHONUTF8=1 python3 - "$ledger" "$to_stdout" "$output_dir" "$descriptor" "$fmt" "$rates" "$ROOT" <<'PY'
 import sys, os, json
 sys.path.insert(0, os.path.join(sys.argv[7], 'scripts', 'lib'))
 import journey_render as J

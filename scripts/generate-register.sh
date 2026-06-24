@@ -69,6 +69,8 @@ extract_frontmatter() {
   local result=""
 
   while IFS= read -r line; do
+    line=${line%$'\r'}   # tolerate CRLF input (cross-platform-support): a "---\r"
+                         # fence must still match the frontmatter delimiter test.
     if [ "$fm_done" = true ]; then break; fi
     if [[ "$line" == "---" ]]; then
       ((delimiters++)) || true

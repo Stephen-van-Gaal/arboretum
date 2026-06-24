@@ -69,7 +69,7 @@ def process(path, FAM):
     seen=set(); stage='(pre-workflow)'; skill='(direct)'
     tree=OrderedDict(); uuid_root={}; tooluse={}; intakes=[]; turn_no=0
     fam_ctx={}  # context-$ per model family → session-dominant family (intake pricing, D2)
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             try: o=json.loads(line)
             except (ValueError, RecursionError): continue  # ValueError subsumes JSONDecodeError + the 3.11+ int-digit-limit ValueError (#776); both non-BaseException, so the py/catch-base-exception fix holds
@@ -101,7 +101,7 @@ def process(path, FAM):
 
 def child_summary(path, FAM):
     seen=set(); ctx=op=0.0; turns=0; puid=None; own=[]; label="subagent"; model=""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             try: o=json.loads(line)
             except (ValueError, RecursionError): continue  # ValueError subsumes JSONDecodeError + the 3.11+ int-digit-limit ValueError (#776); both non-BaseException, so the py/catch-base-exception fix holds
@@ -285,7 +285,7 @@ def render_json(tree, intakes, total_turns, dom_fam='opus', dom_rate=0.0,
 
 def last_ts(path):
     ts=None
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             try: o=json.loads(line)
             except (ValueError, RecursionError): continue  # ValueError subsumes JSONDecodeError + the 3.11+ int-digit-limit ValueError (#776); both non-BaseException, so the py/catch-base-exception fix holds

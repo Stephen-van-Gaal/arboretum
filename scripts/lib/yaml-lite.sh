@@ -6,7 +6,7 @@ yaml_lite_parse() {
   local mode="$1"
   local file="$2"
 
-  python3 - "$mode" "$file" <<'PY'
+  PYTHONUTF8=1 python3 - "$mode" "$file" <<'PY'
 import os
 import re
 import sys
