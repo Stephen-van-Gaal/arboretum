@@ -3,7 +3,7 @@ name: finish
 owner: git-workflow-tooling
 description: Complete implementation work — verify, reconcile spec status to active via /consolidate if needed, and create a pull request. Use when implementation is done and you're ready to ship.
 disable-model-invocation: false
-allowed-tools: Bash, Read, Edit, Grep, Glob
+allowed-tools: Bash, Read, Edit, Grep, Glob, AskUserQuestion
 layer: 0
 ---
 
@@ -180,6 +180,37 @@ the *post-PR* bots); add, swap, or disable a reviewer by editing one row — nev
    normalizer}` — in registry (dispatch) order, with `{base}` already shell-quoted in
    runtime `invoke`s. `altitude`/`artifact` are **data**: they change the fan-out *width*,
    not this mechanism.
+
+1a. **Review-dispatch gate (#854).** Before fanning out, read the per-lane relevance
+   verdicts and the gate config, and soft-gate the skippable lanes so a trivial change
+   does not pay the full review cost:
+
+   ```bash
+   git diff "$BASE"...HEAD --name-only | bash scripts/review-dispatch.sh --verdicts --files-from -
+   ```
+
+   - Read `gate.enabled` / `gate.unattended` from `reviewers.yml` (defaults when the block
+     is absent: `enabled: true`, `unattended: run-everything`).
+   - **`gate.enabled` is false** → skip this gate entirely; dispatch the full selected set
+     as today.
+   - Otherwise compute **skip-candidates** = selected lanes whose verdict `relevant` is
+     `false`. In practice this is `general-security` on a prose-only change; `ai-surface`/
+     `correctness` are already absent from the selected set when irrelevant. `--verdicts`
+     classifies only the three skill lanes — a selected **runtime** reviewer (e.g. `codex`)
+     is never a skip-candidate (it reviews docs too); it runs by default but the human may
+     still force-skip it below.
+   - **No skip-candidate** → no question; dispatch the full selected set (item 2).
+   - **Skip-candidate(s) present:**
+     - **Human present** → present a single `AskUserQuestion`: list each selected reviewer
+       with its verdict reason (skip-candidates flagged), and ask which to run
+       (Skip all / Run all / pick). The human may force-run a skip-candidate or force-skip
+       any selected reviewer. Dispatch only the confirmed run-set. If the human skips
+       **every** selected reviewer → **short-circuit**: dispatch nothing, record
+       "B4 skipped — prose-only change (confirmed)", and continue to the next ship-tail step.
+     - **No human present** (Auto Mode / unattended / non-interactive) → **fail safe**:
+       honor `gate.unattended`. `run-everything` (default) dispatches the full selected set,
+       no skip, and never silently auto-answers the question. `honor-classifier` drops the
+       skip-candidates.
 
 2. Fan out over the selected reviewers in **one batch, one level only** (a reviewer never
    dispatches reviewers), dispatching each by its `type`:
@@ -413,6 +444,6 @@ remain authoritative.
 - **`/land` is merge-readiness-only.** It does not close tracker items; post-merge tracker verification and any safe fallback close belong to `/cleanup`.
 - Steps are sequential and each depends on the previous one. Don't skip ahead.
 - If the user wants to create a PR without reconciling spec status via `/consolidate` or running health checks, let them — this is guidance, not a gate. But note what was skipped.
-- For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; the B4 review dispatch still runs — `general-security` always fires, `ai-surface` fires when an AI-facing instruction file changed, and `correctness` is skipped (the diff has no code).
+- For documentation-only branches (no source code changes), there is typically no spec-status reconciliation needed; the B4 review dispatch still runs — `ai-surface` fires when an AI-facing instruction file changed, `correctness` is skipped (the diff has no code), and `general-security` is a skip-candidate on a *prose-only* change: the gate (Step 5 item 1a) asks the human whether to run it or skip B4, while config changes (e.g. `*.yml`/`*.json`) keep it. With no human present it still runs (fail-safe).
 
 $ARGUMENTS

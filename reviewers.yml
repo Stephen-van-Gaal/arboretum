@@ -16,6 +16,13 @@
 manifest_contract: docs/contracts/review-manifest.contract.md
 degradation: explicit-deferral-to-land-reviewers
 
+# gate: — the B4 review-dispatch gate (#854). Optional; both keys default conservative.
+# Read by the /finish Step 5 driver, NOT by the dispatcher scripts. Soft-gates the
+# always-on general-security lane on a prose-only change, with human confirmation.
+gate:
+  enabled: true                # false = general-security runs on every change (no skip, no question)
+  unattended: run-everything   # run-everything (default, fail-safe) | honor-classifier
+
 workers:
   - id: ai-surface
     type: skill
