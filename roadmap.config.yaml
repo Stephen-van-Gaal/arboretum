@@ -29,6 +29,7 @@ component_values:
   - examples
   - docs
   - roadmap
+  - ci-checks
 
 # Branch prefixes the WIP detector should recognize.
 branch_prefixes: [feat, fix, docs, chore, refactor, spike]
