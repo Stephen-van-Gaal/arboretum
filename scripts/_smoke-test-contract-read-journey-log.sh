@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-read-journey-log.sh — Contract test for
 # docs/contracts/read-journey-log.contract.md. Asserts RJL-1..RJL-7
 # against scripts/read-journey-log.sh.

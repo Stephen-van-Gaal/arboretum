@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-heartbeat
+# scope: plugin-only
 # heartbeat.sh — per-machine liveness sentinel (sourced, never executed).
 # Writes/refreshes a branch-keyed sentinel from the refresh hooks and answers
 # "is branch B's session live within the TTL?" for the collision read-back (#715).

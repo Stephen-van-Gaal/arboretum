@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-refresh-workspace-cache.sh — Contract test for
 # docs/contracts/refresh-workspace-cache.contract.md. Asserts RWC-1..RWC-9
 # from the contract's ## Test surface against scripts/refresh-workspace-cache.sh.

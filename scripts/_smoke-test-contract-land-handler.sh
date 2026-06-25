@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-land-handler.sh — Contract test for
 # docs/contracts/land-handler.contract.md. Asserts LH-1..LH-8 against
 # scripts/land-handler.sh.

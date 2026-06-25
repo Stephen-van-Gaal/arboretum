@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # _smoke-test-read-patch-lane-config.sh — Contract checks for
 # scripts/read-patch-lane-config.sh.
 set -euo pipefail

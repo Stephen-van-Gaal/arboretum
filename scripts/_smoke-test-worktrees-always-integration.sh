@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workspace-skill
+# scope: plugin-only
 # _smoke-test-worktrees-always-integration.sh — End-to-end integration for the
 # worktrees-always default (#716): exercises the predicate, the structural
 # one-branch-per-worktree guard, the resolve round-trip, and git-based removal

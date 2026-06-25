@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: inflight-work-classifier
+# scope: plugin-only
 # _smoke-test-contract-inflight-classifier.sh — Contract test for
 # docs/contracts/inflight-classifier.contract.md (IC-1..IC-9). Fixture-driven;
 # no network. Picked up automatically by ci-checks.sh's === Smoke tests === loop.

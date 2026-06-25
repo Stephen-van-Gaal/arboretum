@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # statusline.sh — Claude Code statusline renderer. Emits the project's
 # full status line on a single line: <model>  |  ts HH:MM  |
 # <project>/<branch>  |  ctx <N>%  |  5h:<N>% 7d:<N>%  |  wt:<name>  |

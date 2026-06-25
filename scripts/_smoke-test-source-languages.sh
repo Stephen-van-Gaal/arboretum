@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # _smoke-test-source-languages.sh — Unit-tier tests for language-aware
 # Check 3 ownership (#859): source_languages enforcement, in-file marker
 # ownership, the unknown-prefix diagnostic, and Half C undeclared-source-type

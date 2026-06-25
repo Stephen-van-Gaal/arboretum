@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # review-registry-filter.sh — the dispatcher's deterministic selection step (#791 D3):
 # registry.filter(altitude, artifact) + gate evaluation (section-dispatch element 2).
 #

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # manage-trust.sh — Lifecycle helper for the journey-log author allowlist
 # (.arboretum.yml trust.journey_log_authors). Subcommands:
 #

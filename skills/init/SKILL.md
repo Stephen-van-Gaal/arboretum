@@ -1,6 +1,7 @@
 ---
 name: init
 owner: arboretum-as-plugin
+scope: plugin-only
 description: Initialize a new arboretum-governed project — scaffolds the directory structure, copies templates and hooks from the plugin, generates CLAUDE.md and AGENTS.md, configures git, and hands off to /architect for the project-shape interview. Use after installing the arboretum plugin in an empty (or near-empty) directory.
 allowed-tools:
   - Bash

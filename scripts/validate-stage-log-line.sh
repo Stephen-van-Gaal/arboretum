@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # validate-stage-log-line.sh — S9-5 contract enforcement.
 #
 # Validates a comment block emitted by scripts/log-stage.sh against

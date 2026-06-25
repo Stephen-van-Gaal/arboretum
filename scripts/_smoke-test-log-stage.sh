@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # _smoke-test-log-stage.sh — Verify scripts/log-stage.sh against WS9
 # design (docs/superpowers/specs/2026-05-23-pipeline-overhaul-ws9-state-tracking-design.md).
 # Usage: bash scripts/_smoke-test-log-stage.sh

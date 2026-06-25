@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # _smoke-test-build.sh — Verify /build's parse/validate/write helpers
 # (parse-plan-checkboxes.sh, read-s2-frontmatter.sh, write-escape-hatch.sh).
 set -euo pipefail

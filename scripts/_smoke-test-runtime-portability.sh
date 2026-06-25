@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # ci-tier: full
 # ci-tier-reason: duplicate negative-environment sweep; balanced runs canonical smoke tests
 # _smoke-test-runtime-portability.sh - Verifies parser surfaces do not require PyYAML.

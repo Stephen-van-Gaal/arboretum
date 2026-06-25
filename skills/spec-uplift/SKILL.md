@@ -10,6 +10,7 @@ allowed-tools:
   - Skill
 argument-hint: "<path-to-spec>"
 owner: spec-uplift
+scope: plugin-only
 layer: 0
 disable-model-invocation: false
 ---

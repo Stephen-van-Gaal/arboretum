@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Classify open issues into /roadmap maintain action buckets.
 #
 # Read-only. Cross-references open issues against recently-merged PRs and

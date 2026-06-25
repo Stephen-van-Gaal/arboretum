@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
+# scope: plugin-only
 #
 # _smoke-test-seed-settings.sh — exercises seed-settings.sh across the three
 # target states (absent, hooks-only, pre-populated allow) plus the jq-absent

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # _smoke-test-pipeline-state-banner.sh — Verify session-start.sh surfaces
 # the WS9 pipeline-state lines: Stage, Last action, Last session (D7).
 set -euo pipefail

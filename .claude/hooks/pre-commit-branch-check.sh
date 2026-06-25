@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # PreToolUse hook for Bash: block git commit on protected branches.
 #
 # Intercepts Bash tool calls containing "git commit" and checks

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # ci-preflight.sh — cheap blocker gate before expensive CI.
 
 set -uo pipefail

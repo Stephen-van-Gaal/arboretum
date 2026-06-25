@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # Contract smoke: the review: schema shape shared by the three scripts.
 # Guards the implicit coupling per CLAUDE.md ## Schema-coupled scripts —
 #   read-review-config.sh (producer) ⇄ request-review.sh (consumer key form)

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-upgrade
+# scope: plugin-only
 # _smoke-test-session-start-staleness.sh — Verify the project-tree staleness
 # signal in session-start.sh (issue #316).
 #

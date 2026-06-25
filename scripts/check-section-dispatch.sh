@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: section-dispatch
+# scope: plugin-only
 # check-section-dispatch.sh — conformance checker for the section-dispatch pattern.
 #   check-section-dispatch.sh <registry-file>
 # Exit 0 = conformant; 1 = violation (first offender to stderr); 2 = usage/IO error.

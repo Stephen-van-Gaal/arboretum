@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-refresh-stage-cache.sh — Contract test for
 # docs/contracts/refresh-stage-cache.contract.md. Asserts RSC-1..RSC-8 from
 # the contract's ## Test surface against scripts/refresh-stage-cache.sh.

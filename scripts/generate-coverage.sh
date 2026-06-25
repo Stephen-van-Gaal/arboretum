@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # generate-coverage.sh — Walk the filesystem and regenerate
 # docs/contracts/_coverage.md as a deterministic table mapping every
 # governance script/hook to its covering contract.

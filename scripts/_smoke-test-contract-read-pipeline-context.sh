@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-read-pipeline-context.sh — Contract test for
 # docs/contracts/read-pipeline-context.contract.md: the field vocabulary is
 # exactly {issue, spec_index, changed_files, diff_stat} and the SHA-freshness

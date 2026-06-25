@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # _smoke-test-start-bugfix.sh — Prose and artifact checks for the experimental
 # patch-lane bug triage front half.
 set -euo pipefail

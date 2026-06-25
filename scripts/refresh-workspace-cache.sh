@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-start-cycle-state
+# scope: plugin-only
 # (Owns under the existing session-start-cycle-state spec — this extends the
 #  session-start cycle. A standalone governed spec for this feature, if
 #  warranted, is born at /consolidate per v2; the owner must resolve to an

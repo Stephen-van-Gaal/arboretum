@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # resolve-codex-companion.sh — print the absolute path to the installed codex
 # plugin's codex-companion.mjs, resolved version-independently (#800).
 #

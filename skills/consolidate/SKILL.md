@@ -1,6 +1,7 @@
 ---
 name: consolidate
 owner: consolidate-spec
+scope: plugin-only
 description: Reconcile a branch's code with its governance documentation across four levels — architecture, governed specs, file headers + top-of-file comments, and (opt-in) function/inline comments. Regenerates AUTO sections, preserves HUMAN sections (stale-flagging broken refs), appends harvested decisions from design specs and plans.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep

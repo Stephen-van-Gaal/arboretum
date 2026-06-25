@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: collision-detection
+# scope: plugin-only
 # Unit smoke for scripts/workspace-collision-check.sh — verdict mapping.
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.
 set -uo pipefail

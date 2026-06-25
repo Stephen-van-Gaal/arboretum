@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-roadmap-nag.sh — Contract test for
 # docs/contracts/roadmap-nag.contract.md. Asserts RN-1..RN-4 against
 # scripts/roadmap/nag.sh.

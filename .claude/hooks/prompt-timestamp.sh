@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: prompt-timestamps
+# scope: plugin-only
 # prompt-timestamp.sh — UserPromptSubmit hook. Emits a single dated wall-clock
 # line on stdout, which Claude Code attaches to the submitted prompt as
 # additionalContext. This makes per-turn timing visible in the transcript and

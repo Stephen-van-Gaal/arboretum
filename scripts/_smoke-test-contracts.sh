@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 #
 # _smoke-test-contracts.sh — Validate the structural shape of every
 # docs/contracts/*.contract.md file against the module-contract template.

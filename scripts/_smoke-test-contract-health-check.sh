@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-health-check.sh — Contract test for
 # docs/contracts/health-check.contract.md. Asserts HC-1..HC-10
 # from the contract's ## Test surface against scripts/health-check.sh.

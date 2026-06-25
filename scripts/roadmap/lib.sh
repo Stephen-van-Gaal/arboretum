@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Shared helpers for /roadmap and /idea skills. Source from other scripts; do
 # not execute directly.
 

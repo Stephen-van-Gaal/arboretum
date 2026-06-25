@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # refresh-stage-cache.sh — Populate .arboretum/active-stage-cache.json
 # from the active issue's exclusive stage:* label (#570). See WS9 design D6.
 #

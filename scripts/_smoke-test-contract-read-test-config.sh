@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: test-infrastructure
+# scope: plugin-only
 # _smoke-test-contract-read-test-config.sh — Contract test for
 # docs/contracts/test-infrastructure.contract.md. Asserts TC-1..TC-10
 # against scripts/read-test-config.sh using mktemp spec fixtures.

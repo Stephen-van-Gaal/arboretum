@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Smoke test for scripts/roadmap/audit-board.sh
 #
 # Builds a fixture board, asserts each issue lands in the expected bucket.

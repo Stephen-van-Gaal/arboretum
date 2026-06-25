@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # request-review.sh <pr> [--reviewer <name>] [--re-request]
 #
 # Request (or re-request) the AI reviewers declared in .arboretum.yml's

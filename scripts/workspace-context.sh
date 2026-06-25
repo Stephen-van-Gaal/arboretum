@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workspace-context
+# scope: plugin-only
 # workspace-context.sh - Single tree-root + base + branch resolver.
 # Sourced, never executed. Source-time effects are limited to defining functions
 # and loading the scrub primitive (which exports ARBO_CTRL_CHAR_CLASS); it runs no

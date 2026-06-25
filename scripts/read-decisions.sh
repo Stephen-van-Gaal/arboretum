@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: document-access
+# scope: plugin-only
 set -euo pipefail
 
 # read-decisions.sh — two-altitude projection over a governed-spec Decisions table.

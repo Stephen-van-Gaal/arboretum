@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-roadmap-audit-board.sh — Contract test for
 # docs/contracts/roadmap-audit-board.cli-contract.md. Asserts CLI-1..CLI-5
 # against scripts/roadmap/audit-board.sh.

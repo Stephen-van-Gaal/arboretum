@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # merge-review-manifests.sh — deterministic, LLM-free merge of N review manifests
 # into one ReviewResult (#791 D6, section-dispatch element 6).
 #

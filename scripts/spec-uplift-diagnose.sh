@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: spec-uplift
+# scope: plugin-only
 set -euo pipefail
 
 spec="${1:?usage: spec-uplift-diagnose.sh <spec-path>}"

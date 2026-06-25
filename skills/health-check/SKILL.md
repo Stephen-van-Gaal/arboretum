@@ -6,6 +6,7 @@ allowed-tools: Bash(bash scripts/health-check.sh *), Bash(bash scripts/read-pipe
 argument-hint: [project-dir]
 layer: 0
 owner: health-check
+scope: plugin-only
 ---
 
 # Project Health Check

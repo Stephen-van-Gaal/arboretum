@@ -1,6 +1,7 @@
 ---
 name: upgrade
 owner: project-upgrade
+scope: plugin-only
 description: Re-sync vendored framework files in an already-initialized arboretum project from the installed plugin. Classifies each file against the install-manifest (add/overwrite-safe/overwrite-local/keep-local/conflict/report-only) under a plugin-wins policy — adopters do not fork framework code — applies the safe actions, surfaces conflicts, and verifies. Use when a project is behind the framework (e.g. missing a new hook, script, or template).
 ---
 

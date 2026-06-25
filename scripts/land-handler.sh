@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # land-handler.sh — Bash helpers backing /land's three-phase handler.
 # Subcommands:
 #   check-terminal <pr-number>   → Phase 1 terminal-state check

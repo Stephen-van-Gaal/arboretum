@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # read-patch-lane-config.sh — Read patch-lane workflow configuration.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "read-patch-lane-config.sh requires bash" >&2; exit 1; }

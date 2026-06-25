@@ -1,6 +1,7 @@
 ---
 name: receive-review
 owner: receive-review
+scope: plugin-only
 description: Apply receive-review discipline — verify-before-implement and no-performative-agreement (via superpowers:receiving-code-review) plus arboretum extras (GraphQL thread-resolve after fix push, paired-stub-sync check when feedback touches a design spec). Invoked by /land Steps 3 + 5; also invocable directly for ad-hoc feedback contexts (Slack critique, in-session pushback, manual gh comment responses outside /land).
 disable-model-invocation: false
 allowed-tools: Bash, Read, Skill

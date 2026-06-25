@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # Unit smoke test for scripts/lib/token-journey-ledger.sh (TJL-1..4 minus the
 # reconciliation linchpin, which lives in the contract test).
 set -euo pipefail

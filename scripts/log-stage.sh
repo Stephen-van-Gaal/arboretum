@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # log-stage.sh — Write pipeline state: set the exclusive current-stage
 # label (stage:<name>, LWW) AND post a journey-log comment (naturally
 # serialized by the tracker backend).

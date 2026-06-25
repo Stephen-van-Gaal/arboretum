@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # refresh-next-cache.sh — Refresh .arboretum/next-cache.json from the tracker.
 #
 # Reads the open tracker item carrying the `next-up` label (at most one) via

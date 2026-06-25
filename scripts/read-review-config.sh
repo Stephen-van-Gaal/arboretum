@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # read-review-config.sh — Print the normalized review: config from .arboretum.yml.
 #
 # Output: `key=value` lines on stdout, one per field:

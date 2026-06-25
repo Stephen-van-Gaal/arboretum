@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # classify-pr-change.sh — classify a change set as 'docs-config' or 'code',
 # for the tiered merge handoff in /land.
 #   classify-pr-change.sh <base-ref>      # classify git diff <base>...HEAD

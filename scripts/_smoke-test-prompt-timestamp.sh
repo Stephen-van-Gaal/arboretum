@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: prompt-timestamps
+# scope: plugin-only
 # _smoke-test-prompt-timestamp.sh — Verify .claude/hooks/prompt-timestamp.sh
 # emits exactly one well-formed dated wall-clock line and exits 0, per the
 # UserPromptSubmit hook contract documented in

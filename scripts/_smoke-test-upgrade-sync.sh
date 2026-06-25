@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-upgrade
+# scope: plugin-only
 # Unit smoke tests for upgrade-sync classification + helpers.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

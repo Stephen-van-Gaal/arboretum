@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # validate-test-surface.sh — S3-6 enforcement.
 #
 # Usage: validate-test-surface.sh <design-spec-path> <changed-test-files-list-file>

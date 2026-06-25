@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-handoff
+# scope: plugin-only
 # _smoke-test-handoff-v2.sh — Verify session-handoff v2 (issue #251).
 # Cases map to §5 contracts of the v2 design spec.
 # Usage: bash scripts/_smoke-test-handoff-v2.sh

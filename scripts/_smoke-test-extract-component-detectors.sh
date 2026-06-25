@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: extract-shared-component
+# scope: plugin-only
 # Unit/smoke tests for the extract-component Tier-1/Tier-2 detectors.
 set -euo pipefail
 

@@ -1,6 +1,7 @@
 ---
 name: roadmap
 owner: roadmap
+scope: plugin-only
 description: "Strategic + tactical project direction. Implemented methods — `run` (default; cheap daily orientation), `instantiate` (one-time setup), `maintain` (board hygiene: triage, orphan detection, confidence×reversibility auto-close). `agent-prep` prepares an issue (or a live in-flight discovery) for autonomous agent pickup. Other methods (`shape`, `ready`, `sprint open/close`, `revise`) are stubbed and surface \"not yet implemented\" if invoked. See docs/superpowers/specs/2026-05-09-roadmap-system-design.md."
 disable-model-invocation: false
 allowed-tools: Bash, Read, AskUserQuestion, Write, Edit

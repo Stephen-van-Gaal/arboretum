@@ -1,6 +1,7 @@
 ---
 name: start-bugfix
 owner: workflow-unification
+scope: plugin-only
 description: Experimental patch-lane front half for bug reports — requires tracker intake, produces a patch brief for authority-backed local fixes, or updates the issue and stops when not patchable.
 allowed-tools:
   - Bash

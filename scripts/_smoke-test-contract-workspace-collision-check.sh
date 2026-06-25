@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: collision-detection
+# scope: plugin-only
 # Contract test for docs/contracts/workspace-collision-check.contract.md
 # (seam: workspace-collision-check). Asserts the D4 output contract +
 # signal->verdict mapping. Picked up automatically by ci-checks.sh.

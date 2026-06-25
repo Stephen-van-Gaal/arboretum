@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Device-stable base: anchors at the main checkout, not the invoking worktree (#673).

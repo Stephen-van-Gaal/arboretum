@@ -1,6 +1,7 @@
 ---
 name: design
 owner: workflow-unification
+scope: plugin-only
 description: Wrapper skill that orchestrates the design phase — produces the in-flight design spec, folds in planning, and exits to `/build` after human review. Use at the start of planned work.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion

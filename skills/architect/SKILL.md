@@ -1,6 +1,7 @@
 ---
 name: architect
 owner: workflow-unification
+scope: plugin-only
 description: "Interview the user to determine project shape, match to an architecture archetype, surface essential decisions, recommend spikes, and scaffold ARCHITECTURE.md and group documents. Standalone or called by /init-project."
 allowed-tools:
   - Read

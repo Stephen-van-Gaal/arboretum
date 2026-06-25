@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # _smoke-test-config-driven-enum.sh — Verify health-check honours a
 # `status_enum:` block in .arboretum.yml: validates against the
 # project-declared vocabulary, warns on truly-unknown statuses, and

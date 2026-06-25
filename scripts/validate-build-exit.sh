@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # validate-build-exit.sh — S3 contract enforcement.
 #
 # Validates a `/build exited` journey-log line and its referenced

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-refresh-next-cache.sh — Contract test for
 # docs/contracts/refresh-next-cache.contract.md. Asserts RNC-1..RNC-7
 # from the contract's ## Test surface against scripts/refresh-next-cache.sh.

@@ -7,6 +7,7 @@ allowed-tools:
   - AskUserQuestion
 argument-hint: "[<title>]"
 owner: roadmap
+scope: plugin-only
 layer: 0
 ---
 

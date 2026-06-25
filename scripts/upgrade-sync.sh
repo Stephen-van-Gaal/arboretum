@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-upgrade
+# scope: plugin-only
 # uses: definitions/install-manifest-schema.md @v1
 # upgrade-sync.sh — sync vendored framework files from the installed plugin.
 set -uo pipefail

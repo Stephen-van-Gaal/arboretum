@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/dev-contracts/release/check-version-bump.cli-contract.md.
 # Exercises CLI-1..CLI-8 via fixture git repos driven by REPO_ROOT + BASE_REF.
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.

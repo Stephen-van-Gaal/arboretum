@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # review-dispatch.sh — print the B4 lane plan (or per-lane relevance verdicts) for a change set.
 #   review-dispatch.sh [--verdicts] <base-ref>
 #   review-dispatch.sh [--verdicts] --files-from <file|->

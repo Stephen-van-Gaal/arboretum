@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # write-escape-hatch.sh — Append an `escape-hatch:` block to the
 # frontmatter of a design spec. Idempotent: a second call replaces
 # the existing block in place (rather than appending a duplicate).

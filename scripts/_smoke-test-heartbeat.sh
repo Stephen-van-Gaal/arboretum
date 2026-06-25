@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-heartbeat
+# scope: plugin-only
 # Unit smoke for scripts/heartbeat.sh. Picked up by ci-checks.sh's smoke loop.
 set -uo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "requires bash" >&2; exit 1; }

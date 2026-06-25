@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: extract-shared-component
+# scope: plugin-only
 # Contract test for the extract-component catalog schema: the survey-phase
 # producer format must satisfy the validator the extract phase relies on.
 set -euo pipefail

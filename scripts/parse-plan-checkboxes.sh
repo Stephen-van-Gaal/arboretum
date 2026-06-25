@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # parse-plan-checkboxes.sh — Count checkboxes in a plan file.
 # Prints "open=N total=N skipped=N" to stdout.
 #

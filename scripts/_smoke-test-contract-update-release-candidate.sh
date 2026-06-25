@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/dev-contracts/release/update-release-candidate.cli-contract.md.
 
 set -uo pipefail

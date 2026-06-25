@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: document-taxonomy
+# scope: plugin-only
 # validate-group-membership.sh — group-spec layer integrity (#681).
 #
 # Enforces, over docs/groups/*.md and the specs/groups they reference:

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-context-ledger
+# scope: plugin-only
 # refresh-pipeline-context.sh — write .arboretum/pipeline-context-cache.json.
 #
 # Computes the ship-tail handoff fields (issue snapshot, REGISTER spec-index,

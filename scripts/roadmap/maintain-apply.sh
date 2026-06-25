@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Apply the non-interactive /roadmap maintain actions from a scan JSON.
 #
 # Consumes scripts/roadmap/maintain-scan.sh output. Applies only the

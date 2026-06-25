@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
+# scope: plugin-only
 #
 # Smoke test for bump-version.sh and check-version-bump.sh.
 

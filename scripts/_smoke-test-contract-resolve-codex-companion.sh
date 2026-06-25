@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # Smoke test for scripts/resolve-codex-companion.sh (#800).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

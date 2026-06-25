@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # refresh-update-cache.sh — Check if a newer arboretum plugin release is available.
 #
 # Scans the active plugin cache for the highest installed arboretum version,

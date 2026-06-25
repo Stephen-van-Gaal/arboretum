@@ -1,6 +1,7 @@
 ---
 name: review-closeout
 owner: git-workflow-tooling
+scope: plugin-only
 description: Close the PR review loop after fixes are pushed by validating review ledgers, posting per-thread dispositions, resolving addressed GitHub review threads, posting a top-level summary, and writing closeout evidence.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Skill

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # _smoke-test-resolve-workflow-slot.sh - Verify workflow skill slot resolution.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "run with bash" >&2; exit 1; }

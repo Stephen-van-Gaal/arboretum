@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-validate-cli-contract.sh — exercises validate-cli-contract.sh
 # against the 6 fixtures under tests/contracts/cli/.
 

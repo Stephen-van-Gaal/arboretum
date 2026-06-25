@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Contract test for docs/contracts/token-journey-ledger.contract.md (TJL-1, TJL-5).
 # The linchpin: the ledger tree-builder must reconcile with the transcript
 # tree-builder on a no-subagent fixture — the enforcement that keeps the push

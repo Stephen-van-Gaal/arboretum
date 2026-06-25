@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # Unit smoke for .claude/hooks/worktree-write-guard.sh — PreToolUse guard that
 # BLOCKS (permissionDecision: deny) a Write/Edit/NotebookEdit aimed at the
 # MAIN-tree path from a linked worktree session, naming the corrected path

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-context-ledger
+# scope: plugin-only
 # read-pipeline-context.sh — emit one field from the pipeline-context cache,
 # but only if the cache's head_sha matches the current HEAD. Pure lookup:
 # never computes, never writes. Scrubs at the consumer layer before emit.

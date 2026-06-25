@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
+# scope: plugin-only
 # SessionStart hook (web only): make the in-repo arboretum skills available.
 #
 # Why this exists

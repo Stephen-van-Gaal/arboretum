@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: inflight-work-classifier
+# scope: plugin-only
 # inflight.sh — in-flight-work classifier. Finds & classifies all open board
 # work into epic / sub-issue / naked issue and emits one classified-board JSON.
 # See docs/contracts/inflight-classifier.contract.md and the design spec

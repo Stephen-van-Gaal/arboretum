@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # verify-agent-ready.sh — Validate that an issue's agent-ready label is fresh
 # enough for /start's labelled fast lane to trust.
 #

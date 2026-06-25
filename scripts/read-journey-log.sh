@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # read-journey-log.sh — Read journey-log entries written by log-stage.sh
 # from a GitHub issue's comments. Emits TSV (one row per entry) so other
 # scripts and skills can consume the structured stream without re-parsing

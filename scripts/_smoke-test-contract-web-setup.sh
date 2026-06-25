@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/web-setup.cli-contract.md.
 # Exercises WS-1..WS-3 (the deterministic gate + exit-0 invariants) by driving
 # the hook directly with controlled env and a fixture project dir. The active

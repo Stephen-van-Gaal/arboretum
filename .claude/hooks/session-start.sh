@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-start-cycle-state
+# scope: plugin-only
 # SessionStart hook: produce a compact project state summary for Claude's context.
 # Reads REGISTER.md, contracts.yaml, and definition files to surface:
 # - Which specs exist and their statuses

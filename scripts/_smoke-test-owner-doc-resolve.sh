@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: shared-components
+# scope: plugin-only
 # ci-tier: balanced
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"

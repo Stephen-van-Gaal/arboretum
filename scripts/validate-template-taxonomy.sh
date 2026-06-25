@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: document-taxonomy
+# scope: plugin-only
 set -euo pipefail
 
 if [ "$#" -gt 1 ]; then

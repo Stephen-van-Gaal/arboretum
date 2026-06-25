@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-handoff
+# scope: plugin-only
 # post-handoff-comment.sh — Post a marked session-handoff comment to a
 # tracker issue. The HTML-comment marker lets refresh-next-cache.sh and
 # humans find the latest handoff for an issue (design §4.1, §4.5).

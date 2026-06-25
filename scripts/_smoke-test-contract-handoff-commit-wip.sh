@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/handoff-commit-wip.cli-contract.md.
 # Exercises CLI-1..CLI-4 via four fixture scenarios (A-D) driving the
 # script directly with a temp-dir project fixture. Picked up automatically

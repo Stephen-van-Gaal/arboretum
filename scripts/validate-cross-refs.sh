@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # uses: definitions/register-schema.md @v1
 # uses: definitions/contracts-yaml-schema.md @v1
 # validate-cross-refs.sh — Cross-document consistency checks

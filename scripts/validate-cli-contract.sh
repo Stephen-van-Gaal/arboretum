@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # validate-cli-contract.sh - Validate a *.cli-contract.md file against the
 # WS5 CLI-contract schema.
 #

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Categorize open issues into buckets for /roadmap run.
 #
 # Inputs (one of):

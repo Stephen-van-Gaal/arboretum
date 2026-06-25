@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # Append-only per-contributor token ledger. Source me; call ledger_append.
 # Dependency-free except jq (already a project dependency).
 

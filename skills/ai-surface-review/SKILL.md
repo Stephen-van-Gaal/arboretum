@@ -1,6 +1,7 @@
 ---
 name: ai-surface-review
 owner: review-stage
+scope: plugin-only
 description: Analyze AI-facing surfaces (skills, hooks, scripts, agent instruction files) for prompt-injection, instruction-hijacking, and untrusted-data-flow risk. Runs as a fresh-context driver. The AI-surface lane of the B4 review stage.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob

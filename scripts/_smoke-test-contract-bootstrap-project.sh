@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/bootstrap-project.cli-contract.md.
 # Exercises CLI-1 through CLI-10 directly by running bootstrap-project.sh
 # against temp fixture directories. Picked up automatically by ci-checks.sh's

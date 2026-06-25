@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-yaml-lite.sh - Contract test for docs/contracts/yaml-lite.contract.md.
 set -uo pipefail
 

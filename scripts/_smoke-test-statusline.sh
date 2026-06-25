@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # _smoke-test-statusline.sh — Verify .claude/hooks/statusline.sh renders
 # the full rich line: <model> | ts HH:MM | <project>/<branch> | ctx N% |
 # 5h:N% 7d:N% | wt:name | [#N /stage], with graceful omission of absent

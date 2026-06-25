@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
+# scope: plugin-only
 # Verify the nightly release-candidate workflow remains a human-merge PR flow.
 
 set -euo pipefail

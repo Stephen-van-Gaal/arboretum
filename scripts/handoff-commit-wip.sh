@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-handoff
+# scope: plugin-only
 # handoff-commit-wip.sh — If the working tree is dirty, commit
 # everything into a `wip: handoff` commit and push the branch, so
 # in-flight work survives a machine switch (design §4.4). A clean

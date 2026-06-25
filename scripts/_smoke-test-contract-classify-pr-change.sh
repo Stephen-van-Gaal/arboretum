@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-classify-pr-change.sh — Contract test for
 # docs/contracts/classify-pr-change.contract.md. Asserts CPC-1..CPC-7
 # against scripts/classify-pr-change.sh by feeding file lists on stdin

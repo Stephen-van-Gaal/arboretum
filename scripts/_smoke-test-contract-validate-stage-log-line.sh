@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-validate-stage-log-line.sh — Contract test for
 # docs/contracts/validate-stage-log-line.contract.md. Asserts VSL-1..VSL-6
 # against scripts/validate-stage-log-line.sh by reusing the existing S9

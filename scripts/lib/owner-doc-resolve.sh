@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: shared-components
+# scope: plugin-only
 # owner-doc-resolve.sh — resolve a `# owner: <name>` to its governing document.
 #
 # Sourced library; defines owner_doc_path. Group-aware (D7, #681): an owner name

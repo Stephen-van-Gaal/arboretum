@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-post-handoff-comment.sh — Contract test for
 # docs/contracts/post-handoff-comment.contract.md. Asserts PHC-1..PHC-6
 # against scripts/post-handoff-comment.sh.

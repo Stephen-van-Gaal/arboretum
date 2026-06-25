@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # Regression smoke test for scripts/lib/journey_render.py (#776).
 # A JSONL line with an oversized integer literal makes json.loads raise a plain
 # ValueError (Python 3.11+ integer string-conversion digit limit), which is NOT

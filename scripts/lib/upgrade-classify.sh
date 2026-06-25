@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-upgrade
+# scope: plugin-only
 # Pure classification for upgrade-sync. Sourceable; no side effects.
 
 # classify_file BASE OURS THEIRS IN_PLUGIN(yes|no) IN_TREE(yes|no) -> action

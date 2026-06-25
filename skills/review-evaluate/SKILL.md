@@ -1,6 +1,7 @@
 ---
 name: review-evaluate
 owner: git-workflow-tooling
+scope: plugin-only
 description: Evaluate collected PR review records from collect-review.sh and write a validated dispositions.json ledger for /land. Read-only with respect to GitHub; invoked by /land after collection.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Skill

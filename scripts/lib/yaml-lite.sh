@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # yaml-lite.sh - Shared parser for Arboretum's constrained YAML/frontmatter subset.
 
 yaml_lite_parse() {

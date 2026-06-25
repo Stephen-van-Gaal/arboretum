@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-validate-test-surface.sh — Contract test for
 # docs/contracts/validate-test-surface.contract.md. Asserts VTS-1..VTS-6
 # against scripts/validate-test-surface.sh by reusing the existing S3-6

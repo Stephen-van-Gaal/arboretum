@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap-inflight-view
+# scope: plugin-only
 # _smoke-test-roadmap-inflight-view-integration.sh — full `--format full` render
 # over a fixture board, asserting in-flight-first order, de-dup against buckets,
 # no truncation of a #516-class epic, and the degradation notice. No network.

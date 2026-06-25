@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # render-ledger-journey.sh — render the token-journey report from a push ledger.
 # The ledger tree-builder + the shared renderer (epic #719 D3 / slice-1 DS1.5).
 # The transcript audit path stays in read-session-journey.sh --transcript.

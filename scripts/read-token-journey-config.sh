@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # read-token-journey-config.sh — Read token_journey config from .arboretum.yml.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "read-token-journey-config.sh requires bash" >&2; exit 1; }

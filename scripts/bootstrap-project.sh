@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # bootstrap-project.sh — Initialize a new spec-driven project
 #
 # Usage:

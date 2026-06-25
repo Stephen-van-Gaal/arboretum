@@ -1,6 +1,7 @@
 ---
 name: handoff
 owner: session-handoff
+scope: plugin-only
 description: "Queue a tracker item as `next-up` so the next session boots oriented on it. Single canonical writer for the session-handoff label — /cleanup, /reflect, and explicit completion-mode callers delegate here. Use directly when leaving mid-session ('I'm wrapping up; #154 is next')."
 disable-model-invocation: false
 allowed-tools:

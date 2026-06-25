@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/ci-checks.cli-contract.md.
 # Asserts structural invariants of scripts/ci-checks.sh by inspecting the
 # script source — it does NOT execute ci-checks.sh.
@@ -192,7 +193,11 @@ else
   fail=1
 fi
 
-if grep -q 'scope_re=' "$TARGET" \
+# The `# scope:` grammar lives in scripts/lib/scope-resolve.sh (single-sourced,
+# tested by _smoke-test-scope-resolve.sh). ci-checks consumes it via file_scope
+# rather than re-inlining a scope_re= regex — assert the resolver call + the
+# consumer-scope fall-through SKIP, not the moved grammar.
+if grep -q 'file_scope' "$TARGET" \
   && grep -q 'no consumer-applicable scope declared' "$TARGET"; then
   echo "PASS: CLI-7d — consumer roots require explicit consumer/any smoke-test scope"
 else

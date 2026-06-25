@@ -1,6 +1,7 @@
 ---
 name: workspace
 owner: workspace-skill
+scope: plugin-only
 description: "List the active worktrees (enriched: issue / branch / open-PR / dirty, with a 'you are here' marker) and switch between them. The legibility half of the worktrees-always default (#716) — answers 'where am I / switch to X'. List + switch only; worktree CREATION is owned by /start, removal by /cleanup."
 disable-model-invocation: false
 allowed-tools:

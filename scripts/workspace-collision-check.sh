@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: collision-detection
+# scope: plugin-only
 # workspace-collision-check.sh — Compute a branch/worktree collision verdict.
 #   --issue N     rich (network-permitted): recorded claim + on-disk detectors
 #   --pre-commit  narrow (local-only): >=2 on-disk branches for the same issue

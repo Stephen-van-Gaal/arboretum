@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/dev-contracts/release/check-release-gate.cli-contract.md.
 # Exercises release-gate behavior via isolated git fixtures.
 

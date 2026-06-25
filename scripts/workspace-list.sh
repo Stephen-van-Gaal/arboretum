@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workspace-skill
+# scope: plugin-only
 # workspace-list.sh - Enumerate + enrich the repo's worktrees, and resolve a
 # switch selector to a worktree path. Sourced, never executed. The data half of
 # the /workspace skill (list + switch); creation is owned by the /start seam.

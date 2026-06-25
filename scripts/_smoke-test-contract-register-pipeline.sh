@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-register-pipeline.sh — Contract test for
 # docs/contracts/register-pipeline.contract.md. Asserts the seven
 # invariants RP-1..RP-7 from the contract's ## Test surface against

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-sync-contracts.sh — Contract test for
 # docs/contracts/sync-contracts.contract.md. Asserts SC-1..SC-8 from the
 # contract's ## Test surface against scripts/sync-contracts.sh.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-tests.sh — Run every test under tests/contracts/
 # whose declared named pipeline selector matches the active flag.
 #

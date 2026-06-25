@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # uses: definitions/register-schema.md @v1
 # uses: definitions/contracts-yaml-schema.md @v1
 # uses: definitions/spec-status-state-machine.md @v1
@@ -81,6 +82,7 @@ CONTRACTS="$PROJECT_DIR/contracts.yaml"
 DEFS_DIR="$PROJECT_DIR/docs/definitions"
 SPECS_DIR="$PROJECT_DIR/docs/specs"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/owner-doc-resolve.sh"   # group-aware # owner: resolution (D7, #681)
+source "$(dirname "${BASH_SOURCE[0]}")/lib/scope-resolve.sh"       # `# scope:` governance-scope marker (#836)
 
 # Severity-tiered finding counters (S2 #641): warn() emits blocking ✗,
 # advise() emits advisory ⚠. The exit code summarizes the run:
@@ -154,8 +156,22 @@ PYEOF
 missing_owner_spec_is_applicable() {
   local rel="$1"
 
-  if ! is_plugin_root && manifest_manages_path "$rel"; then
-    return 1
+  # Primary signal (#836): the in-file `# scope:` marker is authoritative in a
+  # consumer root, ahead of manifest membership. An explicit marker decides
+  # outright — only an *absent* marker falls back to the install manifest.
+  if ! is_plugin_root; then
+    case "$(file_scope "$PROJECT_DIR/$rel")" in
+      # plugin-only → framework-governed, never the adopter's to own.
+      plugin-only) return 1 ;;
+      # consumer/any → adopter-owned: enforce normally even if the file is still
+      # listed in the manifest (a stale manifest entry must not mask it).
+      consumer|any) return 0 ;;
+    esac
+    # Marker absent (`none`): fall back to install-manifest membership
+    # (back-compat for unmarked framework files vendored before the marker).
+    if manifest_manages_path "$rel"; then
+      return 1
+    fi
   fi
   return 0
 }
@@ -1123,6 +1139,11 @@ else
       rel_path="${file#"$PROJECT_DIR"/}"
       [[ "$rel_path" == *"__pycache__"* ]] && continue
       [[ "$rel_path" == *.pyc ]] && continue
+      # Framework-governed by its own `# scope:` marker — out of the adopter's
+      # ownership scope (#836). Primary signal; manifest-independent.
+      if ! is_plugin_root && governed_by_framework_in_consumer_root "$file"; then
+        continue
+      fi
       owned=false
       while IFS=: read -r pattern _; do
         [ -z "$pattern" ] && continue

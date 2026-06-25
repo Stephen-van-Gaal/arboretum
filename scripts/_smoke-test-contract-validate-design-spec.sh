@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-validate-design-spec.sh — Contract test for
 # docs/contracts/validate-design-spec.contract.md. Asserts VDS-1..VDS-5
 # against scripts/validate-design-spec.sh by reusing the existing S2

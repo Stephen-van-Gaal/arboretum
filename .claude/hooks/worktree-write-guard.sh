@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # PreToolUse hook for Write/Edit/NotebookEdit: block when a worktree session
 # targets the MAIN-tree path instead of the session worktree (#825, #826).
 #

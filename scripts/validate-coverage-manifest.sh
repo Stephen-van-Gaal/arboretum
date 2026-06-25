@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # validate-coverage-manifest.sh — Verify docs/contracts/_coverage.md is
 # both fresh (matches a fresh generate-coverage.sh run) and complete
 # (every script/hook in scope has a row). Peer to validate-cross-refs.sh.

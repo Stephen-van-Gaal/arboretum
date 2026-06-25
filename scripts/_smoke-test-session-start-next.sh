@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # _smoke-test-session-start-next.sh — Verify the session-handoff
 # mechanism end-to-end (issue #155).
 #

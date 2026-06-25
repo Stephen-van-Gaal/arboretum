@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-context-ledger
+# scope: plugin-only
 # _smoke-test-pipeline-context-roundtrip.sh — Integration: writer → reader hits
 # within one HEAD window; misses after HEAD advances (the self-invalidation
 # contract that makes the ledger safe to cache across stages, #665).

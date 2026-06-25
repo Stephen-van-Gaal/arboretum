@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # _smoke-test-health-check.sh — Fixture round-trip for the
 # generate-register.sh ↔ health-check.sh schema contract.
 #
@@ -218,6 +219,56 @@ echo "$HEALTH_OUT" | grep -q 'Unowned: bin/__pycache__' \
 echo "$HEALTH_OUT" | grep -q 'Unowned: scripts/ci-checks.sh' \
   && fail "health-check flagged a manifest-managed framework script" \
           "$(echo "$HEALTH_OUT" | grep 'scripts/ci-checks.sh')"
+
+# Check 3 Half A: a framework file carrying `# scope: plugin-only` must be
+# skipped even when it is NOT recorded in the install manifest — the in-file
+# marker is the primary governance-scope signal, independent of the manifest
+# (#836). The manifest-managed assertion above covers the fallback path; this
+# covers the marker path.
+cat > "$FIXTURE/scripts/framework-tool.sh" <<'EOF'
+#!/usr/bin/env bash
+# owner: git-workflow-tooling
+# scope: plugin-only
+echo hi
+EOF
+set +e
+SCOPE_OUT=$(bash "$CHECK" "$FIXTURE" 2>&1)
+set -e
+echo "$SCOPE_OUT" | grep -q 'Unowned: scripts/framework-tool.sh' \
+  && fail "health-check flagged a '# scope: plugin-only' framework file absent from the manifest" \
+          "$(echo "$SCOPE_OUT" | grep 'scripts/framework-tool.sh')"
+rm -f "$FIXTURE/scripts/framework-tool.sh"
+
+# Check 3 Half A: an explicit `# scope: consumer` marker is the PRIMARY signal
+# and is adopter-owned — it MUST be flagged when its owner spec is missing, even
+# if a stale install-manifest entry still lists it. The marker overrides the
+# manifest fallback; a manifest entry must not mask an explicitly consumer-scoped
+# file (#836). Inject the entry into the real fixture manifest, then restore it.
+cat > "$FIXTURE/scripts/consumer-tool.sh" <<'EOF'
+#!/usr/bin/env bash
+# owner: consumer-app-tooling
+# scope: consumer
+EOF
+cp "$FIXTURE/.arboretum/install-manifest.json" "$FIXTURE/.arboretum/install-manifest.json.bak"
+python3 - "$FIXTURE/.arboretum/install-manifest.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+with open(p) as f:
+    d = json.load(f)
+d.setdefault("files", {})["scripts/consumer-tool.sh"] = {"version": "fixture", "sha256": "fixture"}
+with open(p, "w") as f:
+    json.dump(d, f)
+PY
+set +e
+CONSUMER_OUT=$(bash "$CHECK" "$FIXTURE" 2>&1)
+CONSUMER_RC=$?
+set -e
+echo "$CONSUMER_OUT" | grep -q 'Unowned: scripts/consumer-tool.sh' \
+  || fail "Check 3 Half A did not flag a '# scope: consumer' file (marker must override manifest membership)" "$CONSUMER_OUT"
+[ "$CONSUMER_RC" -ne 0 ] \
+  || fail "health-check.sh exit 0 despite an explicitly consumer-scoped file with a missing owner spec" "$CONSUMER_OUT"
+rm -f "$FIXTURE/scripts/consumer-tool.sh"
+mv "$FIXTURE/.arboretum/install-manifest.json.bak" "$FIXTURE/.arboretum/install-manifest.json"
 
 # But the same missing-owner-spec condition must remain a drift finding
 # for local scripts that are not framework-managed.

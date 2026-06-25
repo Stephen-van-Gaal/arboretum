@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Time-based nag computation for the roadmap system.
 # Called by view.sh (orientation render) before the tracker guard.
 # Outputs [nag] lines to stdout; no output = no nags due.

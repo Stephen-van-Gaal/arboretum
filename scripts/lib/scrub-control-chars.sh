@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: shared-components
+# scope: plugin-only
 # scrub-control-chars.sh - Single source of the control-char scrub primitive.
 #
 # Strips ASCII/C1 control characters from author-controlled content (branch

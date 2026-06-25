@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # post-review-closeout.sh <pr> [--dry-run]
 #
 # Validate review closeout ledgers, verify local/provider head safety, post

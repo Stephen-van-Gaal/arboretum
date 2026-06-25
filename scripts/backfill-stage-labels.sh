@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # backfill-stage-labels.sh — One-shot migration (#570). For each OPEN issue
 # carrying a legacy current-stage marker block in its body: set the
 # corresponding exclusive stage:* label, then rewrite the body with the

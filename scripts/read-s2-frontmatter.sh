@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # read-s2-frontmatter.sh — Read & validate the S2 input frontmatter on
 # a design spec (per docs/superpowers/specs/2026-05-22-pipeline-overhaul-ws1-build-orchestrator-design.md D3 + D5).
 # Prints key=value lines on success (exit 0); exits 2 on any missing

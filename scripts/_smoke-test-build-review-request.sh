@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # _smoke-test-build-review-request.sh — unit test for scripts/build-review-request.sh
 # (#791 D2). The ReviewRequest is the context-parameterized request the pipeline stage
 # hands the dispatcher: {altitude, artifact, base, brief} (section-dispatch element 1).

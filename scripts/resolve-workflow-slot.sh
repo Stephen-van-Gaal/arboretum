@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # resolve-workflow-slot.sh - Resolve an Arboretum workflow skill slot.
 set -euo pipefail
 

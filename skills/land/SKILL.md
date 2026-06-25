@@ -1,6 +1,7 @@
 ---
 name: land
 owner: git-workflow-tooling
+scope: plugin-only
 description: Drive an open pull request to merge-ready through the configured repo backend. GitHub gets the full CI/reviewer loop; Azure DevOps gets explicit PR state/policy checks and merge handoff guidance. Chained from /finish; also runnable standalone on any open PR.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob, ScheduleWakeup, Skill

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: test-infrastructure
+# scope: plugin-only
 # read-test-config.sh — Read & validate a project's testing-shape declaration
 # off a test-infrastructure.spec.md frontmatter block (per
 # docs/superpowers/specs/2026-05-30-testing-shape-design.md). Prints key=value

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
+# scope: plugin-only
 # stage-codex-plugin-marketplace.sh — materialize a public-shaped local
 # marketplace root for Codex plugin install smoke tests.
 

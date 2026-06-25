@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/seed-settings.cli-contract.md.
 # Exercises CLI-1..CLI-5 via temp-file fixtures. Never touches the live
 # repo. Picked up automatically by ci-checks.sh's === Smoke tests === loop.

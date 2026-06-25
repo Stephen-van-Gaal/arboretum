@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Idempotent label installer for /roadmap.
 #
 # Installs the framework-fixed label vocabulary (type:*, horizon:*, appetite:*,

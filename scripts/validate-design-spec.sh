@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # validate-design-spec.sh - S2 contract enforcement.
 #
 # Validates a design spec's frontmatter against the S2 contract

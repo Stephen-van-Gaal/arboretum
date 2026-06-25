@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # Decisions Status/supersession-link validation (#682). Greps for the check's
 # own warning messages so it is robust to unrelated cross-ref warnings.
 set -uo pipefail

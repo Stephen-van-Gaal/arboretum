@@ -23,6 +23,7 @@
 | scripts/heartbeat.sh | docs/contracts/heartbeat.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
 | scripts/lib/owner-doc-resolve.sh | docs/contracts/owner-doc-resolve.contract.md | full |
+| scripts/lib/scope-resolve.sh | docs/contracts/scope-resolve.contract.md | full |
 | scripts/lib/scrub-control-chars.sh | docs/contracts/scrub-control-chars.contract.md | full |
 | scripts/lib/state-dir.sh | docs/contracts/state-dir.contract.md | full |
 | scripts/lib/token-journey-ledger.sh | docs/contracts/token-journey-ledger.contract.md | full |

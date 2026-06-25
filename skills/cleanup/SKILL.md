@@ -1,6 +1,7 @@
 ---
 name: cleanup
 owner: workflow-unification
+scope: plugin-only
 description: Post-merge cleanup — verify merge state, safely remove the merged local branch/session worktree, and verify spec status. Use after a PR has been merged.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob, AskUserQuestion, Task

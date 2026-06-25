@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
+# scope: plugin-only
 # read-pipeline-flag.sh — Print the active named pipeline.workflow value.
 # Reads ./roadmap.config.yaml in the current working directory.
 # Exits 0 with "unified" if the pipeline block or workflow key is absent.

@@ -1,6 +1,7 @@
 ---
 name: design-package
 owner: workflow-unification
+scope: plugin-only
 description: Build the human review packet for a design session: recognize the AI-facing session artifact, generate the overview, prepare the Durable Document Change Set, and drive durable-doc diff review before /design exits.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep

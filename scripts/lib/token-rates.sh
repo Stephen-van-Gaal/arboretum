@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # Per-1M-token USD rates. As of 2026-06-06 (claude-api Appendix). Re-verify on change.
 token_rate() { # token_rate <model> <input|output|cache_write|cache_read>
   case "$1:$2" in

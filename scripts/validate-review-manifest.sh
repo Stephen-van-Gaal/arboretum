@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # validate-review-manifest.sh — enforce the review-manifest seam schema.
 #   validate-review-manifest.sh <manifest-file>
 # Exit 0 = valid; exit 1 = schema violation (first offending field to stderr).

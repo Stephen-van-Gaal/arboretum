@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: skill-and-agent-authoring
+# scope: plugin-only
 # ci-parallel: safe
 # _smoke-test-haiku-dispatch-model.sh — Assert the two skills that dispatch an
 # internal Haiku sub-task set an explicit, concrete Haiku model parameter at the

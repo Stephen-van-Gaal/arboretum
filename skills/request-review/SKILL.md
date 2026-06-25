@@ -1,6 +1,7 @@
 ---
 name: request-review
 owner: git-workflow-tooling
+scope: plugin-only
 description: Request (or re-request) the reviewers declared in .arboretum.yml's review: block, each via its configured mechanism, through the project's repo backend. Thin orchestrator over request-review.sh; standalone-invocable to re-prompt review on an existing PR.
 disable-model-invocation: false
 allowed-tools: Bash, Read, AskUserQuestion

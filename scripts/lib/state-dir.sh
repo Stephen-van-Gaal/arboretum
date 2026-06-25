@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # state-dir.sh — single source of truth for the arboretum state directory.
 #
 # Sourceable, side-effect-free. Defines arboretum_state_dir(), which echoes the

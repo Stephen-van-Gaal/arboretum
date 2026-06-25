@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-roadmap-install-labels.sh — Contract smoke test for
 # docs/contracts/roadmap-install-labels.cli-contract.md. Asserts CLI-1..CLI-5
 # fully offline: all assertions use --dry-run mode or a stripped-PATH live

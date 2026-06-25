@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # _smoke-test-contract-review-adapter-codex.sh — Contract test for
 # docs/contracts/review-adapter-codex.cli-contract.md. Asserts RAC-1..RAC-7 against
 # scripts/review-adapter-codex.sh using a fixture codex --json payload (no live codex

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # cleanup-tracker-closure.sh — Non-interactive helper for /cleanup tracker close.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "cleanup-tracker-closure.sh requires bash" >&2; exit 2; }

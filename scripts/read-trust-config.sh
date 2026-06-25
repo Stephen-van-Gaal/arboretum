@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # read-trust-config.sh — Read the journey-log author allowlist from
 # .arboretum.yml (trust.journey_log_authors). Emits:
 #   present=yes|no          (textual presence of the key — distinguishes

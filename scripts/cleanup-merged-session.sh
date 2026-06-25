@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "cleanup-merged-session.sh requires bash" >&2; exit 2; }
 

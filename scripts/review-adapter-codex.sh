@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # review-adapter-codex.sh — the `runtime` adapter for the codex reviewer (#791 D5).
 # Maps codex `review --json` output (schema: verdict/summary/findings[]) onto the shared
 # review-manifest (docs/contracts/review-manifest.contract.md), so a deterministic CLI

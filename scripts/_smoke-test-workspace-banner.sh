@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: session-start-cycle-state
+# scope: plugin-only
 # _smoke-test-workspace-banner.sh — Integration assertions for the
 # [Workspace] banner block rendered by .claude/hooks/session-start.sh.
 #

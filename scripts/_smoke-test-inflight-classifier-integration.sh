@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: inflight-work-classifier
+# scope: plugin-only
 # _smoke-test-inflight-classifier-integration.sh — Integration coverage for the
 # classified board over a faithful multi-epic fixture (issues + native links +
 # PR map + worktree set). Asserts the full seam end to end, the board-wide

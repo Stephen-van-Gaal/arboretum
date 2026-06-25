@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-write-escape-hatch.sh — Contract test for
 # docs/contracts/write-escape-hatch.contract.md. Asserts WEH-1..WEH-6 from the
 # contract's ## Test surface against scripts/write-escape-hatch.sh.

@@ -8,6 +8,7 @@ allowed-tools:
   - AskUserQuestion
 argument-hint: "[problem|enhancement] [short description]"
 owner: intake-report
+scope: plugin-only
 layer: 0
 ---
 

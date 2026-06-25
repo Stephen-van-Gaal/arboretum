@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # read-session-journey.sh — per-stage/skill/subagent token cost from a transcript.
 # Bash senses the environment (rates, config, descriptor); python is a pure
 # function of its inputs. Zero LLM inference. See token-journey design spec D1–D10.

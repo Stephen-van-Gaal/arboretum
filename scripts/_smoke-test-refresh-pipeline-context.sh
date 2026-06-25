@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-context-ledger
+# scope: plugin-only
 # _smoke-test-refresh-pipeline-context.sh — Verify refresh-pipeline-context.sh
 # writes a well-formed, SHA-stamped, scrubbed pipeline-context cache (#665).
 set -uo pipefail

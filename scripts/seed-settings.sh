@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
+# scope: plugin-only
 #
 # seed-settings.sh — seed or merge a project's .claude/settings.json permission
 # allow list from the arboretum settings template.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap-inflight-view
+# scope: plugin-only
 # view.sh — Shared deterministic roadmap-view core. Single renderer behind
 # /roadmap view, /roadmap run, and the SessionStart banner.
 #

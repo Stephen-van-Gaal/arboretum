@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # _smoke-test-check7-branch-scope.sh — Check 7 --reconcile branch-scoping (#750).
 #
 # Fixture: a local 'main' with TWO active specs, both drifted (each owns a file

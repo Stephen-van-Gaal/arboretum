@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # ci-checks.sh — canonical check entrypoint. Run by the pre-PR local gate
 # (skills/finish) and, once #206 merges, by .github/workflows/ci.yml — so the
 # local gate and CI cannot drift. Exit 0 only if all blocking checks pass.
@@ -7,6 +8,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 source "$ROOT/scripts/lib/owner-doc-resolve.sh"   # group-aware # owner: resolution (D7, #681)
+source "$ROOT/scripts/lib/scope-resolve.sh"       # `# scope:` governance-scope marker (#836)
 fail=0
 # Failing-stage rollup (#839): record the stage where `fail` first flips so a
 # failed run can name the failing stage in $GITHUB_STEP_SUMMARY at a glance.
@@ -114,29 +116,27 @@ is_plugin_manifest_root() {
 
 smoke_test_applicable() {
   local f="$1"
-  local owner_line owner_name scope_line scope
-  local owner_re scope_re
+  local owner_line owner_name scope
 
   if is_plugin_root; then
     return 0
   fi
 
-  scope_re='^# scope: (plugin-only|consumer|any)$'
-  scope_line="$(sed -n '1,8{/^# scope: /p;}' "$f" | head -1)"
-  if [[ "$scope_line" =~ $scope_re ]]; then
-    scope="${BASH_REMATCH[1]}"
-    case "$scope" in
-      consumer|any)
-        return 0
-        ;;
-      plugin-only)
-        echo "SKIP: $f (scope '$scope' is not applicable in this root)"
-        return 1
-        ;;
-    esac
-  fi
+  # Governance-scope marker via the single-sourced resolver (#836). `none` falls
+  # through to the owner-resolution path below for back-compat.
+  scope="$(file_scope "$f")"
+  case "$scope" in
+    consumer|any)
+      return 0
+      ;;
+    plugin-only)
+      echo "SKIP: $f (scope '$scope' is not applicable in this root)"
+      return 1
+      ;;
+  esac
 
   owner_line="$(sed -n '2p' "$f")"
+  local owner_re
   owner_re='^# owner: ([a-z][a-z0-9-]+)$'
   if [[ "$owner_line" =~ $owner_re ]]; then
     owner_name="${BASH_REMATCH[1]}"

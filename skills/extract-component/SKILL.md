@@ -1,6 +1,7 @@
 ---
 name: extract-component
 owner: extract-shared-component
+scope: plugin-only
 description: Survey a codebase for extractable duplication and safely extract a shared component under arboretum's TDD + spec-first gate. Use when consolidating copy-pasted logic, removing a documented-but-unenforced invariant, or acting on a Rule-of-Three duplication finding.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion

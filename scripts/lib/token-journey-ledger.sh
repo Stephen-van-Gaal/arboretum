@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 # token-journey-ledger.sh — append-only per-session push ledger writer.
 # Source me; call journey_ledger_capture. Watermark-resumed, uuid-deduped,
 # control-char scrubbed. The row schema is pinned by

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # Smoke test: request-review.sh — backend dispatch + per-reviewer mechanism.
 # Uses REVIEW_DRY_RUN=1 so it never touches the network.
 set -uo pipefail

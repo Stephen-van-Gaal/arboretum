@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-read-pipeline-flag.sh — Contract test for
 # docs/contracts/read-pipeline-flag.contract.md. Asserts RPF-1..RPF-10
 # against scripts/read-pipeline-flag.sh using a mktemp CWD fixture

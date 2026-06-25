@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: spec-uplift
+# scope: plugin-only
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIAG="$ROOT/scripts/spec-uplift-diagnose.sh"

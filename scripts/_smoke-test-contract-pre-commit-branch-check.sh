@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/pre-commit-branch-check.cli-contract.md.
 # Exercises CLI-1..CLI-9 via fixture scenarios (A–O) driving the
 # hook directly with stdin JSON. Picked up automatically by

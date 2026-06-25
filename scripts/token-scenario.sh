@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: token-accounting
+# scope: plugin-only
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export ARBORETUM_MODE=testbed ARBORETUM_RUN_ID="${ARBORETUM_RUN_ID:-scenario}"

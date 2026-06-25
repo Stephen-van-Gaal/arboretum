@@ -1,6 +1,7 @@
 ---
 name: start
 owner: workflow-unification
+scope: plugin-only
 description: Entry point for new work — ensures a tracker issue exists, determines whether the change is planned or exploratory, and routes to the appropriate workflow path. Auto-invoked by CLAUDE.md when a change request is detected.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob

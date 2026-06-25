@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # pr-readiness.sh — Classify local/remote PR readiness for the ship tail.
 set -euo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "pr-readiness.sh requires bash" >&2; exit 2; }

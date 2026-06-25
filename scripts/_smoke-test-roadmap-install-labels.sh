@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: roadmap
+# scope: plugin-only
 # Smoke test for scripts/roadmap/install-labels.sh
 #
 # Uses --dry-run mode to avoid touching any GitHub state. Asserts:

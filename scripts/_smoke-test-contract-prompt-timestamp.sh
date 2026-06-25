@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/contracts/prompt-timestamp.cli-contract.md.
 # Exercises CLI-1..CLI-4 via four scenarios driving the hook directly.
 # Picked up automatically by ci-checks.sh's === Smoke tests === loop.

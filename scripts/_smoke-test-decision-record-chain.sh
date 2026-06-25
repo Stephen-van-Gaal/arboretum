@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: document-access
+# scope: plugin-only
 # Integration test for the schema-coupled decision-record chain (#682): a single
 # fixture spec flows schema-shape → read-decisions.sh (summary/detail) →
 # validate-cross-refs.sh. Per CLAUDE.md ## Schema-coupled scripts, exercise the

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # collect-review.sh <pr> [--unanswered]
 #
 # Aggregate every PR comment surface into one backend-neutral normalized

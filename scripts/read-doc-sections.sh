@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: document-access
+# scope: plugin-only
 set -euo pipefail
 
 [ "$#" -ge 2 ] || { echo "Usage: $0 <markdown-file> <section-key>..." >&2; exit 2; }

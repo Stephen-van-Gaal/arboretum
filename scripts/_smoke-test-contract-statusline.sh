@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-statusline.sh — Contract test for
 # docs/contracts/statusline.contract.md. Asserts STL-1..STL-3 against
 # .claude/hooks/statusline.sh by driving the real hook with a stdin

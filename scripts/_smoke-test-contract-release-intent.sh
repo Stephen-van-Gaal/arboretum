@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # Smoke test for docs/dev-contracts/release/release-intent.cli-contract.md.
 # Exercises release-intent parsing from PR body files and GitHub event JSON.
 

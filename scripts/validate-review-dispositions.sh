@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
+# scope: plugin-only
 # validate-review-dispositions.sh <pr>
 #
 # Validate .arboretum/land/<pr>/dispositions.json against the collected

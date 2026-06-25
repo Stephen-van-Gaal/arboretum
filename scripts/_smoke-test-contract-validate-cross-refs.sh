@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
+# scope: plugin-only
 # _smoke-test-contract-validate-cross-refs.sh — Contract test for
 # docs/contracts/validate-cross-refs.contract.md. Asserts VCR-1..VCR-2
 # against scripts/validate-cross-refs.sh. VCR-1 runs the validator

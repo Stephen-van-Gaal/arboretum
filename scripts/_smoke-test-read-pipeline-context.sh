@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-context-ledger
+# scope: plugin-only
 # _smoke-test-read-pipeline-context.sh — Verify read-pipeline-context.sh emits a
 # field only on a fresh-SHA hit; misses on stale SHA / missing file / unknown
 # field; scrubs at the consumer layer (#665).

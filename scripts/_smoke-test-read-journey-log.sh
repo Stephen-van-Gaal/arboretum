@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
+# scope: plugin-only
 # _smoke-test-read-journey-log.sh — Verify scripts/read-journey-log.sh
 # against the line-format contract defined by scripts/log-stage.sh.
 # Usage: bash scripts/_smoke-test-read-journey-log.sh

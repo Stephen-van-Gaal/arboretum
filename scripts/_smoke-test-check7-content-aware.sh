@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
+# scope: plugin-only
 # _smoke-test-check7-content-aware.sh — Unit-tier test for Check 7's
 # content-aware drift classifier (issue #238, epic #640). Builds a
 # git fixture with one active spec owning one file, then commits the

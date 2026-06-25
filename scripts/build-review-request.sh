@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # owner: review-stage
+# scope: plugin-only
 # build-review-request.sh — construct the ReviewRequest the pipeline stage hands the
 # dispatcher (#791 D2, section-dispatch element 1: the context-parameterized request).
 #
