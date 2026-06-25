@@ -28,6 +28,7 @@ status: active
 owner: architecture
 owns:
   - src/omega.py
+  - src/omega.sql
   - owned-docs/omega.md
   - config/omega.yaml
 ---
@@ -38,6 +39,10 @@ INNER
 # owner: omega
 def run():
     return 1
+INNER
+  cat > "$d/src/omega.sql" <<'INNER'
+-- owner: omega
+SELECT 1;
 INNER
   cat > "$d/owned-docs/omega.md" <<'INNER'
 ---
@@ -64,7 +69,7 @@ INNER
 
 | Spec | Status | Owner | Owns (files/directories) |
 |------|--------|-------|--------------------------|
-| omega.spec.md | active | architecture | src/omega.py, owned-docs/omega.md, config/omega.yaml |
+| omega.spec.md | active | architecture | src/omega.py, src/omega.sql, owned-docs/omega.md, config/omega.yaml |
 
 ## Status Summary
 
@@ -76,7 +81,7 @@ INNER
 
 ## Dependency Resolution Order
 INNER
-  (cd "$d" && git add docs/specs/omega.spec.md src/omega.py owned-docs/omega.md config/omega.yaml docs/REGISTER.md \
+  (cd "$d" && git add docs/specs/omega.spec.md src/omega.py src/omega.sql owned-docs/omega.md config/omega.yaml docs/REGISTER.md \
               CLAUDE.md contracts.yaml workflows/README.md docs/ARCHITECTURE.md \
    && git commit -q -m "spec+code baseline")
   echo "$d"
@@ -96,6 +101,15 @@ D="$(make_fixture)"
 (cd "$D" && printf '# owner: omega\n# touched\ndef run():\n    return 1\n' > src/omega.py \
    && git add src/omega.py && git commit -q -m "comment only")
 if omega_drifts "$D"; then fail_case "comment-only change flagged as drift"; else pass "comment-only → benign"; fi
+rm -rf "$D"
+
+# --- benign: SQL (-- prefix) comment-only change → NO drift (#859) ---
+# Exercises the broadened _comment_prefix map: a `--` comment edit on an
+# owned .sql file must be recognized as benign, not unknown→drift.
+D="$(make_fixture)"
+(cd "$D" && printf -- '-- owner: omega\n-- a new explanatory comment\nSELECT 1;\n' > src/omega.sql \
+   && git add src/omega.sql && git commit -q -m "sql comment only")
+if omega_drifts "$D"; then fail_case "sql comment-only change flagged as drift"; else pass "sql comment-only → benign"; fi
 rm -rf "$D"
 
 # --- benign: net-empty (change then revert) → NO drift ---

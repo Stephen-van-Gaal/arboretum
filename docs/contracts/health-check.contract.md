@@ -1,6 +1,6 @@
 ---
 seam: health-check
-version: 1.4
+version: 1.5
 producer-type: script
 consumer-type: script
 consumes:
@@ -116,9 +116,12 @@ The `--reconcile` flag does NOT change exit-code semantics — Check 7's mutatio
   - **`--reconcile --all` on the feature branch:** BOTH A and B flip to `stale`.
   - **Default `--reconcile` with HEAD on `main` (merge-base == HEAD):** nothing flips (A and B stay `active`) and an advisory names `--reconcile --all`.
   The smoke test diffs pre-/post-run spec + REGISTER state for each sub-case and asserts the advisory lines. Pins the branch-scope default against regressing to the unscoped repo-wide flip (the #750 footgun).
+- **HC-11: source-languages-opt-in (#859).** With no `source_languages:` key, Check 3 Half B scans only `*.py` — an unowned `.ts` in a source root is not *block-flagged* `Unowned:` and does not yield exit `1` (a Half C advisory nudge about the undeclared `.ts` is expected and is exit `2`). With `source_languages: [py, ts]`, the same unowned `.ts` is flagged `Unowned:` and the run exits `1`. Pins the backward-compatible default and the opt-in enforcement glob.
+- **HC-12: undeclared-source-type-discovery (advisory, #859).** A recognized code source type (`.sql`) present in a `source_paths` root but absent from both `source_languages:` and `source_languages_ignore:` yields a `⚠ … not declared in source_languages` line; this finding is advisory (does not by itself produce exit `1`). Listing the extension in `source_languages_ignore:` silences it. Pins Half C as a non-blocking nudge with an acknowledge path.
 
 ## Versioning
 
+- **1.5** (2026-06-25) — Check 3 is language-aware (#859). Half B's scan set is driven by `source_languages:` (default `[py]`, backward-compatible); in-file `<prefix> owner:` markers (leading-block, any recognized language — `#`/`--`/`//`) count as ownership alongside `owns:` patterns, so a generated provenance banner satisfies ownership. New advisory **Half C** nudges (`advise()`, exit `2`, never blocking) for recognized code source types undeclared in `source_languages:`/`source_languages_ignore:`. Adds **HC-11** (opt-in + backward-compat) and **HC-12** (advisory discovery + ignore). Issue #859.
 - **1.4** (2026-06-12) — `--reconcile` is **branch-scoped by default** (#750): it flips only specs whose owned files changed on the current branch (vs the `workspace_base_ref` integration base); out-of-scope drift is surfaced as one advisory roll-up, not flipped; degenerate scope (no base, or HEAD == base) flips nothing and advises `--all`. Adds the `--all` flag (order-independent) restoring the repo-wide sweep, the "Check 7 reconcile scope" invariant, and **HC-10** (branch-scope). **HC-5** now invokes `--reconcile --all` (its single-commit fixture has no feature branch, so the scope-independent mutation mechanics need the repo-wide opt-in). Closes the collateral-stale footgun where a shared `main`'s latent drift was written into an unrelated branch's diff. Issue #750 / lineage epic #640.
 - **1.3** (2026-06-08) — Findings are severity-tiered (S2 #641). HC-2 becomes a three-level exit-code contract: `0` clean / `1` ≥1 blocking finding (`✗`; checks 1/2/3/4/6) / `2` advisory-only findings (`⚠`; checks 5/7/8/9), with blocking precedence (any blocking finding yields `1`). Adds a severity-classification property; the Check 7 read-only/`--reconcile` property and HC-5 now describe advisory (`⚠`, exit `2`) findings. The frontmatter `version:` is corrected to track the changelog head (was stale at `1.0`). Issue #641 / epic #640.
 - **1.2** (2026-06-07) — Check 7 is now content-aware (#238): a drift candidate (owned file committed after its spec) only flags when the net change is non-benign. HC-5's fixture change becomes a behaviour change (a comment-only edit is now benign); adds HC-9 (benign diff-classes do not flag). Issue #238 / epic #640.

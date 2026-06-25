@@ -813,10 +813,70 @@ else
   fail_case "HC-10: clean --reconcile on-base not exit-0/no-roll-up (HC-2, finding C)" "rc=$clean_rc | $clean_out"
 fi
 
+# ── HC-11 / HC-12: language-aware Check 3 (#859) ─────────────────────
+# Self-contained Check-1-complete fixture: one active spec owning src/alpha.py.
+mk_lang_fixture() {
+  local d; d="$(mktemp -d)"
+  mkdir -p "$d/docs/specs" "$d/docs/definitions" "$d/src" "$d/workflows"
+  touch "$d/CLAUDE.md" "$d/contracts.yaml" "$d/docs/ARCHITECTURE.md" "$d/workflows/README.md"
+  ( cd "$d" && git init -q && git config user.email t@t && git config user.name t )
+  cat > "$d/docs/specs/alpha.spec.md" <<'INNER'
+---
+name: alpha
+status: active
+owner: architecture
+owns:
+  - src/alpha.py
+---
+
+# alpha
+INNER
+  printf '# owner: alpha\n' > "$d/src/alpha.py"
+  printf '%s\n' "# Project Register" "" "## Spec Index" "" \
+    "| Spec | Status | Owner | Owns (files/directories) |" \
+    "|------|--------|-------|--------------------------|" \
+    "| alpha.spec.md | active | architecture | src/alpha.py |" > "$d/docs/REGISTER.md"
+  ( cd "$d" && git add -A && git commit -qm init )
+  printf '%s\n' "$d"
+}
+
+# HC-11: source-languages-opt-in. Default scans only *.py; opt-in flags .ts.
+LF="$(mk_lang_fixture)"
+printf '// stray\n' > "$LF/src/stray.ts"; ( cd "$LF" && git add -A && git commit -qm ts )
+set +e; def_out=$(bash "$HC" "$LF" 2>&1); def_rc=$?; set -e
+printf 'source_languages:\n  - py\n  - ts\n' > "$LF/.arboretum.yml"
+( cd "$LF" && git add -A && git commit -qm optin )
+set +e; opt_out=$(bash "$HC" "$LF" 2>&1); opt_rc=$?; set -e
+# Default must not *block-flag* the .ts (Half B scans only .py); a Half C
+# advisory nudge about the undeclared .ts is expected and is exit 2, not 1.
+if ! echo "$def_out" | grep -q "Unowned:.*stray.ts" && [ "$def_rc" != "1" ] \
+   && echo "$opt_out" | grep -q "Unowned:.*stray.ts" && [ "$opt_rc" -eq 1 ]; then
+  pass "HC-11: default does not block .ts (exit $def_rc); source_languages:[py,ts] flags it (exit 1)"
+else
+  fail_case "HC-11: source_languages opt-in/backward-compat" "def_rc=$def_rc opt_rc=$opt_rc | $opt_out"
+fi
+rm -rf "$LF"
+
+# HC-12: undeclared-source-type discovery (advisory). One ⚠ nudge per ext,
+# does not by itself produce exit 1; source_languages_ignore silences it.
+LF="$(mk_lang_fixture)"
+printf 'SELECT 1;\n' > "$LF/src/x.sql"; ( cd "$LF" && git add -A && git commit -qm sql )
+set +e; disc_out=$(bash "$HC" "$LF" 2>&1); disc_rc=$?; set -e
+printf 'source_languages_ignore:\n  - sql\n' > "$LF/.arboretum.yml"
+( cd "$LF" && git add -A && git commit -qm ignore )
+set +e; sil_out=$(bash "$HC" "$LF" 2>&1); set -e
+if echo "$disc_out" | grep -q "sql.*not declared in source_languages" && [ "$disc_rc" != "1" ] \
+   && ! echo "$sil_out" | grep -q "not declared in source_languages"; then
+  pass "HC-12: undeclared .sql nudge is advisory (exit $disc_rc); ignore-list silences it"
+else
+  fail_case "HC-12: Half C discovery/advisory/ignore" "disc_rc=$disc_rc | $disc_out"
+fi
+rm -rf "$LF"
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 if [ $fail -eq 0 ]; then
-  echo "All health-check contract assertions passed (HC-1..HC-10)."
+  echo "All health-check contract assertions passed (HC-1..HC-12)."
   exit 0
 else
   echo "health-check contract test FAILED" >&2

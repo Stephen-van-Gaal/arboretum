@@ -33,7 +33,7 @@ You don't need to understand every skill or hook. You need to understand specs (
 
 **Checking that Claude is following the process:**
 
-- Every source file should have an `# owner: <spec-name>` comment — for shell scripts, the shebang stays on line 1 and `# owner: <spec-name>` goes on line 2. If files are missing owner comments, ask Claude to run `/health-check`.
+- Every source file should have an owner comment on its first line, in the file's comment syntax (`# owner: <spec>` for shell/Python, `-- owner: <spec>` for SQL, `// owner: <spec>` for TypeScript/JavaScript, etc.) — for shell scripts, the shebang stays on line 1 and the marker on line 2. Generated files carry a provenance banner (owner + what generated them + when) emitted by their generator. If files are missing owner comments, ask Claude to run `/health-check`.
 - Specs have one of three statuses: `draft` (being authored), `active` (matches current code), or `stale` (drift detected). Transitions are automatic via `/consolidate` and `/health-check` — no manual promotion step.
 - PRs should reference specs and include health-check results — if they don't, the `/pr` skill wasn't used
 
@@ -111,7 +111,7 @@ The workflow invariants are stated centrally in `workflows/README.md ## Workflow
 ## Development Rules
 
 - **Spec-first gate:** Code modification is allowed when the changed files' `# owner:` headers point to a topic that has either an existing governed spec at `docs/specs/<topic>.spec.md` (status `draft` or `active`) or an in-flight design spec at `docs/superpowers/specs/*-<topic>-design.md` (the governed spec will be created by `/consolidate` at `/finish` time). In the current general-release pipeline, `/consolidate` is the sole writer of governed specs — no workflow step hand-authors one.
-- **Ownership:** Every source file includes `# owner: <spec-name>` as its first comment line. Shell scripts use shebang line 1 and `# owner: <spec-name>` line 2.
+- **Ownership:** Every source file carries an owner marker on its first comment line, in the file's own comment syntax — `# owner: <spec>` for shell/Python/Ruby/YAML, `-- owner: <spec>` for SQL, `// owner: <spec>` for TypeScript/JavaScript/Go/Java/etc. Shell scripts keep the shebang on line 1 and the marker on line 2. **Generated files** carry a provenance banner their generator emits on every write — the owner line plus what generated them and when — so ownership survives regeneration; health-check recognizes the owner line anywhere in the leading comment block. Which languages are *enforced* is set per repo via `source_languages:` in `.arboretum.yml`.
 - **Permitted without spec change:** implementation-detail refactoring (preserves behaviour, tests pass), patch fixes (code didn't match spec), supplementary test additions.
 
 ## Key Documents

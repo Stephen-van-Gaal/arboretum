@@ -168,11 +168,27 @@ is_generated_source_artifact() {
   return 1
 }
 
-shell_owner_marker() {
-  local file="$1"
-  awk '
-    NR == 1 && /^#!/ { next }
-    { print; exit }
+# Scan the contiguous leading comment block of $1 for a `<prefix> owner: <name>`
+# marker (#859), tolerating a shebang and other leading comment/banner lines so
+# a generated provenance banner is recognized. $2 = comment prefix. Echoes the
+# owner name or nothing. Stops at the first non-comment, non-blank line.
+leading_block_owner_marker() {
+  local file="$1" prefix="$2"
+  [ -n "$prefix" ] || return 0
+  awk -v p="$prefix" '
+    { sub(/\r$/, "", $0) }   # strip trailing CR so CRLF-authored files match (#859 B4 / cross-platform)
+    NR==1 && /^#!/ { next }
+    /^<\?php/ && !php_skipped { php_skipped=1; next }   # skip the PHP opener (after an optional shebang) before the // owner: line (#859 B4)
+    {
+      if ($0 ~ /^[[:space:]]*$/) next
+      plen = length(p)
+      if (substr($0, 1, plen) == p) {
+        rest = substr($0, plen + 1)
+        if (rest ~ /^ owner: [a-z][a-z0-9-]*$/) { sub(/^ owner: /, "", rest); print rest; exit }
+        next
+      }
+      exit
+    }
   ' "$file"
 }
 
@@ -201,11 +217,21 @@ _in_array() {
 # Markdown (.md) is intentionally excluded: a leading `#` in Markdown is a
 # heading (document content), not a line comment — treating it as one would
 # hide real heading/prose edits to owned .md specs/contracts (#238 review).
+# Single source of recognized source-file comment syntax (#859). `ext:prefix`
+# pairs, space-separated (no prefix contains a space). Drives _comment_prefix
+# (Check 7 benign-diff + owner-marker detection) AND the recognized-extension
+# set. Markdown is intentionally absent: a leading `#` is a heading, not a
+# comment. Data formats (yaml/yml) are recognized for comment-stripping but
+# excluded from discovery (see _DISCOVERY_EXTS).
+_COMMENT_PREFIX_MAP='sh:# bash:# py:# rb:# yaml:# yml:# sql:-- ts:// tsx:// js:// jsx:// mjs:// cjs:// go:// java:// scala:// rs:// kt:// swift:// c:// h:// cpp:// cc:// php://'
+
 _comment_prefix() {
-  case "$1" in
-    *.sh|*.bash|*.py|*.rb|*.yaml|*.yml) printf '#' ;;
-    *) printf '' ;;
-  esac
+  local ext="${1##*.}" pair
+  [ "$ext" = "$1" ] && return 0   # no extension → unknown
+  for pair in $_COMMENT_PREFIX_MAP; do
+    if [ "${pair%%:*}" = "$ext" ]; then printf '%s' "${pair#*:}"; return 0; fi
+  done
+  return 0
 }
 
 # Content of a file at a commit (empty if absent). Always called in an
@@ -726,6 +752,170 @@ PYEOF
 
 _read_source_paths
 
+# Languages Check 3 Half B *enforces* (flags unowned files) — opt-in, default
+# [py] (today's behaviour, byte-for-byte). Same reader shape as
+# _read_source_paths; charset is bare extensions [A-Za-z0-9_-]. A malformed
+# block emits ERROR: on stderr and retains the [py] default. (#859)
+SOURCE_LANGUAGES=(py)
+# Languages explicitly acknowledged as NOT governed — silences Half C's
+# undeclared-source-type nudge for deliberate exceptions. Default empty. (#859)
+SOURCE_LANGUAGES_IGNORE=()
+
+# Extensions Half C nudges about: recognized CODE source types (#859). DERIVED
+# from _COMMENT_PREFIX_MAP (single source of truth — avoids the hand-maintained
+# second-list drift class, #124) minus the carve-outs: sh/bash (governed by
+# Half A's owner-marker scan) and data formats yaml/yml (recognized for
+# comment-stripping but not governed-by-default). To govern one, add it to
+# source_languages; to silence, add it to source_languages_ignore.
+_DISCOVERY_EXTS=""
+for _pair in $_COMMENT_PREFIX_MAP; do
+  case "${_pair%%:*}" in
+    sh|bash|yaml|yml) ;;
+    *) _DISCOVERY_EXTS="$_DISCOVERY_EXTS ${_pair%%:*}" ;;
+  esac
+done
+
+# Shared reader for the two source-language lists. $1 = config key. Echoes the
+# validated, pipe-joined value list on stdout (empty when the key is absent,
+# empty, or malformed) for the caller to `read -ra` into its own array — no
+# indirect array assignment (avoids shellcheck SC2229). Mirrors
+# _read_source_paths' PyYAML-or-fallback parse + token validation; a malformed
+# block emits a stderr notice and echoes nothing, so the caller keeps its
+# pre-seeded default.
+_read_source_lang_list() {
+  local key="$1"
+  local config="$PROJECT_DIR/.arboretum.yml"
+  [ -f "$config" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  local raw
+  raw=$(KEY="$key" python3 - "$config" <<'PYEOF' 2>/dev/null || true
+import sys, os, re
+path = sys.argv[1]
+KEY = os.environ["KEY"]
+TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+
+def emit(vals):
+    print('LANGS:' + '|'.join(vals))
+
+def _bail(msg):
+    print('ERROR:' + msg)
+    emit([])
+    sys.exit(0)
+
+def _validate_list(raw):
+    if raw is None:
+        return [], None
+    if not isinstance(raw, list):
+        return None, f"{KEY} must be a YAML list, got {type(raw).__name__}"
+    out = []
+    for x in raw:
+        if isinstance(x, (dict, list)):
+            return None, f"{KEY} contains non-scalar entry: {x!r}"
+        s = str(x).strip()
+        if not s:
+            continue
+        if not TOKEN_RE.match(s):
+            return None, (f"{KEY} contains invalid token {s!r} "
+                          "— allowed characters: [A-Za-z0-9_-]")
+        out.append(s)
+    return out, None
+
+parsed = None
+yaml_module = None
+try:
+    import yaml as yaml_module
+except ImportError:
+    pass
+
+if yaml_module is not None:
+    try:
+        with open(path) as f:
+            cfg = yaml_module.safe_load(f) or {}
+    except yaml_module.YAMLError as e:
+        _bail(f'.arboretum.yml is not valid YAML: {e}')
+    except OSError:
+        emit([])
+        sys.exit(0)
+    if not isinstance(cfg, dict):
+        emit([])
+        sys.exit(0)
+    parsed = cfg.get(KEY)
+else:
+    try:
+        with open(path) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        emit([])
+        sys.exit(0)
+    def parse_flow(s):
+        s = s.strip()
+        if not (s.startswith('[') and s.endswith(']')):
+            return None
+        return [x.strip().strip('"').strip("'")
+                for x in s[1:-1].split(',') if x.strip()]
+    in_block = False
+    items = None
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        m = re.match(r'^(\s*)([A-Za-z_][\w_-]*)\s*:\s*(.*?)\s*(?:#.*)?$', line)
+        bullet = re.match(r'^(\s*)-\s+(.*?)\s*(?:#.*)?$', line)
+        if not in_block:
+            if m and len(m.group(1)) == 0 and m.group(2) == KEY:
+                val = m.group(3).strip()
+                flow = parse_flow(val)
+                if flow is not None:
+                    parsed = flow
+                    break
+                if val:
+                    parsed = val
+                    break
+                in_block = True
+                items = []
+            continue
+        if bullet and len(bullet.group(1)) > 0:
+            items.append(bullet.group(2).strip().strip('"').strip("'"))
+            continue
+        if m and len(m.group(1)) == 0:
+            break
+    if in_block:
+        parsed = items
+
+langs_v, err = _validate_list(parsed)
+if err:
+    _bail(err)
+emit(langs_v)
+PYEOF
+)
+
+  [ -z "$raw" ] && return 0
+
+  local line
+  while IFS= read -r line; do
+    if [ "${line%%:*}" = "ERROR" ]; then
+      echo "  · $key config rejected: ${line#ERROR:}" >&2
+      return 0
+    fi
+  done <<< "$raw"
+
+  local payload=""
+  while IFS= read -r line; do
+    case "${line%%:*}" in
+      LANGS) payload="${line#*:}" ;;
+    esac
+  done <<< "$raw"
+
+  # Echo the pipe-joined payload; the caller reads it into its own literal-named
+  # array (avoids an indirect `read -ra "$name"`, which shellcheck flags SC2229).
+  printf '%s' "$payload"
+}
+
+_sl_payload="$(_read_source_lang_list source_languages)"
+[ -n "$_sl_payload" ] && IFS='|' read -ra SOURCE_LANGUAGES <<< "$_sl_payload"
+_sli_payload="$(_read_source_lang_list source_languages_ignore)"
+[ -n "$_sli_payload" ] && IFS='|' read -ra SOURCE_LANGUAGES_IGNORE <<< "$_sli_payload"
+
 # ── Check 0: Missing governed documents ──────────────────────────────
 
 header "Check 1: Governed documents exist"
@@ -830,7 +1020,6 @@ fi
 header "Check 3: Unowned source files"
 
 unowned_count=0
-owner_re='^# owner: ([a-z][a-z0-9-]+)$'
 skill_owner_re='^owner:[[:space:]]*([a-z][a-z0-9-]+)[[:space:]]*$'
 
 # .sh files under scripts/ (excl _archived, _fixtures) and .claude/hooks/,
@@ -841,9 +1030,11 @@ while IFS= read -r f; do
   if is_generated_source_artifact "$rel"; then
     continue
   fi
-  owner_line=$(shell_owner_marker "$f")
-  if [[ "$owner_line" =~ $owner_re ]]; then
-    owner_name="${BASH_REMATCH[1]}"
+  # Leading-block scan (#859 B4): accept `# owner:` anywhere in the leading
+  # comment block, so a generated framework .sh with a provenance banner above
+  # its owner line resolves — consistent with the documented convention and Half B.
+  owner_name=$(leading_block_owner_marker "$f" "#")
+  if [ -n "$owner_name" ]; then
     if ! owner_doc_path "$owner_name" "$PROJECT_DIR" >/dev/null; then
       if missing_owner_spec_is_applicable "$rel"; then
         warn "Unowned: $rel — owner '$owner_name' has no spec at docs/specs/$owner_name.spec.md or group at docs/groups/$owner_name.md"
@@ -853,7 +1044,7 @@ while IFS= read -r f; do
       fi
     fi
   else
-    warn "Unowned: $rel — no '# owner:' header on first non-shebang line"
+    warn "Unowned: $rel — no '# owner:' marker in the leading comment block"
     ((unowned_count++)) || true
   fi
 done < <(
@@ -912,6 +1103,19 @@ fi
 if [ "$register_schema_compatible" = false ]; then
   info "Source-ownership scan skipped — REGISTER.md schema not compatible (see Check 2 message)"
 else
+  # Build the find name-expression from the enforced language set (#859):
+  #   \( -name '*.py' -o -name '*.sql' ... \)
+  find_lang_expr=()
+  for _ext in "${SOURCE_LANGUAGES[@]}"; do
+    [ ${#find_lang_expr[@]} -gt 0 ] && find_lang_expr+=(-o)
+    find_lang_expr+=(-name "*.$_ext")
+    # Advisory diagnostic (#859): an enforced language with no known comment
+    # prefix can still be owned via owns: patterns, but in-file marker
+    # detection cannot run for it. Surface that, do not block.
+    if [ -z "$(_comment_prefix "x.$_ext")" ]; then
+      advise "source_languages includes '$_ext' but no comment prefix is known — owner-marker detection cannot run for it (owns:-pattern coverage still applies)"
+    fi
+  done
   for src_dir in "${SOURCE_PATHS[@]}"; do
     [ -z "$src_dir" ] && continue
     [ ! -d "$PROJECT_DIR/$src_dir" ] && continue
@@ -927,15 +1131,48 @@ else
           if [[ "$rel_path" == "$dir"* ]]; then owned=true; break; fi
         elif [ "$rel_path" = "$pattern" ]; then owned=true; break; fi
       done <<< "$spec_owns_map"
+      # Fall back to a resolvable in-file owner marker (#859): a file carrying
+      # `<prefix> owner: <spec>` in its leading comment block is owned even when
+      # not listed in any owns: pattern (mirrors Half A's .sh marker model, and
+      # lets a generated provenance banner satisfy ownership).
+      if [ "$owned" = false ]; then
+        prefix="$(_comment_prefix "$rel_path")"
+        if [ -n "$prefix" ]; then
+          m_owner="$(leading_block_owner_marker "$file" "$prefix")"
+          if [ -n "$m_owner" ] && owner_doc_path "$m_owner" "$PROJECT_DIR" >/dev/null; then
+            owned=true
+          fi
+        fi
+      fi
       if [ "$owned" = false ]; then
         warn "Unowned: $rel_path"
         ((unowned_count++)) || true
       fi
-    done < <(find "$PROJECT_DIR/$src_dir" -name '*.py' -type f 2>/dev/null)
+    done < <(find "$PROJECT_DIR/$src_dir" \( "${find_lang_expr[@]}" \) -type f 2>/dev/null)
   done
 fi
 
 [ "$unowned_count" -eq 0 ] && ok "All source files carry a resolvable owner"
+
+# ── Check 3 Half C: undeclared source-type discovery (advisory, #859) ──
+# Nudge (never block) when a recognized CODE source type is present in the
+# source roots but declared in neither source_languages: (enforce) nor
+# source_languages_ignore: (acknowledge). The safety net that keeps opt-in
+# enforcement from silently missing un-governed source. advise(), not warn().
+for _ext in $_DISCOVERY_EXTS; do
+  _in_array "$_ext" "${SOURCE_LANGUAGES[@]}" && continue
+  _in_array "$_ext" ${SOURCE_LANGUAGES_IGNORE[@]+"${SOURCE_LANGUAGES_IGNORE[@]}"} && continue
+  _dcount=0
+  for src_dir in "${SOURCE_PATHS[@]}"; do
+    [ -z "$src_dir" ] && continue
+    [ ! -d "$PROJECT_DIR/$src_dir" ] && continue
+    _n=$(find "$PROJECT_DIR/$src_dir" -name "*.$_ext" -type f 2>/dev/null | wc -l | tr -d ' ')
+    _dcount=$((_dcount + _n))
+  done
+  if [ "$_dcount" -gt 0 ]; then
+    advise "Found $_dcount .$_ext file(s) not declared in source_languages — add '$_ext' to enforce ownership, or source_languages_ignore to acknowledge."
+  fi
+done
 
 # ── Check 4: contracts.yaml vs. spec Requires tables ─────────────────
 
