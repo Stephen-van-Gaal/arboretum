@@ -35,6 +35,8 @@
       "Bash(bash scripts/token-cleanup.sh *)",
       "Bash(bash scripts/upgrade-sync.sh *)",
       "Bash(bash scripts/roadmap/view.sh *)",
+      "Bash(bash scripts/roadmap/score-cache.sh *)",
+      "Bash(bash scripts/roadmap/score-render.sh *)",
       "Bash(git status *)",
       "Bash(git rev-parse *)",
       "Bash(git merge-base *)",

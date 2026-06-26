@@ -67,6 +67,12 @@ venv/
 # read-session-journey.sh. Generated, not source.
 .arboretum/token-journey/
 
+# Roadmap scoring cache (#893). Written by score-cache.sh --merge; read by
+# score-render.sh and score-apply.sh. Regenerated on demand, not source.
+.arboretum/score-cache.json
+.arboretum/score-cache.json.tmp
+.arboretum/score-cache.err
+
 # Runtime lock files and worktree storage. Lock files are session-scoped;
 # worktrees are git-managed alternate working trees that should never be
 # tracked as ordinary files. Both the harness-native `.claude/worktrees/`

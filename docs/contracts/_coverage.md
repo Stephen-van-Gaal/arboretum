@@ -73,6 +73,9 @@
 | scripts/roadmap/maintain-apply.sh | docs/contracts/roadmap-maintain-apply.cli-contract.md | cli |
 | scripts/roadmap/maintain-scan.sh | docs/contracts/roadmap-maintain-scan.contract.md | full |
 | scripts/roadmap/nag.sh | docs/contracts/roadmap-nag.contract.md | full |
+| scripts/roadmap/score-apply.sh | docs/contracts/roadmap-score-apply.cli-contract.md | cli |
+| scripts/roadmap/score-cache.sh | docs/contracts/roadmap-score-cache.contract.md | full |
+| scripts/roadmap/score-render.sh | docs/contracts/roadmap-score-render.cli-contract.md | cli |
 | scripts/roadmap/view.sh | docs/contracts/roadmap-view.contract.md | full |
 | scripts/seed-settings.sh | docs/contracts/seed-settings.cli-contract.md | cli |
 | scripts/spec-uplift-diagnose.sh | docs/contracts/spec-uplift-diagnose.contract.md | full |
