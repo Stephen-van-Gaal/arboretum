@@ -828,4 +828,128 @@ if printf '%s\n' "$PHASE12" | grep -qi 'dispatch the land driver'; then
 fi
 ok "case 26 — Phases 1 and 2 do not dispatch a driver"
 
+# ── Case 27: Phase 3 Step 4 dispatches a fixer driver after the triage gate ──
+# The fix sub-loop delegates fix *composition* to a fresh-context fixer driver.
+grep -qi 'fixer driver' "$LAND_SKILL" \
+  || fail "case 27 — Step 4 does not dispatch a fixer driver"
+# The triage 'say stop' notification must appear BEFORE the fixer dispatch.
+TRIAGE_LINE=$(grep -n "say 'stop'\|say \"stop\"\|Say 'stop'\|Say \"stop\"" "$LAND_SKILL" | head -1 | cut -d: -f1)
+# Anchor on the dispatch *directive*, not the first generic "fixer driver"
+# mention (which is the intro paragraph and would make this ordering check pass
+# vacuously even if the dispatch moved ahead of the triage gate).
+FIXER_LINE=$(grep -ni 'dispatch the fixer driver' "$LAND_SKILL" | head -1 | cut -d: -f1)
+[ -n "$TRIAGE_LINE" ] || fail "case 27 — triage 'say stop' notification missing (heading drift?)"
+[ -n "$FIXER_LINE" ]  || fail "case 27 — fixer-driver dispatch directive not found"
+[ "$TRIAGE_LINE" -lt "$FIXER_LINE" ] \
+  || fail "case 27 — fixer driver is dispatched before the human triage gate (must be after)"
+ok "case 27 — Phase 3 Step 4 dispatches a fixer driver after the triage gate"
+
+# ── Case 28: the fixer composes + commits LOCAL only; brief forbids remote work ──
+# The fixer must commit locally and NOT push / consolidate / close out.
+grep -qi 'commit.*local\|local.*commit\|commits locally' "$LAND_SKILL" \
+  || fail "case 28 — fixer is not declared to commit locally only"
+# Positively assert the no-remote-mutation boundary statement EXISTS — the
+# load-bearing control. Without this, a future edit could delete the boundary
+# prose and the absence-of-forbidden-tokens checks below would still pass green.
+grep -qi 'forbidden to push' "$LAND_SKILL" \
+  || fail "case 28 — fixer no-push boundary statement missing"
+# Locate the fixer-region and assert the forbidden tokens are ABSENT from it
+# (mirrors case 25's awk-region technique for the assess driver). End-anchor on
+# the "Conductor: verify HEAD" heading ONLY — the earlier "[Cc]onductor reconcile"
+# substring matched inside the brief and truncated the region BEFORE the fixer's
+# action steps (the `git commit` block), the highest-risk surface for an
+# accidental remote-mutation instruction. The wider region now covers it.
+FIXER_BRIEF=$(awk '/[Ff]ixer brief \(conductor/{f=1} /[Cc]onductor: verif|^### 5\. Review closeout/{f=0} f' "$LAND_SKILL")
+[ -n "$FIXER_BRIEF" ] || fail "case 28 — could not locate the fixer-brief region (heading drift?)"
+for tok in 'git push' '/consolidate' 'review-closeout'; do
+  if printf '%s\n' "$FIXER_BRIEF" | grep -qiF "$tok"; then
+    fail "case 28 — '$tok' appears inside the fixer brief (must stay conductor-side)"
+  fi
+done
+ok "case 28 — fixer commits local only; brief forbids push/consolidate/closeout"
+
+# ── Case 29: HEAD reconciliation, push, fixes.json, cap + ScheduleWakeup conductor-side ──
+# The conductor verifies the returned SHA against local HEAD before pushing.
+grep -qi 'rev-parse HEAD' "$LAND_SKILL" \
+  || fail "case 29 — conductor does not verify git rev-parse HEAD against the returned SHA"
+grep -qi 'head_sha_after' "$LAND_SKILL" \
+  || fail "case 29 — envelope field head_sha_after not documented"
+# fixes.json is written conductor-side, after the push.
+grep -q 'fixes.json' "$LAND_SKILL" \
+  || fail "case 29 — fixes.json write missing from the conductor"
+# The 2-round cap and ScheduleWakeup remain conductor-side (not in the fixer brief).
+grep -qi '2.*round\|two.*round\|cap: 2' "$LAND_SKILL" \
+  || fail "case 29 — 2-round cap missing from the conductor"
+if [ -n "$FIXER_BRIEF" ]; then
+  for tok in 'ScheduleWakeup' 'cap: 2'; do
+    if printf '%s\n' "$FIXER_BRIEF" | grep -qiF "$tok"; then
+      fail "case 29 — '$tok' appears inside the fixer brief (must stay conductor-side)"
+    fi
+  done
+fi
+ok "case 29 — HEAD reconciliation + push + fixes.json + cap + ScheduleWakeup conductor-side"
+
+# ── Case 30: the conductor VERIFIES the fixer's work before pushing ──
+# The brief's no-push/no-consolidate/no-closeout prohibitions are instruction-
+# level only (a general-purpose subagent carries write tools). The conductor's
+# pre-push verification is the capability-level backstop (decision D59), hardened
+# per B4 + Codex review — pin each check so a future edit cannot silently drop it.
+# Baselines captured BEFORE dispatch (Copilot 3482475866): the checks key off
+# base_local + base_remote, so the prose must say to record them up front.
+grep -qi 'base_local' "$LAND_SKILL" \
+  || fail "case 30 — base_local baseline (rev-parse HEAD before dispatch) not captured"
+grep -qi 'base_remote' "$LAND_SKILL" \
+  || fail "case 30 — base_remote baseline (origin/<branch> before dispatch) not captured"
+grep -qi 'no-op check' "$LAND_SKILL" \
+  || fail "case 30 — conductor no-op check (HEAD == base_local ⇒ push nothing) missing"
+grep -qi 'push nothing\|composed nothing' "$LAND_SKILL" \
+  || fail "case 30 — no-op path does not state the conductor pushes nothing"
+# Dirty-tree no-op guard (Codex P2 3482500843): a crashed fixer leaves dirty edits.
+grep -qi 'git status --porcelain\|dirty' "$LAND_SKILL" \
+  || fail "case 30 — no-op path does not require a clean worktree (dirty ⇒ reset)"
+# Reset unverified/mismatched commits (Codex P1 3482500847): no stacking.
+grep -qi 'git reset --hard base_local\|reset --hard .base_local' "$LAND_SKILL" \
+  || fail "case 30 — mismatch/dirty path does not reset to base_local before re-dispatch"
+# Exactly one commit (Codex P2 3482500853).
+grep -qi 'rev-list --count base_local..HEAD\|exactly one commit\|exactly .*one.* commit' "$LAND_SKILL" \
+  || fail "case 30 — conductor does not verify exactly one commit base_local..HEAD"
+# Rogue-push guard with a fetch (Codex P2 3482500851/3482500853).
+grep -qi 'rogue-push\|rogue fixer push\|out of band' "$LAND_SKILL" \
+  || fail "case 30 — conductor rogue-push check (remote head moved out of band) missing"
+grep -qi 'git fetch origin' "$LAND_SKILL" \
+  || fail "case 30 — rogue-push check does not fetch before comparing origin/<branch>"
+# Scope check recomputes from git, does not trust files_touched (Codex P1 3482500839).
+grep -qi 'git diff --name-only base_local..HEAD' "$LAND_SKILL" \
+  || fail "case 30 — scope check does not recompute touched paths from the commit"
+grep -qi 'within the scope\|out-of-scope\|allowed scope' "$LAND_SKILL" \
+  || fail "case 30 — scope check does not constrain touched paths to the addressed clusters"
+# CI-fix files allowed through scope (Codex P2 3482500835).
+grep -qi 'CI.fix\|CI-failure fix\|CI-only round\|CI failure' "$LAND_SKILL" \
+  || fail "case 30 — scope check does not allow CI-fix files through"
+grep -qi 'capability.*backstop' "$LAND_SKILL" \
+  || fail "case 30 — conductor verification is not framed as the capability backstop"
+# Round-2 hardening (Codex re-review): pin the second-order checks.
+# Clean-tree precondition before dispatch (3482703754).
+grep -qi 'clean-tree precondition\|porcelain` must be empty before' "$LAND_SKILL" \
+  || fail "case 30 — no clean-tree precondition before capturing base_local/dispatch"
+# Untracked cleanup on dirty no-op (3482703714): reset --hard alone leaves untracked.
+grep -qi 'git clean -fd' "$LAND_SKILL" \
+  || fail "case 30 — dirty no-op path does not git clean -fd untracked files"
+# Clean-tree gate before push (3482703721).
+grep -qi 'clean-tree gate' "$LAND_SKILL" \
+  || fail "case 30 — no clean-tree gate before push (stray edits could contaminate)"
+# fixes.json keyed to the conductor's verified pushed commit, not fixer-reported (3482703701).
+grep -qi "verified pushed commit\|conductor's own verified" "$LAND_SKILL" \
+  || fail "case 30 — fixes.json not derived from the conductor's verified pushed commit"
+# Reconcile decision from git-computed paths, not files_touched (3482703748).
+grep -qi 'reconcile decision from git\|git-computed.* touched' "$LAND_SKILL" \
+  || fail "case 30 — /consolidate reconcile decision not derived from git-computed paths"
+# Empty fixes ledger on a clean no-op that still closes out (3482703739).
+grep -q '"items":\[\]' "$LAND_SKILL" \
+  || fail "case 30 — clean no-op with replies does not write an empty review-fixes ledger"
+# Top-level (non-inline) fix comments get a real scope, not an empty one (3482703728).
+grep -qi 'top-level / conversation comments\|top-level.*conversation comment' "$LAND_SKILL" \
+  || fail "case 30 — scope check gives top-level/non-inline fixes an empty scope"
+ok "case 30 — conductor verifies fixer work (baselines + clean precondition/gate + no-op/dirty+clean -fd + reconcile/reset + one-commit + fetch/rogue + recomputed+top-level scope + verified-commit ledger + git reconcile) before pushing"
+
 echo "ALL PASS"
