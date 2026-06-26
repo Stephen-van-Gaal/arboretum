@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: skill-and-agent-authoring
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-driver-dispatch-prose.sh — Guards the codified fresh-context-driver
 # dispatch idiom (#720). The invariant lives once in skill-and-agent-authoring.spec.md;
 # /finish Step 5 must apply it (generic subagent + invoke skill), never naming a

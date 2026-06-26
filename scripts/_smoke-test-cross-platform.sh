@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: cross-platform-support
 # scope: any
+# ci-parallel: safe
 # _smoke-test-cross-platform.sh — guards arboretum's cross-platform support
 # contract (docs/specs/cross-platform-support.spec.md): framework scripts must
 # read/write text as UTF-8 regardless of host locale, and must tolerate CRLF in

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: roadmap
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-roadmap-view.sh — Contract + render test for view.sh
 # against docs/contracts/roadmap-view.contract.md. No network: uses the
 # --board-file / --graph-file seams. Auto-discovered by ci-checks.sh.

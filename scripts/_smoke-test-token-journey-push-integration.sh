@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: token-accounting
 # scope: plugin-only
+# ci-parallel: safe
 # Integration smoke test: the Stop + SessionEnd hooks end-to-end (#721).
 # Enabled path captures rows and renders an artifact; || true never blocks on a
 # missing transcript; the disabled gate suppresses capture.

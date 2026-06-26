@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-read-trust-config.sh — Verify scripts/read-trust-config.sh
 # parses trust.journey_log_authors and reports present/absent correctly.
 set -euo pipefail

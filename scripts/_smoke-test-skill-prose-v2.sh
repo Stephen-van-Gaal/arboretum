@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-skill-prose-v2.sh — Prose-regression checks for the unified
 # workflow skill surface. These are structural invariants — accidental edits
 # that reintroduce retired routing or break the unified path are caught here.

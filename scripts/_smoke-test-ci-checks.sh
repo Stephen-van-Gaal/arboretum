@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-ci-checks.sh — assert ci-checks.sh exists, is executable, and
 # emits a section header per check against a stubbed fixture. Does not assert
 # checks pass in the live repo — only that the entrypoint runs and reports

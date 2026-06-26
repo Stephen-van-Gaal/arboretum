@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-script-owners.sh — Assert every shipped framework source
 # file declares a valid spec owner.
 #

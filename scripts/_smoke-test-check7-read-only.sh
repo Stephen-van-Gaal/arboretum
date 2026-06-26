@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-check7-read-only.sh — Check 7 read-only-by-default contract.
 #
 # Asserts two behaviours introduced by the --reconcile flag:

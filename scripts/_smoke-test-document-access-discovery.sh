@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: document-access
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-document-access-discovery.sh -- Verify profile-agnostic document discovery and retrieval.
 set -euo pipefail
 

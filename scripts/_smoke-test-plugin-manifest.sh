@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
 # scope: plugin-only
+# ci-parallel: safe
 #
 # _smoke-test-plugin-manifest.sh — guards Claude and Codex plugin metadata
 # against installer-visible packaging mistakes.

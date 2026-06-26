@@ -73,9 +73,19 @@ The `ARBORETUM_CI_JOBS` environment variable controls smoke-test concurrency
 for smoke tests that explicitly opt into parallel execution with
 `# ci-parallel: safe`. Unset means `8`. `ARBORETUM_CI_JOBS=1` runs all selected
 smoke tests serially, which is useful for debugging. Non-positive, all-zero, or
-non-numeric values are blocking failures before any stage runs. Smoke tests
-without `# ci-parallel: safe` are treated as serial, preserving legacy
-shared-state assumptions until a test is audited and marked safe.
+non-numeric values are blocking failures before any stage runs. The runner
+itself treats a smoke test without `# ci-parallel: safe` as serial (a
+defensive default, preserving legacy shared-state assumptions until a test is
+audited and marked safe). Note, however, that a separate guard smoke test,
+`scripts/_smoke-test-test-metadata.sh` (via `scripts/audit-test-metadata.sh
+--check`), makes an *undeclared* `# ci-parallel:` header a **blocking** failure
+of the suite — so in practice every `scripts/_smoke-test-*.sh` must declare
+`safe` or `serial`; the runner's missing→serial fallback is the belt to that
+guard's braces, not a sanctioned untagged state (#878).
+
+The smoke runner **partitions** selected tests: it runs every `# ci-parallel:
+safe` test in one `ARBORETUM_CI_JOBS`-wide pool, then runs the `serial` tests
+after the pool drains — serial tests never overlap the pool (#878).
 
 The `ARBORETUM_CI_PREFLIGHT_DONE` environment variable is set by hosted
 workflows when a separate preflight job already gated the expensive CI job.

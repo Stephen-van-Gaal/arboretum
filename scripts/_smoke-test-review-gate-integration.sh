@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-review-gate-integration.sh — assert the data the B4 driver consumes:
 # the registry-selected applicable set (review-registry-filter) and which of those
 # lanes are skip-candidates (review-dispatch --verdicts). The driver's confirm-on-skip

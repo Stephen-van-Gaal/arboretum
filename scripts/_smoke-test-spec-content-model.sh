@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: document-taxonomy
 # scope: plugin-only
+# ci-parallel: serial
 # Asserts the real governed-spec content model (#671): the spec.md template,
 # the document-shapes catalog, and the concept-catalog carry the mandatory-core
 # invariants, the two optional sections, schema-driven authorship, the

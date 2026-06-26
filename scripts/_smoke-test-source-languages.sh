@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-source-languages.sh — Unit-tier tests for language-aware
 # Check 3 ownership: source_languages enforcement (#859), owns:-only Half B
 # (#865), in-file marker DETECTION via ownership-aware Half C discovery (#865),

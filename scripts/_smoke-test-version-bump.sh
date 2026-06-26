@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
 # scope: plugin-only
+# ci-parallel: safe
 #
 # Smoke test for bump-version.sh and check-version-bump.sh.
 

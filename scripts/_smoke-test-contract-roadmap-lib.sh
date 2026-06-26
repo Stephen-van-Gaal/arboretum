@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-roadmap-lib.sh — Contract test for
 # docs/contracts/roadmap-lib.contract.md. Asserts RL-1..RL-40f against
 # scripts/roadmap/lib.sh.

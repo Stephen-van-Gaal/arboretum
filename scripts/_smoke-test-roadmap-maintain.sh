@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: roadmap
 # scope: plugin-only
+# ci-parallel: safe
 # Smoke test for scripts/roadmap/maintain-scan.sh and maintain-apply.sh.
 #
 # Builds a fixture board, asserts each issue lands in the expected bucket,

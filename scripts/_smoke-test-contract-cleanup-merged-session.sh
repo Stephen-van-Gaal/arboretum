@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
 set -uo pipefail
 [ -n "${BASH_VERSION:-}" ] || { echo "Error: requires bash. Run: bash $0" >&2; exit 1; }
 

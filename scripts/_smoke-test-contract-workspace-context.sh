@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workspace-context
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-workspace-context.sh - Contract test for
 # docs/contracts/workspace-context.contract.md (seam: workspace-context).
 # shellcheck disable=SC1090  # $HELPER is resolved at runtime; sourcing it dynamically is intentional.

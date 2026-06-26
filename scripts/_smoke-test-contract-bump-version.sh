@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # Smoke test for docs/dev-contracts/release/bump-version.cli-contract.md.
 # Exercises CLI-1..CLI-7 via fixture scenarios driving bump-version.sh
 # against mktemp -d temp dirs (never the live repo). Picked up

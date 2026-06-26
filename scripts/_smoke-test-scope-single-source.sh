@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: framework-scope-marker
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-scope-single-source.sh — the `# scope:` marker grammar is parsed
 # in exactly one place (scripts/lib/scope-resolve.sh). Consumers must source the
 # helper and must NOT re-inline a `# scope:` parsing regex (the parallel-drift

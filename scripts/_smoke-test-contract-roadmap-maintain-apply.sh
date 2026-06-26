@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-roadmap-maintain-apply.sh — Contract test for
 # docs/contracts/roadmap-maintain-apply.cli-contract.md. Asserts CLI-1..CLI-5
 # against scripts/roadmap/maintain-apply.sh.

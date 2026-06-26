@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-refresh-pipeline-context.sh — Contract test for
 # docs/contracts/refresh-pipeline-context.contract.md: the produced cache
 # carries exactly the documented top-level key set (#665).

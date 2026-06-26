@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-extended-enum.sh — Verify health-check tolerates richer
 # status vocabularies (draft/ready/in-progress/implemented) without
 # per-spec warnings, and that Check 7 reports an explicit no-op

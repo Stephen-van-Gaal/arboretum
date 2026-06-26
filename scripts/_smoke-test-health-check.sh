@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-health-check.sh — Fixture round-trip for the
 # generate-register.sh ↔ health-check.sh schema contract.
 #

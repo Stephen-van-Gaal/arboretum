@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: token-accounting
 # scope: plugin-only
+# ci-parallel: safe
 # Integration smoke test (#673): token-journey + token-ledger writes invoked from
 # inside a LINKED WORKTREE must land in the MAIN checkout's .arboretum/ store,
 # not the worktree's own — the cross-surface guard for the centralization change.

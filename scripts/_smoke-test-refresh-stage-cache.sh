@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-refresh-stage-cache.sh — Verify scripts/refresh-stage-cache.sh
 # per WS9 design D6 (active-issue resolution + 30s-TTL cache shape).
 set -euo pipefail

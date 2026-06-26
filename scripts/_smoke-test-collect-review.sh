@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: safe
 # Smoke test: collect-review.sh — comprehensive multi-surface normalization,
 # 3-state status, control-char scrub, priority harvest, ledger write,
 # --unanswered. Uses COLLECT_FIXTURE_DIR so it never touches the network.

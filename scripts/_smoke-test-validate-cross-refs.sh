@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-validate-cross-refs.sh — Exercise Check 4 (dependency
 # notation consistency) in validate-cross-refs.sh.
 #

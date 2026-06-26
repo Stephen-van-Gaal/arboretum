@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-validate-coverage-manifest.sh — Exercises both
 # generate-coverage.sh (the regenerator) and validate-coverage-manifest.sh
 # (the integrity checker) against a fixture project.

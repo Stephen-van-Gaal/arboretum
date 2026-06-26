@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: safe
 # Smoke test: pr-readiness.sh — fixture-driven readiness classification.
 # Uses a PATH-shadowed gh stub and temp git repos so it never touches network.
 set -uo pipefail

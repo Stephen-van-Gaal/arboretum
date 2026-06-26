@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-review-dispatch.sh — assert the lane planner emits, in run order:
 #   ai-surface (only when AI-facing surface changed), general-security (always),
 #   correctness (only when the diff contains code per classify-pr-change.sh).

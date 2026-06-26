@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: session-heartbeat
 # scope: plugin-only
+# ci-parallel: safe
 # Contract-conformance smoke for the heartbeat seam (docs/contracts/heartbeat.contract.md).
 # Asserts the sentinel JSON shape, the non-issue no-op, the liveness boundary, and
 # the branch->issue mapping. Auto-discovered by ci-checks.sh's _smoke-test-* glob.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: arboretum-as-plugin
 # scope: plugin-only
+# ci-parallel: serial
 # Smoke test for Arboretum's dev-only/public-plugin/consumer-managed boundary.
 
 set -uo pipefail

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-classify-pr-change.sh — assert classify-pr-change.sh maps
 # file lists to the correct merge tier (docs-config | code).
 set -euo pipefail

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: serial
 # Smoke test that public workflow skills do not carry dev-only release prose.
 
 set -uo pipefail

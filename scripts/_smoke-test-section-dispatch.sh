@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: section-dispatch
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-section-dispatch.sh — accept a conformant registry, reject one per violation class.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

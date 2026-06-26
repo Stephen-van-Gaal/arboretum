@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-scrub-control-chars.sh - Contract test for
 # docs/contracts/scrub-control-chars.contract.md (seam: scrub-control-chars).
 set -uo pipefail

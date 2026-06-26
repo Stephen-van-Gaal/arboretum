@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-validate-review-manifest.sh — accept a well-formed manifest, reject malformed ones.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

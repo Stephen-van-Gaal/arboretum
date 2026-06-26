@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: framework-scope-marker
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-scope-resolve.sh — unit tests for the scope-resolve helper.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

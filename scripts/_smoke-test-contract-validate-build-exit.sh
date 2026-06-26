@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-validate-build-exit.sh — Contract test for
 # docs/contracts/validate-build-exit.contract.md. Asserts VBE-1..VBE-5
 # against scripts/validate-build-exit.sh by reusing the existing S3

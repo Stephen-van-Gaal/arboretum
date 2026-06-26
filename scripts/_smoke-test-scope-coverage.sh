@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: framework-scope-marker
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-scope-coverage.sh — every vendored framework shell file carries a
 # `# scope:` marker. A class left unmarked re-opens the manifest-absent failure
 # mode (#836): in an adopter root such a file would trip Check 3 with no in-file

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-roadmap-backend-access.sh — Contract test for the
 # roadmap backend live-access probe. Exercises GitHub and Azure DevOps paths
 # with stubbed provider CLIs only; no network and no real auth required.

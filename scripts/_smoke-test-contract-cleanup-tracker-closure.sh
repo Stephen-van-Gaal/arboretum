@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-cleanup-tracker-closure.sh — Contract test for
 # docs/contracts/cleanup-tracker-closure.cli-contract.md.
 set -uo pipefail

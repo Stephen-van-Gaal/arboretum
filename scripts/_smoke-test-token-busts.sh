@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: token-accounting
 # scope: plugin-only
+# ci-parallel: safe
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail() { echo "FAIL token-busts: $1" >&2; exit 1; }

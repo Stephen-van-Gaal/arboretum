@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-backfill-stage-labels.sh — Verify scripts/backfill-stage-labels.sh
 # (the #570 one-shot migration): for an OPEN issue whose body carries the legacy
 # current-stage marker block, the script must (a) set the exclusive stage:* label

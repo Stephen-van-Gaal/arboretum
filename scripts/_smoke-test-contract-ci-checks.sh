@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
 # Smoke test for docs/contracts/ci-checks.cli-contract.md.
 # Asserts structural invariants of scripts/ci-checks.sh by inspecting the
 # script source — it does NOT execute ci-checks.sh.

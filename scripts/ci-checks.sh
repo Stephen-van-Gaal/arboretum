@@ -477,6 +477,7 @@ INNER
 run_smoke_tests_selected() {
   local f mode
   local parallel_batch=()
+  local serial_list=()
 
   for f in "$@"; do
     if [ "$CI_JOBS" = "1" ]; then
@@ -491,19 +492,26 @@ run_smoke_tests_selected() {
 
     if [ "$mode" = "safe" ]; then
       parallel_batch+=("$f")
-      continue
+    else
+      serial_list+=("$f")
     fi
-
-    if [ "${#parallel_batch[@]}" -gt 0 ]; then
-      run_smoke_tests_parallel "${parallel_batch[@]}"
-      parallel_batch=()
-    fi
-
-    run_smoke_test_serial "$f"
   done
 
-  if [ "$CI_JOBS" != "1" ] && [ "${#parallel_batch[@]}" -gt 0 ]; then
+  # Partition, do not interleave (#878). Run every parallel-safe test in ONE
+  # CI_JOBS-wide pool, then the serial tests. The previous file-order interleave
+  # flushed the pool every time a serial test appeared, fragmenting 144 safe
+  # tests into ~56 tiny batches and wasting most of CI_JOBS. Serial tests still
+  # run alone — they never overlap the pool — so safety is unchanged (strictly
+  # better: no serial test ever runs concurrently with the pool).
+  if [ "${#parallel_batch[@]}" -gt 0 ]; then
     run_smoke_tests_parallel "${parallel_batch[@]}"
+  fi
+  # Guard the empty expansion: bash 3.2 (stock macOS) aborts on "${arr[@]}"
+  # under `set -u` when the array is empty (e.g. CI_JOBS=1, or an all-safe set).
+  if [ "${#serial_list[@]}" -gt 0 ]; then
+    for f in "${serial_list[@]}"; do
+      run_smoke_test_serial "$f"
+    done
   fi
 }
 

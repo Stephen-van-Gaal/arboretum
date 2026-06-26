@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-write-agent-brief.sh — Contract test for
 # docs/contracts/write-agent-brief.contract.md. Asserts WAB-1..WAB-6 from the
 # contract's ## Test surface against scripts/write-agent-brief.sh.

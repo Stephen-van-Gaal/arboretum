@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workspace-skill
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-workspace-list.sh - Contract test for
 # docs/contracts/workspace-list.contract.md (seam: workspace-skill).
 # Drives the sourced helper over a git fixture with multiple worktrees.

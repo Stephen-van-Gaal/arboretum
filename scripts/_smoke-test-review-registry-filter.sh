@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-review-registry-filter.sh — unit test for scripts/review-registry-filter.sh
 # (#791 D3). The dispatcher's deterministic selection step: registry.filter(altitude,
 # artifact) + gate evaluation (section-dispatch element 2). Gates compose

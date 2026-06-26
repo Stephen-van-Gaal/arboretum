@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-design-package.sh — Prose-regression checks for the
 # design-package skill and the /design invocation seam.
 set -euo pipefail

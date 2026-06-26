@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-write-agent-brief.sh — Verify the agent-brief writer produces a
 # file with the S2 frontmatter shape /build's read-s2-frontmatter.sh accepts.
 set -euo pipefail

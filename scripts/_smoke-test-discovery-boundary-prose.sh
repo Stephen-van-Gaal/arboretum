@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: skill-and-agent-authoring
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-discovery-boundary-prose.sh — Guards the codified discovery boundary
 # (#667): when a skill does discovery via the deterministic document-access scripts
 # vs. delegates to a read-only Explore-style subagent. The invariant lives once in

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-upgrade-classify.sh — Contract test for
 # docs/contracts/upgrade-classify.contract.md. Asserts UC-1..UC-6
 # against scripts/lib/upgrade-classify.sh.

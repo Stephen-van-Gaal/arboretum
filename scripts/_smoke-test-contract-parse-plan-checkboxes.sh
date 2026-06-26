@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-parse-plan-checkboxes.sh — Contract test for
 # docs/contracts/parse-plan-checkboxes.contract.md. Asserts PPC-1..PPC-7
 # against scripts/parse-plan-checkboxes.sh using mktemp plan fixtures.

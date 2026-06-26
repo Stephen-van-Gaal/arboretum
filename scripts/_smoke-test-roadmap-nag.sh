@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: roadmap
 # scope: plugin-only
+# ci-parallel: safe
 # Smoke test for nag.sh — bootstrap, throttle (day + week), strategic-review-due,
 # and stubbed-gh tests for maintain-overdue (count threshold + silent degradation).
 # Usage: bash scripts/_smoke-test-roadmap-nag.sh

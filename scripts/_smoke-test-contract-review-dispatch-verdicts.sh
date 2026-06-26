@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-review-dispatch-verdicts.sh — assert review-dispatch.sh
 # --verdicts emits the documented JSON shape: three lanes, each {relevant:bool,
 # reason:string}, plus any_relevant = OR of the three booleans.

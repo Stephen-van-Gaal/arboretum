@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-principles-template.sh — Verify PRINCIPLES.md ships
 # from docs/templates/ and lands at the consumer project's repo root.
 #

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: receive-review
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-receive-review.sh — Verify the receive-review wiring contract.
 #
 # Cases:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: roadmap
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-roadmap-ado-epic-graph.sh — Contract test for the
 # azure-devops branch of roadmap_epic_graph (docs/contracts/roadmap-view.contract.md
 # § Epic-tree ADO hierarchy / EWA-1). PATH-shadows `az` with a stub that returns

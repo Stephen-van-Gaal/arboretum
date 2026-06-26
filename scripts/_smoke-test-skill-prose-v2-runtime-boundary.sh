@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-skill-prose-v2-runtime-boundary.sh - Regression test for stale
 # consumer copies of the plugin-only unified skill prose smoke test.
 set -euo pipefail

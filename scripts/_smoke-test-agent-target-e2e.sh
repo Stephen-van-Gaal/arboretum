@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: workflow-unification
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-agent-target-e2e.sh — End-to-end smoke test of the agent-target
 # pipeline at the shell-seam layer: flag is unified, brief is written, /build's
 # S2 helper accepts the brief, all five required S2 fields parse correctly.

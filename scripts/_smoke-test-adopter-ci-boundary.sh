@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: test-infrastructure
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-adopter-ci-boundary.sh — regression checks for the adopter product
 # test boundary. Arboretum ci-checks/health may be advisory framework checks, but
 # initialized adopter repos must not satisfy product-test gates by falling back to

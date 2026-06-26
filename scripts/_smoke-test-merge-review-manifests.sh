@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-merge-review-manifests.sh — unit test for scripts/merge-review-manifests.sh
 # (#791 D6). Asserts MRM-1..MRM-7: the deterministic, LLM-free merge of N review
 # manifests → one ReviewResult (dedup by (location, normalized recommendation), max

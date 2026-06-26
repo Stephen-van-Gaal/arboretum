@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-definition-index.sh — Verify generate-register.sh emits
 # a Definition Index table when docs/definitions/*.md is non-empty,
 # and falls back to the placeholder when the directory is missing.

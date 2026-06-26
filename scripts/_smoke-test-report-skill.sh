@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: intake-report
 # scope: plugin-only
+# ci-parallel: serial
 # Smoke test for the WS7 Stage 1 report skill and public form mirror.
 
 set -euo pipefail

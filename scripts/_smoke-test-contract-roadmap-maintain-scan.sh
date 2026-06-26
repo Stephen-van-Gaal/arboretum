@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-roadmap-maintain-scan.sh — Contract test for
 # docs/contracts/roadmap-maintain-scan.contract.md. Asserts RMS-1..RMS-5
 # against scripts/roadmap/maintain-scan.sh.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-contract-session-start-banner.sh — Contract test for
 # docs/contracts/session-start-banner.contract.md. Asserts SSB-1..SSB-4
 # against .claude/hooks/session-start.sh by driving the real hook in a

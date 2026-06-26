@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: roadmap
 # scope: plugin-only
+# ci-parallel: serial
 # Smoke test for .github/ISSUE_TEMPLATE/agent-ready.md
 #
 # Asserts the template has valid YAML frontmatter and every required

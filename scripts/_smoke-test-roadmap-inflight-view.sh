@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: roadmap-inflight-view
 # scope: plugin-only
+# ci-parallel: serial
 # _smoke-test-roadmap-inflight-view.sh — unit coverage for the in-flight board
 # render in view.sh (--format full), driven by the --inflight-file + --board-file
 # seams. Fixture-driven; no network. Picked up by ci-checks.sh.

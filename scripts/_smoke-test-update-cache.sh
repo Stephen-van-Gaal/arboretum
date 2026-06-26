@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-infrastructure
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-update-cache.sh — Smoke tests for refresh-update-cache.sh.
 #
 # Tests:

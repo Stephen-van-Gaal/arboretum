@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
+# ci-parallel-reason: meta-runner of 24 contract sub-tests that read real-tree
+#   skill/spec files (e.g. S2-7 greps skills/build/SKILL.md); flaked under
+#   full-mode 8-way concurrency in CI (#878). Serial runs it after the pool
+#   drains — no concurrent reader/writer, minimal load.
 # _smoke-test-contract-tests.sh — Run every test under tests/contracts/
 # whose declared named pipeline selector matches the active flag.
 #

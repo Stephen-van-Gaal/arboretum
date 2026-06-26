@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: serial
 # Smoke test for docs/contracts/intake-report.contract.md.
 # Asserts the WS7 Stage 0 intake metadata contract is machine-readable
 # and carries the required v1 fields.

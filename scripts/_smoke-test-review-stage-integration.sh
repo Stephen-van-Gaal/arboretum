@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: review-stage
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-review-stage-integration.sh — #791 integration test (section-dispatch
 # ceiling): one fan-out mixing a RUNTIME reviewer (codex, via the real D5 adapter) and a
 # SKILL reviewer (a fixture manifest standing in for a fresh-context driver's return) is

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-read-s2-frontmatter.sh — Contract test for
 # docs/contracts/read-s2-frontmatter.contract.md. Asserts RS2-1..RS2-8
 # against scripts/read-s2-frontmatter.sh using mktemp design-spec

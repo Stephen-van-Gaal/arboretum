@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: framework-scope-marker
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-adopter-scope-boundary.sh — end-to-end boundary assertion (#836):
 # a simulated adopter root (vendored framework files, NO dev specs) produces zero
 # framework-attributable health-check findings, in BOTH manifest-present and

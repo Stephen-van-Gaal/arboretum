@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-verify-agent-ready.sh — Contract test for
 # docs/contracts/verify-agent-ready.contract.md. Asserts VAR-1..VAR-7
 # against scripts/verify-agent-ready.sh.

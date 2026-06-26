@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-state-tracking
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-manage-trust.sh — Verify scripts/manage-trust.sh instantiate
 # (additive-only, no clobber) and set (authoritative replace).
 set -euo pipefail

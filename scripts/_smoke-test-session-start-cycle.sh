@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: session-start-cycle-state
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-session-start-cycle.sh — Verify the session-start
 # cycle-state detection (issue #167).
 #

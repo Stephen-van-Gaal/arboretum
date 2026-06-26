@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: project-upgrade
 # scope: plugin-only
+# ci-parallel: safe
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; SYNC="$HERE/upgrade-sync.sh"; fail=0
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT

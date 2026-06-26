@@ -5,6 +5,7 @@
 
 | Script / Hook | Contract | Shape |
 |---|---|---|
+| scripts/audit-test-metadata.sh | docs/contracts/audit-test-metadata.cli-contract.md | cli |
 | scripts/backfill-stage-labels.sh | docs/contracts/backfill-stage-labels.cli-contract.md | cli |
 | scripts/bootstrap-project.sh | docs/contracts/bootstrap-project.cli-contract.md | cli |
 | scripts/build-review-request.sh | docs/contracts/build-review-request.cli-contract.md | cli |

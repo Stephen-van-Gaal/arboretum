@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-contract-coverage.sh — Contract test for
 # docs/contracts/contract-coverage.contract.md. Asserts CC-1..CC-8 from
 # the contract's ## Test surface against scripts/generate-coverage.sh and

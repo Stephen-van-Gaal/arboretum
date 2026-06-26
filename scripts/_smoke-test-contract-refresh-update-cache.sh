@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-refresh-update-cache.sh — Contract test for
 # docs/contracts/refresh-update-cache.contract.md. Asserts RUC-1..RUC-9 from
 # the contract's ## Test surface against scripts/refresh-update-cache.sh.

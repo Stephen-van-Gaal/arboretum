@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-land-termination.sh — Verify /land's three-phase handler
 # enforces the termination contract per
 # docs/superpowers/specs/2026-05-28-land-loop-termination-design.md.

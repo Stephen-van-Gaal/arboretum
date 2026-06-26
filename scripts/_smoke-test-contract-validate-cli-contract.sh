@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: pipeline-contracts-template
 # scope: plugin-only
+# ci-parallel: safe
 # _smoke-test-contract-validate-cli-contract.sh — Contract test for
 # docs/contracts/validate-cli-contract.contract.md. Asserts VCC-1..VCC-7
 # against scripts/validate-cli-contract.sh by reusing the existing

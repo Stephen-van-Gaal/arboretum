@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # owner: document-access
 # scope: plugin-only
+# ci-parallel: safe
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
