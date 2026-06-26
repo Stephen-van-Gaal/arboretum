@@ -79,10 +79,10 @@ wip=$(inlib roadmap_config_get wip_limit)
 badout=$(inlib roadmap_config_get 'bad key' 2>/dev/null); rc=$?
 [ "$rc" != 0 ] && [ -z "$badout" ] && pass RL-4 || fail_case RL-4 "rc=$rc out=[$badout]"
 
-# RL-5 — list getter: block style, flow style, and yq-failure fallback.
-# Hide yq for the first two cases so the portable python3 path is asserted on
-# every platform, then install a fake failing yq to pin fallback behaviour when
-# a runner has a yq binary that rejects the expression dialect.
+# RL-5 — list getter: block style, flow style, and missing key, asserted on
+# BOTH the python3 fallback path (yq hidden) and the real mikefarah-yq path.
+# The two paths must produce identical output (one element per line; nothing for
+# a missing key). The yq-path cases are skipped-with-reason when yq is absent.
 NOYQ_BIN="$FIX/.noyq-bin"; mkdir -p "$NOYQ_BIN"
 IFS=':' read -ra _pdirs <<< "$PATH"
 for _d in "${_pdirs[@]}"; do
@@ -97,25 +97,45 @@ done
 # shellcheck source=scripts/roadmap/lib.sh
 inlib_noyq() { ( cd "$FIX" && PATH="$NOYQ_BIN" && source "$LIB" && "$@" ); }
 
-list_block=$(inlib_noyq roadmap_config_list component_values | tr '\n' ',' )
-[ "$list_block" = "skills,workflows,hooks," ] && pass "RL-5 (block)" || fail_case "RL-5 (block)" "got=[$list_block]"
-# flow style
-cat > "$FIX/roadmap.config.yaml" <<'YAML'
+# Fixtures for the block and flow styles, written fresh per case so the two
+# paths see identical input.
+write_block() { cat > "$FIX/roadmap.config.yaml" <<'YAML'
+component_values:
+  - skills
+  - workflows
+  - hooks
+YAML
+}
+write_flow() { cat > "$FIX/roadmap.config.yaml" <<'YAML'
 component_values: [skills, workflows, hooks]
 YAML
+}
+
+# --- python3 fallback path (yq hidden) ---
+write_block
+list_block=$(inlib_noyq roadmap_config_list component_values | tr '\n' ',' )
+[ "$list_block" = "skills,workflows,hooks," ] && pass "RL-5 (python3 block)" || fail_case "RL-5 (python3 block)" "got=[$list_block]"
+write_flow
 list_flow=$(inlib_noyq roadmap_config_list component_values | tr '\n' ',')
-[ "$list_flow" = "skills,workflows,hooks," ] && pass "RL-5 (flow)" || fail_case "RL-5 (flow)" "got=[$list_flow]"
-YQFAIL_BIN="$FIX/.yqfail-bin"; mkdir -p "$YQFAIL_BIN"
-cat > "$YQFAIL_BIN/yq" <<'YQ'
-#!/usr/bin/env bash
-echo "fake yq parser failure" >&2
-exit 2
-YQ
-chmod +x "$YQFAIL_BIN/yq"
-# shellcheck source=scripts/roadmap/lib.sh
-inlib_yqfail() { ( cd "$FIX" && PATH="$YQFAIL_BIN:$PATH" && source "$LIB" && "$@" ); }
-list_yqfail=$(inlib_yqfail roadmap_config_list component_values | tr '\n' ',')
-[ "$list_yqfail" = "skills,workflows,hooks," ] && pass "RL-5 (yq failure fallback)" || fail_case "RL-5 (yq failure fallback)" "got=[$list_yqfail]"
+[ "$list_flow" = "skills,workflows,hooks," ] && pass "RL-5 (python3 flow)" || fail_case "RL-5 (python3 flow)" "got=[$list_flow]"
+miss_py=$(inlib_noyq roadmap_config_list nonexistent_key | tr '\n' ',')
+[ -z "$miss_py" ] && pass "RL-5 (python3 missing key)" || fail_case "RL-5 (python3 missing key)" "got=[$miss_py]"
+
+# --- real mikefarah-yq path (exercises the yq expression directly) ---
+if command -v yq >/dev/null 2>&1; then
+  write_block
+  list_yq_block=$(inlib roadmap_config_list component_values | tr '\n' ',')
+  [ "$list_yq_block" = "skills,workflows,hooks," ] && pass "RL-5 (yq block)" || fail_case "RL-5 (yq block)" "got=[$list_yq_block]"
+  write_flow
+  list_yq_flow=$(inlib roadmap_config_list component_values | tr '\n' ',')
+  [ "$list_yq_flow" = "skills,workflows,hooks," ] && pass "RL-5 (yq flow)" || fail_case "RL-5 (yq flow)" "got=[$list_yq_flow]"
+  miss_yq=$(inlib roadmap_config_list nonexistent_key | tr '\n' ',')
+  [ -z "$miss_yq" ] && pass "RL-5 (yq missing key)" || fail_case "RL-5 (yq missing key)" "got=[$miss_yq]"
+else
+  echo "SKIP: RL-5 (yq block/flow/missing) — mikefarah yq not installed; yq path not live-verified"
+fi
+# Restore the block fixture for downstream cases.
+write_block
 
 # RL-6 — pulse readers fail-silent when pulse file is missing
 [ ! -f "$FIX/.arboretum/roadmap-pulse.json" ] || rm -f "$FIX/.arboretum/roadmap-pulse.json"

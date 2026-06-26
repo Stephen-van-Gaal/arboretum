@@ -1,6 +1,6 @@
 ---
 seam: roadmap-lib
-version: 1.15
+version: 1.16
 producer-type: script
 consumer-type: script
 consumes:
@@ -120,7 +120,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **Cheap setup vs live reachability are distinct.** `roadmap_require_backend` is the cheap local prerequisite guard and may run frequently. `roadmap_probe_backend_access` performs a provider API read and should be used at workflow edges where a clear "this process can reach the backend" diagnostic is worth the extra call; neutral `roadmap_tracker_*` helpers do not call the probe internally.
 - **Pulse fail-silence.** All pulse readers return 0 with empty stdout when the file/field is missing; writers are atomic (`.tmp` + `mv`) and never error out the caller.
 - **Global label exclusivity.** `roadmap_set_globally_exclusive_label` MUST remove the label from every open holder except the target, MUST ensure the label exists before applying, and MUST apply it to the target. The target is never cleared. `DRY_RUN=1` MUST perform no tracker mutation (no remove, no create, no add) and instead print the planned operations. Rich label metadata (description/color) is the caller's responsibility; the helper's ensure-exists is bare.
-- **Tooling parity.** The `yq`/`jq` paths and the `python3` fallbacks are intended to produce equivalent output regardless of which tool is installed. `roadmap_config_list` captures `yq` output first and falls through to the python3 parser if the installed `yq` rejects the expression dialect, so runners with mikefarah `yq` and machines without `yq` keep the same list protocol.
+- **Tooling parity.** The `yq` and `python3` paths produce equivalent output regardless of which tool is installed. `roadmap_config_list` uses `yq -r ".${key}[]?"` — valid on mikefarah `yq` (`[]` splats the array; `?` yields nothing for a missing/empty key) and free of jq-only syntax (`// empty`) — so runners with mikefarah `yq` and machines without `yq` keep the same list protocol.
 - **Epic-list is read-only and bounded.** `roadmap_tracker_epic_list` performs no mutation, filters to open `type:epic` issues, and caps the GitHub query at a 200-item window. Azure DevOps returns an empty array so downstream consumers degrade gracefully.
 - **Epic titles are scrubbed at the source.** Author-controlled epic titles are control-char-scrubbed at the source via `ARBO_CTRL_CHAR_CLASS` before leaving the helper, so consumers rendering them into Claude context inherit the source layer of the scrub-at-source-and-consumer invariant.
 - **Sub-issue linking is gated and GitHub-first.** `roadmap_tracker_issue_link_subissue` MUST treat a non-`true` `sub_issues_enabled` as a soft no-op (return 0, no mutation), MUST require both parent and child (return 2 otherwise), and MUST link via the native GitHub sub-issues API keyed on the child's database id. Azure DevOps linking is unsupported in this version and returns nonzero with a controlled diagnostic — never a silent success. When `sub_issues_enabled` is not true, Azure DevOps projects also soft-no-op rather than returning the not-supported diagnostic.
@@ -131,7 +131,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 - **RL-2:** `roadmap_config_path` echoes the config path when `roadmap.config.yaml` exists under the root; echoes nothing when it is absent.
 - **RL-3:** `roadmap_config_get wip_limit` against a fixture config returns the scalar with quotes/inline-comment stripped; a quoted value is unquoted.
 - **RL-4:** `roadmap_config_get badkey$(touch x)` (malformed key) returns nonzero with no value echoed (key-name guard).
-- **RL-5:** `roadmap_config_list component_values` against a block-style fixture returns one element per line; a flow-style `[a, b, c]` fixture returns the same three elements; an installed-but-failing `yq` falls back to the same python3 output.
+- **RL-5:** `roadmap_config_list component_values` returns one element per line for a block-style fixture and the same three elements for a flow-style `[a, b, c]` fixture; a missing key yields nothing. Asserted on both the python3 fallback path (yq hidden) and the real mikefarah-`yq` path (skipped-with-reason when `yq` is absent), which must agree.
 - **RL-6:** `roadmap_pulse_get_field` / `roadmap_pulse_get_nag` against a missing pulse file return empty stdout and exit 0 (fail-silent).
 - **RL-7:** `roadmap_pulse_update_field` followed by `roadmap_pulse_get_field` round-trips a value through the atomically-rewritten pulse JSON.
 - **RL-8:** `roadmap_backend` defaults to `github`, reads `backend: azure-devops` from `roadmap.config.yaml`, and lets `.arboretum.yml backend: github` override the roadmap config.
@@ -174,6 +174,7 @@ Consumer-type: `script`. Downstream consumers source the lib and capture functio
 
 ## Versioning
 
+- **1.16** (2026-06-26) — fixes `roadmap_config_list` to read lists with `yq -r ".${key}[]?"` (valid on mikefarah `yq`; the prior `[]? // empty` form used jq-only syntax that errored at parse time on mikefarah `yq`, returning empty on Linux/CI). Drops the python3-fallthrough workaround for the rejected expression; RL-5 now exercises the real `yq` path directly. Issue #412.
 - **1.15** (2026-06-12) — adds `roadmap_tracker_epic_list` (open `type:epic` issues as `[{number,title}]`, GitHub-first, ADO→`[]`; RL-39/RL-39b) and `roadmap_tracker_issue_link_subissue` (native GitHub sub-issue link, gated on `sub_issues_enabled`, ADO unsupported; RL-40/40b/40c/40d/40e/40f). First slice of the `/idea` capture reframe. Issue #751.
 - **1.14** (2026-06-06) — adds `roadmap_set_globally_exclusive_label`, the cross-issue exclusive-label helper extracted from `/handoff` Step 4–5, with RL-35/35b/35c/35d pinning the clear-others / bare ensure-exists / apply-to-target sequence, the `DRY_RUN` plan output, and nonzero-return on failed clear or failed holder-enumeration (no silent exclusivity breach). Issue #574.
 - **1.13** (2026-06-04) — renders Arboretum-authored Markdown bodies to HTML for Azure DevOps `System.Description` create/update writes, preserves existing ADO HTML during read-modify-write updates, and keeps GitHub raw Markdown unchanged. Issue #540.

@@ -91,13 +91,10 @@ roadmap_config_list() {
     return 1
   fi
   if command -v yq >/dev/null 2>&1; then
-    local yq_out
-    if yq_out="$(yq -r ".${key}[]?" "$config" 2>/dev/null)"; then
-      [ -n "$yq_out" ] && printf '%s\n' "$yq_out"
-      return 0
-    fi
-  fi
-  if command -v python3 >/dev/null 2>&1; then
+    # `.key[]?` is valid on mikefarah yq: `[]` splats the array, `?` yields
+    # nothing for a missing/empty/non-array key. No `// empty` (jq-only).
+    yq -r ".${key}[]?" "$config"
+  elif command -v python3 >/dev/null 2>&1; then
     python3 - "$config" "$key" <<'PYEOF'
 import sys, re
 def parse_list(path, key):
