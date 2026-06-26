@@ -780,4 +780,51 @@ if echo "$out" | grep -q 'reason=ci-fetch-failed'; then
 fi
 ok "case 23 — no checks configured falls through to head-SHA path (not stall=unknown)"
 
+# ── Case 24: Phase 3 dispatches a read-only land driver ───────────────
+grep -q 'allowed-tools:.*\bTask\b' "$LAND_SKILL" \
+  || fail "case 24 — /land frontmatter does not allow the Task tool for driver dispatch"
+grep -qi 'dispatch the land driver' "$LAND_SKILL" \
+  || fail "case 24 — Phase 3 does not dispatch the land driver"
+grep -qi 'general-purpose' "$LAND_SKILL" \
+  || fail "case 24 — land driver is not a general-purpose subagent"
+grep -qi 'work-product envelope' "$LAND_SKILL" \
+  || fail "case 24 — driver report contract (work-product envelope) is undocumented"
+grep -qi 'driver.*read-only\|read-only.*driver' "$LAND_SKILL" \
+  || fail "case 24 — land driver is not declared read-only"
+ok "case 24 — Phase 3 dispatches a read-only land driver"
+
+# ── Case 25: mutations and the loop primitive stay in the conductor ───
+grep -q 'ScheduleWakeup' "$LAND_SKILL" \
+  || fail "case 25 — ScheduleWakeup callsite missing from the conductor"
+grep -q 'review-closeout' "$LAND_SKILL" \
+  || fail "case 25 — review-closeout no longer invoked by the conductor"
+grep -qi 'merge handoff' "$LAND_SKILL" \
+  || fail "case 25 — tiered merge handoff missing from the conductor"
+grep -qi 'no mutating\|mutates no\|never mutates' "$LAND_SKILL" \
+  || fail "case 25 — driver contract does not forbid mutation"
+# Those mutations must NOT appear inside the driver-brief region. A bare
+# string-existence check above would still pass if a regression moved a mutation
+# into the driver's instructions, so assert absence within the brief block.
+BRIEF=$(awk '/Driver brief \(conductor/{f=1} /driver.s three assess steps/{f=0} f' "$LAND_SKILL")
+[ -n "$BRIEF" ] || fail "case 25 — could not locate the driver-brief region (heading drift?)"
+for tok in 'ScheduleWakeup' 'review-closeout' 'merge handoff'; do
+  if printf '%s\n' "$BRIEF" | grep -qi "$tok"; then
+    fail "case 25 — '$tok' appears inside the driver brief (must stay conductor-side)"
+  fi
+done
+ok "case 25 — mutations + ScheduleWakeup conductor-side and absent from the driver brief"
+
+# ── Case 26: Phases 1 and 2 never dispatch a driver ───────────────────
+# Extract the text from "### Phase 1" up to (not including) "### Phase 3"
+# and assert it contains no land-driver dispatch — a terminal or stalled
+# PR must never spawn a subagent.
+PHASE12=$(awk '/^### Phase 1: Terminal check/{f=1} /^### Phase 3: Active iteration/{f=0} f' "$LAND_SKILL")
+# Guard against a vacuous pass: a renamed heading makes the range empty, and the
+# grep below would then find nothing and falsely pass. Require a non-empty extract.
+[ -n "$PHASE12" ] || fail "case 26 — Phase 1/2 region extraction empty (heading drift?) — would vacuously pass"
+if printf '%s\n' "$PHASE12" | grep -qi 'dispatch the land driver'; then
+  fail "case 26 — Phase 1/2 dispatches a driver (must only happen in Phase 3)"
+fi
+ok "case 26 — Phases 1 and 2 do not dispatch a driver"
+
 echo "ALL PASS"

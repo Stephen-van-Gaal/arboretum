@@ -75,7 +75,7 @@ check(
 )
 check(
     "/land handles ci-failing before reviewer triage",
-    before(land, "reason=ci-failing", "Before classifying, invoke `Skill arboretum:receive-review`"),
+    before(land, "reason=ci-failing", "invokes `Skill arboretum:receive-review`"),
 )
 check(
     "/land recomputes readiness before resolving threads",
