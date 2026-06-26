@@ -110,16 +110,34 @@ done < <(printf '%s' "$issues" | jq -r \
   '.[] | select([.labels[].name] | index("agent-ready")) | .number')
 # --------------------------------------------------------------------------
 
+# The three JSON payloads ($issues, $prs, $agent_ready) can be large — on a
+# mature board $issues alone (200 issues with bodies + comment threads) blows
+# past the OS ARG_MAX limit when passed via --argjson on argv, killing the scan
+# with "Argument list too long" (#890). Stage them in temp files and feed them
+# through --slurpfile, which keeps them off argv. --slurpfile wraps each file's
+# JSON in a one-element array, so the program unwraps with `$var[0]`. Only the
+# small --arg asof scalar stays on argv.
+scan_tmpdir="$(mktemp -d)"
+trap 'rm -rf "$scan_tmpdir"' EXIT
+printf '%s' "$issues"      > "$scan_tmpdir/issues.json"
+printf '%s' "$prs"         > "$scan_tmpdir/prs.json"
+printf '%s' "$agent_ready" > "$scan_tmpdir/agent_ready.json"
+
 jq -n \
-  --argjson issues "$issues" \
-  --argjson prs "$prs" \
   --arg asof "$as_of" \
-  --argjson agent_ready "$agent_ready" '
+  --slurpfile issues_w      "$scan_tmpdir/issues.json" \
+  --slurpfile prs_w         "$scan_tmpdir/prs.json" \
+  --slurpfile agent_ready_w "$scan_tmpdir/agent_ready.json" '
   def days_since(d):
     (($asof + "T00:00:00Z" | fromdate) - (d | fromdate)) / 86400 | floor;
 
+  # Unwrap the slurpfile one-element array wrappers back to the raw payloads.
+  ($issues_w[0]) as $issues
+  | ($prs_w[0]) as $prs
+  | ($agent_ready_w[0]) as $agent_ready
+
   # Merged PRs within the 60-day window.
-  ($prs | map(select(days_since(.mergedAt) <= 60))) as $recent_prs
+  | ($prs | map(select(days_since(.mergedAt) <= 60))) as $recent_prs
 
   | ($issues | map(
       . as $iss
@@ -146,6 +164,13 @@ jq -n \
       | (any($labels[]; . == "horizon:next")) as $has_next
       | ((($body | test("(?m)^##[[:space:]]")) or ($body | test("(?i)<h2([[:space:]>])"))) and (($body | length) >= 200)) as $shaped
       | (([$iss.labels[].name] | index("agent-ready")) != null) as $is_ar
+      # type:epic issues are parents of other work. A child/design PR that
+      # says "Closes #<epic>" carries a closing keyword + the epic number, which
+      # would otherwise flag the live epic for auto_close (real incident #891:
+      # epic #516 flagged by merged PR #522). Exempt epics from auto_close and
+      # soft_resolved so the parent is never closed/soft-stated off a child PR;
+      # other buckets (orphan/untriaged/...) still apply.
+      | (([$iss.labels[].name] | index("type:epic")) != null) as $is_epic
       | ($agent_ready[($n | tostring)]) as $ar
       | (
           if $is_ar and ($ar != null) then
@@ -159,11 +184,11 @@ jq -n \
           number: $n,
           title: $iss.title,
           bucket: (
-            if   ($closing_ref or $all_checked)   then "auto_close"
-            elif $partial_ref                     then "soft_resolved"
+            if   (($closing_ref or $all_checked) and ($is_epic | not)) then "auto_close"
+            elif ($partial_ref and ($is_epic | not))                   then "soft_resolved"
             elif ($ar_state == "invalidated")     then "agent_ready_invalidated"
             elif ($ar_state == "stale")           then "agent_ready_stale"
-            elif ($updated_d > 90)                then "orphan"
+            elif ($updated_d > 90 and (($is_epic and ($closing_ref or $partial_ref)) | not)) then "orphan"
             elif ($has_horizon | not)             then "untriaged"
             elif ($has_next and ($shaped | not))  then "unshaped_next"
             else "healthy" end
@@ -171,16 +196,16 @@ jq -n \
           # Evidence strings must use only controlled fields (issue/PR numbers, dates, day counts).
           # Never embed untrusted .title or .body content — evidence flows verbatim into tracker comment bodies in maintain-apply.sh.
           evidence: (
-            if   $closing_ref then "Merged PR #\($closing_prs[0].number) references this with a closing keyword"
-            elif $all_checked then "All \($done_boxes) acceptance checkbox(es) ticked, none left open"
-            elif $partial_ref then "Merged PR #\($mention_prs[0].number) mentions this without a closing keyword"
+            if   ($closing_ref and ($is_epic | not)) then "Merged PR #\($closing_prs[0].number) references this with a closing keyword"
+            elif ($all_checked and ($is_epic | not)) then "All \($done_boxes) acceptance checkbox(es) ticked, none left open"
+            elif ($partial_ref and ($is_epic | not)) then "Merged PR #\($mention_prs[0].number) mentions this without a closing keyword"
             elif ($ar_state == "invalidated") then (
               if ($ar.hasMarker | not)
               then "agent-ready label present but no agent-prep verification comment from a trusted author found"
               else "Issue body edited since agent-ready was verified on \($ar.markerDate) (body-sha mismatch)" end)
             elif ($ar_state == "stale") then
               "agent-ready verified \(days_since($ar.markerDate + "T00:00:00Z")) days ago, unused — past the 7-day window"
-            elif ($updated_d > 90) then "Open \($updated_d) days; no merged-PR reference, no recent activity"
+            elif ($updated_d > 90 and (($is_epic and ($closing_ref or $partial_ref)) | not)) then "Open \($updated_d) days; no merged-PR reference, no recent activity"
             elif ($has_horizon | not) then "No horizon:* label — needs triage"
             elif ($has_next and ($shaped | not)) then "horizon:next but body lacks shape (needs a Markdown ## or HTML <h2> heading and >=200 chars)"
             else "" end
