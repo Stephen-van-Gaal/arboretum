@@ -333,5 +333,56 @@ echo "$HALFB_OUT" | grep -q 'Unowned: src/foo.py' \
 [ "$HALFB_RC" -ne 0 ] \
   || fail "health-check.sh exit 0 despite an unowned source file" "$HALFB_OUT"
 
+# Half B is owns:-only (#865): an in-file `# owner:` marker is NO LONGER a Half B
+# ownership source. A .py file carrying a resolvable owner marker but matched by
+# no owns: glob must be flagged Unowned — the forcing function that gives it
+# Check 7 drift coverage (a marker-only file used to silently escape Check 7).
+rm -f "$FIXTURE/src/orphan.py"
+echo "# owner: foo" > "$FIXTURE/src/marker_only.py"
+echo "def f(): return 1" >> "$FIXTURE/src/marker_only.py"
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "add marker-only file"
+bash "$GEN" "$FIXTURE" >/dev/null \
+  || fail "generate-register.sh exited non-zero (marker-only case)"
+set +e
+MARKER_OUT=$(bash "$CHECK" "$FIXTURE" 2>&1)
+MARKER_RC=$?
+set -e
+echo "$MARKER_OUT" | grep -q 'Unowned: src/marker_only.py' \
+  || fail "Check 3 Half B did not flag a marker-only .py file (owns:-only, #865)" "$MARKER_OUT"
+[ "$MARKER_RC" -ne 0 ] \
+  || fail "health-check.sh exit 0 despite a marker-only (no owns:) source file" "$MARKER_OUT"
+rm -f "$FIXTURE/src/marker_only.py"
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "cleanup marker-only file"
+
+# ── Check 3 Half C: ownership-aware discovery, sh/bash included (#865) ──
+# sh/bash are now discoverable (were excluded on the false premise Half A
+# covers arbitrary source roots). The nudge counts only UNGOVERNED files: a
+# file owned by an owns: glob, a resolvable in-file marker, or framework-scope
+# does not contribute. Fixture: an unowned src/deploy.sh (counted) plus a
+# marker-owned src/marker_owned.sh (NOT counted — exercises the marker branch).
+printf '#!/usr/bin/env bash\necho deploy\n' > "$FIXTURE/src/deploy.sh"
+printf '#!/usr/bin/env bash\n# owner: foo\necho governed\n' > "$FIXTURE/src/marker_owned.sh"
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "add sh discovery fixtures"
+bash "$GEN" "$FIXTURE" >/dev/null \
+  || fail "generate-register.sh exited non-zero (discovery case)"
+set +e
+DISC_OUT=$(bash "$CHECK" "$FIXTURE" 2>&1)
+set -e
+# sh is now discoverable: the unowned src/deploy.sh trips the nudge.
+echo "$DISC_OUT" | grep -qE "Found [0-9]+ \.sh file\(s\) not declared" \
+  || fail "Half C did not discover unowned .sh under a source root (#865)" "$DISC_OUT"
+# Ownership-aware: only the 1 ungoverned file is counted (marker_owned.sh excluded).
+echo "$DISC_OUT" | grep -qE "Found 1 \.sh file\(s\) not declared" \
+  || fail "Half C counted a marker-owned .sh — discovery must be ownership-aware (#865)" \
+          "$(echo "$DISC_OUT" | grep '\.sh file')"
+rm -f "$FIXTURE/src/deploy.sh" "$FIXTURE/src/marker_owned.sh"
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t add . >/dev/null
+git -C "$FIXTURE" -c user.email=t@t -c user.name=t commit -q -m "cleanup discovery fixtures"
+
 echo "PASS: fixture round-trip healthy (rc=$HEALTH_RC; schema OK; no missing/unowned)"
 echo "PASS: Check 3 Half B flags unowned src/*.py, leaves owned files clean"
+echo "PASS: Check 3 Half B is owns:-only — marker-only .py is Unowned (#865)"
+echo "PASS: Check 3 Half C is ownership-aware and discovers sh (#865)"

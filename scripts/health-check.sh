@@ -208,6 +208,50 @@ leading_block_owner_marker() {
   ' "$file"
 }
 
+# True (exit 0) if any owns pattern in the map ($2) covers repo-relative path $1.
+# A pattern matches by: a `**` glob (prefix up to the first `**`, so mid-pattern
+# globs like `a/**/*.sh` resolve to the `a/` prefix); a trailing-`/` directory
+# entry (prefix over its contents, #865 P2-1); or an exact path. Shared by Half B
+# (enforcement) and _file_is_governed (discovery) so the two never diverge.
+#   $1 = repo-relative path, $2 = owns map (pattern:spec lines)
+_owns_map_covers() {
+  local rel="$1" owns_map="$2" pattern dir
+  while IFS=: read -r pattern _; do
+    [ -z "$pattern" ] && continue
+    if [[ "$pattern" == *"**"* ]]; then
+      # Strip from the FIRST `*` so both trailing `**` and mid-pattern
+      # `**/...` globs reduce to their literal directory prefix (#865 codex P2).
+      dir="${pattern%%\**}"
+      [[ "$rel" == "$dir"* ]] && return 0
+    elif [[ "$pattern" == */ ]]; then
+      [[ "$rel" == "$pattern"* ]] && return 0
+    elif [ "$rel" = "$pattern" ]; then
+      return 0
+    fi
+  done <<< "$owns_map"
+  return 1
+}
+
+# Discovery-ownership predicate (#865): is a file "governed" for Half C
+# discovery purposes? Broader than Half B (which is owns:-only) — discovery asks
+# "is this governed at all?", so a resolvable marker counts. Returns 0 when an
+# owns: glob matches, OR the file carries a resolvable in-file owner marker, OR
+# it is framework-scoped; 1 otherwise.
+#   $1 = repo-relative path, $2 = absolute path, $3 = owns map (pattern:spec lines)
+_file_is_governed() {
+  local rel="$1" abs="$2" owns_map="$3" prefix m_owner
+  _owns_map_covers "$rel" "$owns_map" && return 0
+  if ! is_plugin_root && governed_by_framework_in_consumer_root "$abs"; then
+    return 0
+  fi
+  prefix="$(_comment_prefix "$rel")"
+  if [ -n "$prefix" ]; then
+    m_owner="$(leading_block_owner_marker "$abs" "$prefix")"
+    [ -n "$m_owner" ] && owner_doc_path "$m_owner" "$PROJECT_DIR" >/dev/null && return 0
+  fi
+  return 1
+}
+
 # O(N) membership test. Kept linear (not an associative array) because
 # macOS ships bash 3.2, which lacks `declare -A`. N is typically <10
 # (status states / active_states), so linear scan is fine.
@@ -289,8 +333,24 @@ _trim_ws() { sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
 # deletions symmetrically. Returns `unknown` (not `drift`) when no benign class
 # matches, so the dispatcher consults later tiers; the dispatcher applies the
 # D2 fail-safe (all-unknown → drift).
+# Emit the Go build-constraint lines (`//go:build` / legacy `// +build`) that
+# precede the `package` clause — the only place the Go toolchain honours a
+# constraint. Scanning until `package` (rather than the first non-comment line)
+# tolerates a leading `/* license */` block comment or doc comment before the
+# constraint (#865 codex), while still excluding a constraint moved BELOW the
+# package clause (inert → drift, #865 P2-2). Files with no `package` clause
+# (e.g. cgo `.c`/`.h`) have no terminator, so the whole file is scanned —
+# conservative and fail-safe. Reading from stdin.
+_leading_build_constraints() {
+  awk '
+    { sub(/\r$/, "", $0) }
+    /^[[:space:]]*package[[:space:]]/ { exit }
+    /^[[:space:]]*\/\/(go:build| \+build)/ { print }
+  '
+}
+
 _tier1_diff_class() {
-  local spec_commit="$1" file_rel="$2" a b prefix
+  local spec_commit="$1" file_rel="$2" a b prefix ca cb
   a="$(_blob "$spec_commit" "$file_rel")"
   b="$(_blob HEAD "$file_rel")"
 
@@ -308,6 +368,21 @@ _tier1_diff_class() {
     *.md)
       [ "$(printf '%s' "$a" | _strip_frontmatter)" = "$(printf '%s' "$b" | _strip_frontmatter)" ] \
         && { printf benign; return; } ;;
+  esac
+
+  # (c2) Go build constraints are load-bearing comments (#865): a change to
+  #      //go:build or legacy // +build lines changes the compiled file set, so
+  #      it is NOT benign even though it is comment syntax. Compare the
+  #      LEADING-BLOCK constraint set — a constraint is only honoured by the Go
+  #      toolchain when it sits in the comment block before any code, so a line
+  #      moved below `package` is inert and must register as a change (#865 P2-2).
+  #      cgo C/C++ sources (`.c`/`.h`/`.cc`/`.cpp`) also honour `//go:build`
+  #      constraints, so they get the same carve-out (#865 codex P2).
+  case "$file_rel" in
+    *.go|*.c|*.h|*.cc|*.cpp)
+      ca="$(printf '%s' "$a" | _leading_build_constraints | sort || true)"
+      cb="$(printf '%s' "$b" | _leading_build_constraints | sort || true)"
+      [ "$ca" != "$cb" ] && { printf unknown; return; } ;;
   esac
 
   # (d) comment-only / `# owner:` marker only (known comment-prefix files).
@@ -779,14 +854,17 @@ SOURCE_LANGUAGES_IGNORE=()
 
 # Extensions Half C nudges about: recognized CODE source types (#859). DERIVED
 # from _COMMENT_PREFIX_MAP (single source of truth — avoids the hand-maintained
-# second-list drift class, #124) minus the carve-outs: sh/bash (governed by
-# Half A's owner-marker scan) and data formats yaml/yml (recognized for
-# comment-stripping but not governed-by-default). To govern one, add it to
-# source_languages; to silence, add it to source_languages_ignore.
+# second-list drift class, #124) minus the data formats yaml/yml (recognized for
+# comment-stripping but not governed-by-default). sh/bash ARE discoverable (#865):
+# Half A only walks framework locations (scripts/, .claude/hooks/, bin/), not
+# arbitrary source_paths, so shell under src/ would otherwise escape every check.
+# Discovery is ownership-aware (see Half C), so owned shell does not self-noise.
+# To govern one, add it to source_languages; to silence, add it to
+# source_languages_ignore.
 _DISCOVERY_EXTS=""
 for _pair in $_COMMENT_PREFIX_MAP; do
   case "${_pair%%:*}" in
-    sh|bash|yaml|yml) ;;
+    yaml|yml) ;;
     *) _DISCOVERY_EXTS="$_DISCOVERY_EXTS ${_pair%%:*}" ;;
   esac
 done
@@ -1112,7 +1190,13 @@ fi
 # Half A above is arboretum-framework-specific (owner markers on .sh/
 # bin/SKILL.md). Half B is the general source-ownership scan that
 # downstream adopter projects depend on: walk the project source roots
-# for *.py files and flag any not covered by a spec's owns: patterns.
+# for the enforced languages and flag any file not covered by a spec's
+# owns: patterns. Half B is owns:-glob-only for every enforced language
+# (#865): an in-file `<prefix> owner:` marker is NOT a Half B ownership
+# source — markers remain Half A (framework), a Check 7 benign-diff
+# signal, and an authoring/provenance convention only. Making Half B
+# owns:-only dissolves the marker-only-escapes-Check-7 gap by construction
+# (the only way to satisfy Half B is the same owns: data Check 7 walks).
 # It reuses the spec_owns_map built for Check 2, so — like Check 2 — it
 # is gated on register_schema_compatible: an incompatible REGISTER.md
 # schema means spec_owns_map is empty and every file would mis-flag.
@@ -1125,12 +1209,6 @@ else
   for _ext in "${SOURCE_LANGUAGES[@]}"; do
     [ ${#find_lang_expr[@]} -gt 0 ] && find_lang_expr+=(-o)
     find_lang_expr+=(-name "*.$_ext")
-    # Advisory diagnostic (#859): an enforced language with no known comment
-    # prefix can still be owned via owns: patterns, but in-file marker
-    # detection cannot run for it. Surface that, do not block.
-    if [ -z "$(_comment_prefix "x.$_ext")" ]; then
-      advise "source_languages includes '$_ext' but no comment prefix is known — owner-marker detection cannot run for it (owns:-pattern coverage still applies)"
-    fi
   done
   for src_dir in "${SOURCE_PATHS[@]}"; do
     [ -z "$src_dir" ] && continue
@@ -1145,26 +1223,9 @@ else
         continue
       fi
       owned=false
-      while IFS=: read -r pattern _; do
-        [ -z "$pattern" ] && continue
-        if [[ "$pattern" == *"**"* ]]; then
-          dir="${pattern%%\*\*}"
-          if [[ "$rel_path" == "$dir"* ]]; then owned=true; break; fi
-        elif [ "$rel_path" = "$pattern" ]; then owned=true; break; fi
-      done <<< "$spec_owns_map"
-      # Fall back to a resolvable in-file owner marker (#859): a file carrying
-      # `<prefix> owner: <spec>` in its leading comment block is owned even when
-      # not listed in any owns: pattern (mirrors Half A's .sh marker model, and
-      # lets a generated provenance banner satisfy ownership).
-      if [ "$owned" = false ]; then
-        prefix="$(_comment_prefix "$rel_path")"
-        if [ -n "$prefix" ]; then
-          m_owner="$(leading_block_owner_marker "$file" "$prefix")"
-          if [ -n "$m_owner" ] && owner_doc_path "$m_owner" "$PROJECT_DIR" >/dev/null; then
-            owned=true
-          fi
-        fi
-      fi
+      _owns_map_covers "$rel_path" "$spec_owns_map" && owned=true
+      # owns:-glob-only (#865): no in-file-marker fallback. A file matched by no
+      # owns: pattern is Unowned — markers are not a Half B ownership source.
       if [ "$owned" = false ]; then
         warn "Unowned: $rel_path"
         ((unowned_count++)) || true
@@ -1187,8 +1248,16 @@ for _ext in $_DISCOVERY_EXTS; do
   for src_dir in "${SOURCE_PATHS[@]}"; do
     [ -z "$src_dir" ] && continue
     [ ! -d "$PROJECT_DIR/$src_dir" ] && continue
-    _n=$(find "$PROJECT_DIR/$src_dir" -name "*.$_ext" -type f 2>/dev/null | wc -l | tr -d ' ')
-    _dcount=$((_dcount + _n))
+    # Ownership-aware (#865): count only UNGOVERNED files of this type. A file
+    # owned by an owns: glob, a resolvable marker, or framework-scope is already
+    # governed and must not trip the discovery nudge (else owned test fixtures
+    # like tests/contracts/**/*.sh would flood it).
+    while IFS= read -r _abs; do
+      [ -z "$_abs" ] && continue
+      _rel="${_abs#"$PROJECT_DIR"/}"
+      _file_is_governed "$_rel" "$_abs" "$spec_owns_map" && continue
+      _dcount=$((_dcount + 1))
+    done < <(find "$PROJECT_DIR/$src_dir" -name "*.$_ext" -type f 2>/dev/null)
   done
   if [ "$_dcount" -gt 0 ]; then
     advise "Found $_dcount .$_ext file(s) not declared in source_languages — add '$_ext' to enforce ownership, or source_languages_ignore to acknowledge."

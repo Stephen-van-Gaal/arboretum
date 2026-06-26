@@ -30,6 +30,8 @@ owner: architecture
 owns:
   - src/omega.py
   - src/omega.sql
+  - src/omega.go
+  - src/omega.c
   - owned-docs/omega.md
   - config/omega.yaml
 ---
@@ -44,6 +46,21 @@ INNER
   cat > "$d/src/omega.sql" <<'INNER'
 -- owner: omega
 SELECT 1;
+INNER
+  cat > "$d/src/omega.go" <<'INNER'
+//go:build linux
+
+// owner: omega
+package main
+
+// run returns the exit code
+func run() int { return 1 }
+INNER
+  cat > "$d/src/omega.c" <<'INNER'
+//go:build linux
+
+// owner: omega
+int run(void) { return 1; }
 INNER
   cat > "$d/owned-docs/omega.md" <<'INNER'
 ---
@@ -70,7 +87,7 @@ INNER
 
 | Spec | Status | Owner | Owns (files/directories) |
 |------|--------|-------|--------------------------|
-| omega.spec.md | active | architecture | src/omega.py, src/omega.sql, owned-docs/omega.md, config/omega.yaml |
+| omega.spec.md | active | architecture | src/omega.py, src/omega.sql, src/omega.go, src/omega.c, owned-docs/omega.md, config/omega.yaml |
 
 ## Status Summary
 
@@ -82,7 +99,7 @@ INNER
 
 ## Dependency Resolution Order
 INNER
-  (cd "$d" && git add docs/specs/omega.spec.md src/omega.py src/omega.sql owned-docs/omega.md config/omega.yaml docs/REGISTER.md \
+  (cd "$d" && git add docs/specs/omega.spec.md src/omega.py src/omega.sql src/omega.go src/omega.c owned-docs/omega.md config/omega.yaml docs/REGISTER.md \
               CLAUDE.md contracts.yaml workflows/README.md docs/ARCHITECTURE.md \
    && git commit -q -m "spec+code baseline")
   echo "$d"
@@ -111,6 +128,49 @@ D="$(make_fixture)"
 (cd "$D" && printf -- '-- owner: omega\n-- a new explanatory comment\nSELECT 1;\n' > src/omega.sql \
    && git add src/omega.sql && git commit -q -m "sql comment only")
 if omega_drifts "$D"; then fail_case "sql comment-only change flagged as drift"; else pass "sql comment-only → benign"; fi
+rm -rf "$D"
+
+# --- drift: Go //go:build constraint change → MUST flag (#865) ---
+# A build-constraint line is `//` comment syntax but load-bearing: it changes the
+# compiled file set. It must NOT be classified benign by the comment-only class.
+D="$(make_fixture)"
+(cd "$D" && printf '//go:build windows\n\n// owner: omega\npackage main\n\n// run returns the exit code\nfunc run() int { return 1 }\n' > src/omega.go \
+   && git add src/omega.go && git commit -q -m "flip build constraint")
+if omega_drifts "$D"; then pass "go build-constraint change → drift (#865)"; else fail_case "go //go:build change NOT flagged (stripped as benign comment)"; fi
+rm -rf "$D"
+
+# --- drift: //go:build after a leading /* license */ block comment → MUST flag (#865 codex) ---
+# The scanner must tolerate a block-comment banner before the constraint, not exit on it.
+D="$(make_fixture)"
+(cd "$D" && printf '/* SPDX-License-Identifier: MIT */\n//go:build windows\n\n// owner: omega\npackage main\n\n// run returns the exit code\nfunc run() int { return 1 }\n' > src/omega.go \
+   && git add src/omega.go && git commit -q -m "constraint after license banner")
+if omega_drifts "$D"; then pass "go constraint after /* */ banner → drift (#865 codex)"; else fail_case "go constraint after block-comment banner NOT flagged"; fi
+rm -rf "$D"
+
+# --- drift: cgo .c //go:build change → MUST flag (#865 codex P2 — extends carve-out) ---
+D="$(make_fixture)"
+(cd "$D" && printf '//go:build windows\n\n// owner: omega\nint run(void) { return 1; }\n' > src/omega.c \
+   && git add src/omega.c && git commit -q -m "flip cgo build constraint")
+if omega_drifts "$D"; then pass "cgo .c build-constraint change → drift (#865 codex P2)"; else fail_case "cgo .c //go:build change NOT flagged"; fi
+rm -rf "$D"
+
+# --- drift: Go //go:build MOVED out of the leading block → MUST flag (#865 P2-2) ---
+# Same constraint text, different placement: below `package main` it is an inert
+# comment, not a build constraint, so the file flips from linux-only to always
+# compiled. Whole-file set comparison misses this; leading-block comparison catches it.
+D="$(make_fixture)"
+(cd "$D" && printf '// owner: omega\npackage main\n//go:build linux\n\n// run returns the exit code\nfunc run() int { return 1 }\n' > src/omega.go \
+   && git add src/omega.go && git commit -q -m "move build constraint below package")
+if omega_drifts "$D"; then pass "go build-constraint placement move → drift (#865 P2-2)"; else fail_case "go //go:build moved out of leading block NOT flagged"; fi
+rm -rf "$D"
+
+# --- benign: Go plain comment change → NO drift (#865 regression guard) ---
+# A non-constraint `//` comment edit must remain benign — the carve-out is
+# scoped to build-constraint lines only.
+D="$(make_fixture)"
+(cd "$D" && printf '//go:build linux\n\n// owner: omega\npackage main\n\n// run is the entrypoint helper\nfunc run() int { return 1 }\n' > src/omega.go \
+   && git add src/omega.go && git commit -q -m "go comment only")
+if omega_drifts "$D"; then fail_case "go plain comment change flagged as drift"; else pass "go plain comment-only → benign (#865)"; fi
 rm -rf "$D"
 
 # --- benign: net-empty (change then revert) → NO drift ---
