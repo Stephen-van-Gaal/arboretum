@@ -204,4 +204,45 @@ echo "$OUT" | grep -qiE 'all .*no effect|no effect without --reconcile' \
   || fail "--all without --reconcile was silently ignored (finding A)" "$OUT"
 echo "PASS (test 6): --all without --reconcile is a reported no-op, no mutation"
 
+# ── Test 7: directory owns: — in-scope child drift flips on a feature branch ──
+#
+# #892 (#865 codex P2 follow-up): with directory owns: (trailing slash, e.g.
+# `src/`) now resolving in _owns_map_covers, Check 7's drift loop must resolve
+# the owns entry to its concrete child files — not record the directory itself.
+# Otherwise scoped --reconcile compares "src/" exactly against git-diff child
+# paths ("src/foo.py") and never matches, so a directory-owned spec never
+# auto-stales on a feature branch. Fixture: spec E owns the directory src/; a
+# child src/foo.py changes in scope → expect flip (both surfaces).
+F7=$(mktemp -d); trap 'rm -rf "$FIXTURE" "$F4" "$F5" "$F7"' EXIT
+G7() { git -C "$F7" -c user.email=t@t -c user.name=t "$@"; }
+mkdir -p "$F7/docs/specs" "$F7/docs/definitions" "$F7/src" "$F7/workflows"
+for f in workflows/README.md CLAUDE.md docs/ARCHITECTURE.md contracts.yaml; do echo "# fixture" > "$F7/$f"; done
+cat > "$F7/docs/specs/e.spec.md" <<'EOF'
+---
+name: e
+status: active
+owner: alice
+owns:
+  - src/
+---
+
+# e
+Fixture spec — directory owns.
+EOF
+printf '# owner: e\ndef foo():\n    return 1\n' > "$F7/src/foo.py"
+G7 init -q; G7 branch -M main; G7 add . >/dev/null
+bash "$GEN" "$F7" >/dev/null || fail "generate-register.sh failed (F7)"
+G7 add . >/dev/null; G7 commit -q -m "spec e (owns src/) + child, no drift"   # spec & child same commit → no drift yet
+# Feature branch: change the in-scope child src/foo.py (non-benign).
+G7 checkout -q -b feat/dir-owns
+printf '# owner: e\ndef foo():\n    return 2\n' > "$F7/src/foo.py"
+G7 add src/foo.py >/dev/null; G7 commit -q -m "feature: change in-scope child of src/"
+e_status() { grep '^status:' "$F7/docs/specs/e.spec.md"; }
+set +e; OUT=$(bash "$CHECK" --reconcile "$F7" 2>&1); set -e
+[ "$(e_status)" = "status: stale" ] \
+  || fail "scoped --reconcile did not flip directory-owned spec E after in-scope child drift (#892)" "$OUT"
+grep 'e\.spec\.md' "$F7/docs/REGISTER.md" | grep -q 'stale' \
+  || fail "scoped --reconcile left directory-owned spec E's REGISTER row unflipped (#892 split-surface)" "$(grep '\.spec\.md' "$F7/docs/REGISTER.md")"
+echo "PASS (test 7): directory owns flips on in-scope child drift (both surfaces)"
+
 echo "ALL PASS"

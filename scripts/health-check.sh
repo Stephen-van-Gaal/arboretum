@@ -1581,6 +1581,17 @@ while IFS='|' read -r _ spec status _ owns _; do
       dir="${dir%/}"
       [ ! -d "$PROJECT_DIR/$dir" ] && continue
       file_list=$(find "$PROJECT_DIR/$dir" -type f 2>/dev/null)
+    elif [[ "$pattern" == */ ]]; then
+      # Trailing-slash directory owns: (#865 P2-1) — expand to concrete child
+      # files so the resolved drift path is a child (e.g. src/foo.py), not the
+      # directory itself. Must precede the [ -e ] branch (a directory satisfies
+      # -e). Without this, scoped --reconcile compares "src/" exactly against
+      # git-diff child paths and never matches → a directory-owned spec never
+      # auto-stales on a feature branch (#892). Mirrors the ** branch and keeps
+      # membership exact-match (no second glob matcher, per spec §Reconcile scope).
+      dir="${pattern%/}"
+      [ ! -d "$PROJECT_DIR/$dir" ] && continue
+      file_list=$(find "$PROJECT_DIR/$dir" -type f 2>/dev/null)
     elif [ -e "$PROJECT_DIR/$pattern" ]; then
       file_list="$PROJECT_DIR/$pattern"
     else
