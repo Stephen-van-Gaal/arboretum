@@ -481,4 +481,49 @@ grep -q "gate-prerequisite seam scaffolding" docs/specs/workflow-unification.spe
   || fail "case 42 — workflow-unification.spec.md does not record the seam-scaffolding obligation"
 ok "case 42 — workflow-unification records the pre-build seam-scaffolding obligation"
 
+# Case 43: /build Branch 2 is mode/plan-conditional (#928). It dispatches TDD in
+# mode=direct AND in a plan-execution mode that has no plan to carry the cycle;
+# it folds into Branch 3 ONLY when a plan is present. Anchors track the dispatch
+# logic, not incidental wording (B4 correctness + Copilot/Codex rounds 1–2).
+BUILD="skills/build/SKILL.md"
+[ -f "$BUILD" ] || fail "case 43 — $BUILD missing"
+
+grep -q 'fold Branch 2 into Branch 3' "$BUILD" \
+  || fail "case 43 — build Branch 2 missing fold language for plan-execution modes"
+grep -q 'sole carrier' "$BUILD" \
+  || fail "case 43 — build Branch 2 missing mode=direct sole-carrier carve-out"
+grep -q 'no TDD cues' "$BUILD" \
+  || fail "case 43 — build Branch 2 missing advisory no-cues TDD-presence warning"
+# Planless plan-execution builds must KEEP the TDD carrier (dispatch, not just warn)
+# — Codex round 2: a warning-only no-plan path leaves subagent+plan:null uncovered.
+grep -q 'no plan to carry the TDD cycle' "$BUILD" \
+  || fail "case 43 — build Branch 2 missing the no-plan TDD dispatch (planless builds would lose their carrier)"
+grep -q 'never gates' "$BUILD" \
+  || fail "case 43 — build Branch 2 advisory check no longer states it never gates (warning may have become gating)"
+# Portable whole-word cue match — a bare-letters regex matches everyday prose
+# ("required", "structured") and suppresses the warning; a \b-anchored pattern
+# is GNU-only and mis-detects under BSD/macOS grep (Codex round 1). Pin the -w form.
+grep -qF "grep -qiwE 'red|green|refactor|failing test'" "$BUILD" \
+  || fail "case 43 — build Branch 2 TDD-cue grep is not the portable whole-word (-w) form"
+grep -q "grep -qiE '\\\\bred" "$BUILD" \
+  && fail "case 43 — build Branch 2 still uses the GNU-only \\b-anchored grep (not BSD/macOS-portable)"
+# Section-scoped assertion (Codex P3): within Step 3, every standalone TDD dispatch
+# must be reason-gated to a mode/plan condition, and the plan-present path must say
+# "Do not dispatch" — so a future edit can't re-add an UNconditional dispatch (or
+# append the fold paragraph while leaving an ungated dispatch) and still pass.
+STEP3="$(awk '/^### Step 3:/{f=1} f{print} /^### Step 4:/{if(f)exit}' "$BUILD")"
+printf '%s\n' "$STEP3" | grep -q 'reason=Branch 2 — no plan to carry the TDD cycle' \
+  || fail "case 43 — Step 3 no-plan branch does not dispatch TDD with a plan-gated reason"
+printf '%s\n' "$STEP3" | grep -qi 'do \*\*not\*\* dispatch a separate' \
+  || fail "case 43 — Step 3 plan-present fold branch missing the explicit 'do not dispatch a separate TDD skill' guard"
+
+# Companion contract surfaces must describe the same mode-conditional fold, not the
+# old unconditional dispatch — else an agent/contract reader still double-dispatches
+# (Codex round 1, paired-stub-sync).
+grep -q 'folds into Branch 3' workflows/build.md \
+  || fail "case 43 — workflows/build.md Branch 2 still describes unconditional TDD dispatch (not the fold)"
+grep -q 'folds into Branch 3' docs/contracts/s2-design-to-build.contract.md \
+  || fail "case 43 — s2-design-to-build.contract.md Outputs still describes unconditional Branch 2 dispatch"
+ok "case 43 — /build Branch 2 fold (mode-conditional, advisory+portable, section-scoped, surfaces synced)"
+
 echo "ALL PASS: skill-prose unified invariants"

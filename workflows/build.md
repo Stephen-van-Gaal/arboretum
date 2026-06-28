@@ -39,7 +39,7 @@ The other workflows are reserved for shapes the build workflow does not cover:
   └── not patchable → issue update + stop    │
                                              ▼
                        /build (Branch 2 + Branch 3)
-                          ├── TDD (any applicable tier)
+                          ├── TDD (applicable tier + direct, or plan-execution w/ no plan; else folds into Branch 3)
                           └── implementation mode (direct / executing-plans / subagent)
                                              │
                                              ▼
@@ -115,7 +115,7 @@ Verified `agent-ready` skips this step entirely.
 
 `/build` is the build-stage orchestrator. It reads the design spec's S2 frontmatter (or the agent brief) and dispatches:
 
-- **Branch 2 — TDD assessment.** Any test tier with a non-`n/a` value triggers `superpowers:test-driven-development`. All-tiers-`n/a` is a logged skip.
+- **Branch 2 — TDD assessment.** Any test tier with a non-`n/a` value is applicable. Dispatch is mode-conditional (#928): in `mode=direct`, an applicable tier triggers `superpowers:test-driven-development` (the sole test-discipline carrier). In the plan-execution modes (`executing-plans`, `subagent-driven-development`) Branch 2 **folds into Branch 3** — no separate TDD dispatch, since the plan already carries the red → green → refactor cycle Branch 3 runs; an advisory check warns (never gates) when that can't be confirmed. All-tiers-`n/a` is a logged skip.
 - **Branch 3 — implementation mode.**
   - `direct` — `/build` writes the code inline.
   - `executing-plans` — dispatches to `superpowers:executing-plans`.

@@ -1,6 +1,6 @@
 ---
 seam: s2-design-to-build
-version: 1.1
+version: 1.2
 producer-type: skill
 consumer-type: skill
 consumes:
@@ -55,7 +55,7 @@ Optional field:
 
 `/build`'s normal execution proceeds when all five fields are present and valid:
 
-- Branch 2 dispatches per `test-tiers:` — when ≥ 1 tier is `yes`, dispatches to `superpowers:test-driven-development`; when all tiers are `n/a — <reason>`, logs the skip and proceeds to Branch 3.
+- Branch 2 dispatches per `test-tiers:` **and** `implementation-mode:` (#928): when ≥ 1 tier is applicable **and** `implementation-mode: direct`, dispatches to `superpowers:test-driven-development` (the sole test-discipline carrier); when ≥ 1 tier is applicable in a plan-execution mode (`executing-plans`, `subagent-driven-development`), Branch 2 folds into Branch 3 (no separate TDD dispatch — the plan carries the cycle Branch 3 runs) with an advisory, non-gating TDD-presence check; when all tiers are `n/a — <reason>`, logs the skip and proceeds to Branch 3.
 - Branch 3 dispatches per `implementation-mode:` — to one of the three modes per the WS1 §D3 enum-to-skill mapping above.
 
 When any one required field is missing or violates its constraint, `/build` writes an S2-contract-drift error to stderr naming the missing or invalid field(s), exits non-zero, and **does not write any pipeline-state journey-log entry beyond a `/build entered` line followed by the failure** — the build is not considered to have run.
@@ -83,5 +83,6 @@ When any one required field is missing or violates its constraint, `/build` writ
 
 ## Versioning
 
+- **1.2** (2026-06-28) — `/build` Branch 2 output protocol is now mode-conditional (#928): an applicable tier dispatches `superpowers:test-driven-development` in `mode=direct` or when a plan-execution mode has no plan to carry the cycle (`plan: null`); in a plan-execution mode *with* a plan, Branch 2 folds into Branch 3 (no separate TDD dispatch) with an advisory, non-gating TDD-presence check. Behaviour-only change to the consumer-side dispatch description — the producer schema (the five fields + `kind`) is unchanged, so this is backward-compatible for producers.
 - **1.1** (2026-06-08) — additive: optional `kind: {buildable, shaping}` field (absent ⇒ buildable). `kind: shaping` lets a non-buildable epic/shaping design doc pass producer validation without the build-targeted fields and be refused by `/build` (read-s2 exit 3). Backward-compatible — existing docs unchanged. Adds invariant + S2-8; also backfills the previously-undocumented S2-7 binding bullet (its test shipped in WS4 but was never listed here) (#692).
 - **1.0** (2026-05-24) — initial contract; producer + consumer shapes per WS1 §D3, with the producer side reflecting the unified `/design` behaviour from PR #329 and the consumer side reflecting `/build` from PR #321 (WS1 build).

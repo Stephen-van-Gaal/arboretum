@@ -23,7 +23,7 @@ Thin orchestrator for the build stage of the unified pipeline. Reads the design 
 
 This skill does **not** do the build work itself — it dispatches to:
 
-- `superpowers:test-driven-development` for Branch 2 (when any test tier applies).
+- `superpowers:test-driven-development` for Branch 2 (when any test tier applies **and** `mode=direct`; in the plan-execution modes Branch 2 folds into Branch 3, which runs the plan's TDD cycle — #928).
 - `superpowers:executing-plans` for Branch 3 (when `implementation-mode: executing-plans`).
 - `superpowers:subagent-driven-development` for Branch 3 (when `implementation-mode: subagent-driven-development`).
 - Nothing — proceed inline (when `implementation-mode: direct`).
@@ -119,31 +119,62 @@ add .claude/worktrees/feat-<issue>-<slug> -b feat/<issue>-<slug> origin/main` +
 `EnterWorktree --path`); on a **feature branch** → no-op (respects a decline).
 `rc == 2` → no-op. Never double-create.
 
-### Step 3: Branch 2 — TDD-tier dispatch
+### Step 3: Branch 2 — TDD-tier dispatch (mode-conditional)
 
-Read the per-tier `test-tiers.<tier>=` lines from `$FRONTMATTER`. **Any tier whose value is not exactly `n/a`** (case-insensitive prefix, since values like `n/a — no shared definitions` carry trailing reason text) is applicable.
+Read the per-tier `test-tiers.<tier>=` lines from `$FRONTMATTER` and count applicable tiers. **Any tier whose value does not start with `n/a`** (case-insensitive prefix, so `n/a`, `N/A`, and `n/a — no shared definitions` all count as N/A while any other value is applicable) is applicable.
 
 ```bash
 APPLICABLE=$(echo "$FRONTMATTER" | grep -E '^test-tiers\.' | grep -viE '=n/a' | wc -l | tr -d ' ')
 ```
 
-- **`APPLICABLE >= 1`** → dispatch to `superpowers:test-driven-development`:
-
-  ```bash
-  bash scripts/log-stage.sh "$ISSUE" "/build" dispatched \
-    "target=superpowers:test-driven-development" \
-    "reason=Branch 2 — $APPLICABLE applicable tier(s)"
-  ```
-
-  Then invoke `Skill superpowers:test-driven-development` and wait for it to complete.
-
-- **`APPLICABLE == 0`** (all tiers N/A) → log the skip and proceed to Branch 3:
+- **`APPLICABLE == 0`** (all tiers N/A, any mode) → log the skip and proceed to Branch 3:
 
   ```bash
   bash scripts/log-stage.sh "$ISSUE" "/build" skipped \
     "branch=2" \
     "reason=all test tiers declared N/A"
   ```
+
+- **`APPLICABLE >= 1`** → the dispatch decision depends on `$MODE`, because the plan-execution modes already carry the TDD cycle in the plan (#928 — Branch 2 + Branch 3 were a conceptual double-dispatch; PR #916 worked around it ad hoc):
+
+  - **`mode=direct`** — Branch 2 is the **sole carrier** of test discipline (no plan-executor runs downstream). Dispatch as before:
+
+    ```bash
+    bash scripts/log-stage.sh "$ISSUE" "/build" dispatched \
+      "target=superpowers:test-driven-development" \
+      "reason=Branch 2 — $APPLICABLE applicable tier(s), mode=direct"
+    ```
+
+    Then invoke `Skill superpowers:test-driven-development` and wait for it to complete.
+
+  - **`mode=executing-plans` / `subagent-driven-development`** — fold **only when a plan actually carries the TDD cycle**. The fold's premise is that Branch 3's plan-executor runs the red → green → refactor steps the `/design` plan encodes, so a separate Branch 2 dispatch would run TDD twice (the double-dispatch PR #916 worked around). That premise holds only when a plan exists, so branch on `$PLAN`:
+
+    - **No plan to carry the cycle** — `$PLAN` is `null` or the file is missing (reachable in `subagent-driven-development`, where S2 does not require a plan path). The fold premise is unmet: there is no plan-executor TDD cycle for applicable tiers to ride. **Do not fold** — Branch 2 remains the sole test-discipline carrier exactly as in `mode=direct`. Dispatch TDD:
+
+      ```bash
+      if [ "$PLAN" = "null" ] || [ ! -f "$PLAN" ]; then
+        bash scripts/log-stage.sh "$ISSUE" "/build" dispatched \
+          "target=superpowers:test-driven-development" \
+          "reason=Branch 2 — no plan to carry the TDD cycle (mode=$MODE); not folding"
+        # invoke Skill superpowers:test-driven-development, wait for it to complete,
+        # and DO NOT run the fold below.
+      fi
+      ```
+
+      Invoke `Skill superpowers:test-driven-development` and wait for it to complete; skip the fold.
+
+    - **Plan present** — it carries the cycle Branch 3 runs, so **fold Branch 2 into Branch 3**: do **not** dispatch a separate `superpowers:test-driven-development` skill (Branch 2's test-tier analysis already fed the plan's test design at `/design` time). First run a best-effort, **advisory** TDD-presence check — it never gates; it only surfaces a plan that does not look TDD-structured (a hand-authored or external plan). The cue match uses `grep -w` (whole-word) so everyday plan prose ("required", "structured", "covered") does not spuriously satisfy the bare letters `red`/`green`. Use `-w`, **not** a `\b`-anchored pattern: `\b` is a GNU grep extension unreliable under BSD/macOS grep, while `-w` is supported by GNU, BSD, and busybox grep — not in the strict POSIX option set, but far more portable than `\b`:
+
+      ```bash
+      if ! grep -qiwE 'red|green|refactor|failing test' "$PLAN"; then
+        echo "WARNING: plan '$PLAN' shows no TDD cues (red/green/refactor/failing test). Branch 3's executor still owns test discipline; proceeding without a separate TDD dispatch." >&2
+      fi
+      bash scripts/log-stage.sh "$ISSUE" "/build" skipped \
+        "branch=2" \
+        "reason=folded into Branch 3 — TDD carried by the plan (mode=$MODE)"
+      ```
+
+    Logging the fold reuses the `skipped branch=2` shape — the D5 action vocab has no separate `folded` verb.
 
 ### Step 4: Branch 3 — implementation-mode dispatch
 
