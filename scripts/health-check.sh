@@ -22,6 +22,17 @@
 #                 nothing and advises --all.
 #   --all         With --reconcile, reconcile repo-wide (every drifted spec),
 #                 not just branch-touched ones. No effect without --reconcile.
+#   --dry-run     With --reconcile, REPORT what would flip without writing.
+#                 Emits one `DRYRUN-FLIP <spec> <status> <drift-file>
+#                 <spec-last-commit>` line per would-flip spec; no files change.
+#                 Same branch-scoping (#750) as --reconcile. Consumed by the
+#                 /consolidate driver (#666). No effect without --reconcile.
+#   --keep-active <comma-list>
+#                 With --reconcile, EXEMPT the listed specs from the stale-flip.
+#                 /consolidate passes the specs it reconciled clean; their drift
+#                 resolves to active rather than flipping stale (role separation,
+#                 #870). Drift in specs NOT listed still flips. No effect without
+#                 --reconcile.
 #
 # Runs nine checks:
 #   1. Governed documents exist (ARCHITECTURE, REGISTER, contracts, etc.)
@@ -63,10 +74,26 @@ fi
 
 RECONCILE=false
 RECONCILE_ALL=false
+DRY_RUN=false
+KEEP_ACTIVE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --reconcile) RECONCILE=true;     shift ;;
     --all)       RECONCILE_ALL=true; shift ;;
+    # --dry-run (with --reconcile): run the exact branch-scope resolution and
+    # drift classification, but REPORT each would-flip spec as a
+    # `DRYRUN-FLIP <spec> <status> <drift-file> <spec-last-commit>` line and make
+    # NO writes. The consolidate driver (#666) consumes this read-only.
+    --dry-run)   DRY_RUN=true;       shift ;;
+    # --keep-active <comma-list> (with --reconcile): specs the conductor has
+    # reconciled clean. Their drift is NOT flipped to stale (role separation,
+    # #870) — /consolidate resolves drift to active; only unresolved drift stales.
+    --keep-active)
+      # Guard the value: a bare trailing --keep-active would make `shift 2`
+      # fail under set -e and abort silently (exit 1, no message). Give a clear
+      # usage error instead, matching the unknown-flag exit (64).
+      [ $# -ge 2 ] || { echo "Missing value for --keep-active" >&2; exit 64; }
+      KEEP_ACTIVE="$2"; shift 2 ;;
     --) shift; break ;;
     # Distinct usage exit (EX_USAGE); avoids colliding with the script's
     # advisory-findings exit 2 so an exit-code consumer can't read a flag
@@ -75,6 +102,26 @@ while [ $# -gt 0 ]; do
     *)  break ;;
   esac
 done
+
+# True when $1 (a spec filename, e.g. alpha.spec.md) is in the comma-separated
+# KEEP_ACTIVE list. Splits on commas by turning them into newlines and reading
+# each entry with `read` (which neither globs nor word-splits), then trims
+# surrounding whitespace before a literal compare. So: a spec name with glob
+# metacharacters can never over-match (literal compare), the list side is never
+# subject to pathname expansion (read, not unquoted for-in), and the natural
+# LLM-emitted form `a.spec.md, b.spec.md` (space after comma) still matches —
+# without trimming, ` b.spec.md` would silently fail and re-introduce the #870
+# stale-flip. Empty list → always false.
+_is_keep_active() {
+  local needle="$1" entry
+  [ -n "$KEEP_ACTIVE" ] || return 1
+  while IFS= read -r entry; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"   # ltrim
+    entry="${entry%"${entry##*[![:space:]]}"}"    # rtrim
+    [ "$entry" = "$needle" ] && return 0
+  done <<< "${KEEP_ACTIVE//,/$'\n'}"
+  return 1
+}
 
 PROJECT_DIR="${1:-$(pwd)}"
 REGISTER="$PROJECT_DIR/docs/REGISTER.md"
@@ -1662,6 +1709,30 @@ while IFS='|' read -r _ spec status _ owns _; do
         ((drift_flipped++)) || true
         continue
       fi
+    fi
+
+    # --keep-active (#666, #870): the conductor reconciled this spec clean, so
+    # its drift resolves to active — skip the flip entirely. Placed before the
+    # dry-run and write branches so a kept spec is neither reported as pending
+    # nor flipped. Counted as handled so the "No drift detected" summary stays
+    # suppressed when real (but resolved) drift existed.
+    if [ "$RECONCILE" = true ] && _is_keep_active "$spec"; then
+      advise "$spec: drift detected but kept active (reconciled by /consolidate)"
+      ((drift_flipped++)) || true
+      continue
+    fi
+
+    # --dry-run (#666): report the would-flip decision and write nothing. The
+    # branch-scope gate above already ran, so this inherits #750 scoping. Placed
+    # before the writing branch so a dry-run never reaches the sed writes.
+    if [ "$RECONCILE" = true ] && [ "$DRY_RUN" = true ]; then
+      printf 'DRYRUN-FLIP %s %s %s %s\n' "$spec" "$status" "$drift_file" "$spec_last_commit"
+      # Also emit an advisory so the run's summary and exit code reflect the
+      # reported drift — without this, a pure dry-run with only in-scope drift
+      # would print "No drift detected" and exit 0 while emitting DRYRUN-FLIP.
+      advise "$spec: drift detected ($drift_file modified after spec's last commit $spec_last_commit) — dry-run, not flipped"
+      ((drift_flipped++)) || true
+      continue
     fi
 
     if [ "$RECONCILE" = true ]; then

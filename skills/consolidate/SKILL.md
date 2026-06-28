@@ -43,6 +43,42 @@ pipeline uses the unified reconciliation details below: new governed specs are
 born from built state, behaviour supersession is surfaced explicitly, and
 `coverage-baseline` refactor design specs get AUTO-only reconciliation.
 
+### Driver dispatch (read-only analysis) — #666
+
+The read-heavy 4-level analysis runs in a fresh-context **consolidate driver**,
+not the main message thread. This is the conductor/driver pattern (epic #516):
+the conductor (main thread) holds only the file-seam **report** the driver
+returns — never the driver's working transcript — which removes `/consolidate`'s
+measured context-tax. The split is the same as the cleanup driver (#644) and the
+land driver (#879/#882): **driver owns orchestration; main thread owns the
+terminal action.**
+
+Dispatch a generic `general-purpose` subagent that **inlines** the procedure (no
+skill name to confuse with a `subagent_type`; see
+`docs/specs/skill-and-agent-authoring.spec.md` § "Fresh-context driver
+dispatch"). The driver is strictly **read-only** — it writes no governance files,
+edits no specs, and runs no `--reconcile` write. Brief it with `$ARBO_BASE_REF`
+and the changed-file set, and instruct it to perform, read-only:
+
+- Steps 1–3 (change gathering + categorization, design-spec/plan harvest-source
+  identification, governance-state cross-reference);
+- the level-1 architecture diff-heuristic candidate scan, the level-2 governed-
+  spec AUTO-regen **preview** + HUMAN-section stale-reference scan, the level-3
+  `# owner:` diff + top-of-file comment scan, and the level-4 comment scan **only
+  if** `--audit-comments` was passed;
+- a report-only `scripts/health-check.sh --reconcile --dry-run` run for the drift
+  decisions (emits `DRYRUN-FLIP` lines; writes nothing).
+
+The driver returns **one structured report**: the per-level proposed
+reconciliation, the `DRYRUN-FLIP` drift decisions, and the per-spec
+unresolved-HUMAN-stale-reference findings. The conductor consumes that report to
+render the Step-4 plan, takes the human-approval gate, and performs **all** the
+Step-5 writes and the Step-6 status flips itself. A subagent must never perform
+the terminal write.
+
+Steps 1–6 below are the procedure the driver inlines for analysis and the
+conductor follows for the gate and writes.
+
 ### Step 1: Detect base branch and gather changes
 
 1. Determine the base ref. Source the workspace-context helper and read
@@ -252,6 +288,9 @@ Per the simplified state machine (`draft / active / stale`):
 - A spec at `draft` whose reconciliation succeeded with code present → flip to `active`.
 - A spec at `stale` whose reconciliation resolved the drift → flip to `active`.
 - A spec at `active` with no detected drift → leave at `active` (no-op).
+- A spec at `active` **with** detected drift → resolved in Step 6 (role-separated):
+  kept `active` if reconciled clean, flipped `stale` only if reconciliation could
+  not resolve it. 5e never flips `active → stale` — that is `/health-check`'s job.
 - A spec at `draft` with no code yet → leave at `draft` (no-op).
 
 No prompts. The flip happens automatically as part of writing the reconciled spec.
@@ -320,11 +359,37 @@ For each flag:
 
 This substep never adds new comments. The bias is toward removing stale ones.
 
-### Step 6: Verify
+### Step 6: Verify and reconcile status (role-separated, #870)
 
-1. Run `scripts/health-check.sh --reconcile`. This is **branch-scoped** (#750): on a feature branch (the normal `/finish` context) it reconciles only the specs this branch's changes touched, leaving any latent drift elsewhere on `main` alone. Do **not** add `--all` here — the repo-wide sweep would pull unrelated drift into this branch's diff.
-2. Present results.
-3. Summarise what was done:
+Status reconciliation honours the **reconciler/surveillance role split**:
+`/consolidate` resolves drift to `active`; flipping `active → stale` to surface
+*new* drift is `/health-check`'s separate job. `/consolidate` must not stale a
+spec it just reconciled. The conductor (main thread) applies status — the driver
+only reported.
+
+1. The driver's report carries the drift decisions from
+   `scripts/health-check.sh --reconcile --dry-run` (report-only, no writes) plus
+   the per-spec unresolved-HUMAN-stale-reference findings. This is
+   **branch-scoped** (#750): on a feature branch (the normal `/finish` context)
+   it covers only the specs this branch's changes touched, leaving latent drift
+   elsewhere on `main` alone. Do **not** add `--all` here — the repo-wide sweep
+   would pull unrelated drift into this branch's diff.
+2. Compute the **reconciled-clean** set: drift-candidate specs whose AUTO
+   sections regenerated (Step 5) **and** whose HUMAN sections carry no unresolved
+   stale reference (the human did not decline a fix at the Step-4 gate).
+   Impl-detail hardening of an owned file lands here — no stale HUMAN ref, AUTO
+   regenerated → reconciled-clean → stays `active`.
+3. Apply the flips through the single tested write path so `REGISTER.md` and the
+   spec frontmatter never desync:
+
+   ```bash
+   bash scripts/health-check.sh --reconcile --keep-active "<comma-separated reconciled-clean specs>"
+   ```
+
+   Specs in `--keep-active` stay `active`; drift specs reconciliation could
+   **not** resolve (unresolved HUMAN stale references) flip `stale`.
+4. Present results.
+5. Summarise what was done:
 
    ```
    ## Consolidation Complete

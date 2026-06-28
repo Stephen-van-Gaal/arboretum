@@ -3,7 +3,7 @@
 # scope: plugin-only
 # ci-parallel: serial
 # _smoke-test-contract-health-check.sh — Contract test for
-# docs/contracts/health-check.contract.md. Asserts HC-1..HC-10
+# docs/contracts/health-check.contract.md. Asserts HC-1..HC-14
 # from the contract's ## Test surface against scripts/health-check.sh.
 #
 # Uses the fixture-project pattern: mktemp -d a project skeleton,
@@ -815,6 +815,42 @@ else
   fail_case "HC-10: clean --reconcile on-base not exit-0/no-roll-up (HC-2, finding C)" "rc=$clean_rc | $clean_out"
 fi
 
+# ── HC-13: --reconcile --dry-run report-only (#666) ──────────────────
+# Reuse SCOPE_FIXTURE on the feature branch (spec a drifts in scope). dry-run
+# must REPORT a as DRYRUN-FLIP and write nothing (a stays active).
+SG checkout -q feat/scope
+sc_reset
+dr_before_a=$(cat "$SCOPE_FIXTURE/docs/specs/a.spec.md")
+dr_before_reg=$(cat "$SCOPE_FIXTURE/docs/REGISTER.md")
+# Wrap in set +e/-e: health-check exits 2 on advisory drift, and set -e is in
+# effect here (HC-10 case 5 re-enabled it). Match the surrounding convention.
+set +e; dr_out=$(bash "$HC" --reconcile --dry-run "$SCOPE_FIXTURE" 2>&1); set -e
+if printf '%s\n' "$dr_out" | grep -qE '^DRYRUN-FLIP a\.spec\.md active src/a\.py ' \
+   && [ "$(cat "$SCOPE_FIXTURE/docs/specs/a.spec.md")" = "$dr_before_a" ] \
+   && [ "$(cat "$SCOPE_FIXTURE/docs/REGISTER.md")" = "$dr_before_reg" ]; then
+  pass "HC-13: --reconcile --dry-run reports DRYRUN-FLIP and writes nothing"
+else
+  fail_case "HC-13: dry-run did not report-only" "a=$(sc_status a) | $dr_out"
+fi
+
+# ── HC-14: --reconcile --keep-active exemption + control (#666, #870) ──
+# Exempted: a listed in --keep-active stays active. Control: same drift without
+# the exemption flips a stale — proving the exemption is what protects it.
+sc_reset
+set +e; ka_out=$(bash "$HC" --reconcile --keep-active a.spec.md "$SCOPE_FIXTURE" 2>&1); set -e
+ka_exempt_ok=false
+if ! printf '%s\n' "$ka_out" | grep -qi 'unknown flag' \
+   && echo "$(sc_status a)" | grep -qE "status:[[:space:]]+active"; then
+  ka_exempt_ok=true
+fi
+sc_reset
+set +e; bash "$HC" --reconcile "$SCOPE_FIXTURE" >/dev/null 2>&1; set -e
+if [ "$ka_exempt_ok" = true ] && echo "$(sc_status a)" | grep -qE "status:[[:space:]]+stale"; then
+  pass "HC-14: --keep-active keeps a reconciled drifted spec active; unexempted control flips stale"
+else
+  fail_case "HC-14: keep-active exemption/control" "exempt_ok=$ka_exempt_ok a=$(sc_status a) | $ka_out"
+fi
+
 # ── HC-11 / HC-12: language-aware Check 3 (#859) ─────────────────────
 # Self-contained Check-1-complete fixture: one active spec owning src/alpha.py.
 mk_lang_fixture() {
@@ -878,7 +914,7 @@ rm -rf "$LF"
 # ── Summary ──────────────────────────────────────────────────────────
 
 if [ $fail -eq 0 ]; then
-  echo "All health-check contract assertions passed (HC-1..HC-12)."
+  echo "All health-check contract assertions passed (HC-1..HC-14)."
   exit 0
 else
   echo "health-check contract test FAILED" >&2
