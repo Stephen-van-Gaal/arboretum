@@ -225,6 +225,18 @@ the *post-PR* bots); add, swap, or disable a reviewer by editing one row — nev
      - `general-security` → invoke `/security-review` (the built-in general backend).
      - `correctness` → invoke `/code-review` (the correctness backend).
 
+     **Resolve each lane's model floor (#924).** For each `type: skill` reviewer,
+     run `bash scripts/resolve-stage-model.sh <key>` — `<key>` is
+     `ai-surface-review` for the `ai-surface` reviewer, otherwise the reviewer
+     `id` — and pass the emitted id as the subagent's `model` parameter; on
+     `SESSION_DEFAULT`, omit it. The lanes floor as: `ai-surface` → `capable`
+     (frontmatter), `general-security` → `capable` (`.arboretum.yml`
+     `workflow.stage_models` override, since `/security-review` is a built-in
+     with no arboretum frontmatter), and `correctness` → **no floor** → runs the
+     session frontier (code review is frontier work, cost-analysis Q4). Export
+     `ARBORETUM_STAGE=<id>` for the dispatched lane so its `ledger_append` rows
+     carry stage + model (D7).
+
      **Invariant:** the reviewer/skill name is *what the subagent invokes* — never pass it
      as `subagent_type`; the subagent type is always `general-purpose`. Arboretum skills
      resolve under their plugin-prefixed Skill name (e.g. `arboretum:ai-surface-review`);

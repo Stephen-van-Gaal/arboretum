@@ -28,9 +28,7 @@ Detector logic lives in `scripts/` and is invoked, not inlined.
    - Tier 1: `bash skills/extract-component/scripts/grep-idioms.sh [ROOT ...]`
    - Tier 2: `printf '%s\n' <files> | python3 skills/extract-component/scripts/shingle-detect.py [W] [MIN_FILES] [--mask]`
    - Tier 3: agentic confirm on cross-file clusters / same-name collisions only —
-     dispatch the confirm sub-task on a concrete Haiku-class model (set the
-     dispatch tool's `model` parameter to `claude-haiku-4-5`, never the session's
-     frontier default). Method detail: `references/detection.md` § Tier 3.
+     dispatch the confirm sub-task on a cheap (Haiku-class) model. Obtain the id and pass it as the dispatch tool's `model` parameter: `bash -c 'source scripts/lib/model-families.sh && resolve_model_family cheap'` (never the session's frontier default). Method detail: `references/detection.md` § Tier 3.
 2. Merge, dedup, rank by `distinct_files`, apply the Rule-of-Three gate (≥3), and
    assign each candidate a `worth_extracting` verdict. Schema: `references/catalog-format.md`.
 3. Write the catalog to `.arboretum/extraction-catalog/<YYYY-MM-DD>.md`, then

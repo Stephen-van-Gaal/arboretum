@@ -21,25 +21,27 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROADMAP="$ROOT/skills/roadmap/SKILL.md"
 EXTRACT="$ROOT/skills/extract-component/SKILL.md"
 
-# Concrete Haiku-class model id — matches the repo literal in
-# docs/superpowers/2026-06-06-token-cost-optimization-explore.md. The
-# family→id abstraction (cheap/capable/frontier, MR4) is out of scope for #733.
+# A Haiku model directive is satisfied EITHER by the concrete id (the original
+# #733/MR2 proof-of-mechanism) OR by resolving the `cheap` family through the
+# central map (#924/MR4 — the concrete id now lives single-sourced in
+# scripts/lib/model-families.sh, so the dispatch sites resolve `cheap`).
 MODEL_ID='claude-haiku-4-5'
+FAMILY_DIRECTIVE='resolve_model_family[[:space:]]+cheap'
 
 fail_count=0
 fail() { echo "FAIL: $1" >&2; fail_count=$((fail_count + 1)); }
 pass() { echo "PASS: $1"; }
 
-# A "model directive" is a single line that both names the model parameter and
-# the concrete id — i.e. it tells the dispatcher what to pass, not just that the
-# sub-task is "Haiku-ish". A bare mention of the id elsewhere does not satisfy.
+# A "model directive" is a single line that names the model parameter and either
+# the concrete id or the `cheap` family resolution — i.e. it tells the dispatcher
+# what to pass, not just that the sub-task is "Haiku-ish".
 assert_model_directive() {
   local file="$1" label="$2"
   [ -f "$file" ] || { fail "$label: file not found ($file)"; return; }
-  if grep -qiE "model.*${MODEL_ID}|${MODEL_ID}.*model" "$file"; then
-    pass "$label sets an explicit \`model\` parameter to ${MODEL_ID}"
+  if grep -qiE "model.*(${MODEL_ID}|${FAMILY_DIRECTIVE})|(${MODEL_ID}|${FAMILY_DIRECTIVE}).*model" "$file"; then
+    pass "$label sets an explicit \`model\` directive (concrete id or cheap family)"
   else
-    fail "$label has no explicit model directive naming ${MODEL_ID} (prose-only intent is a regression)"
+    fail "$label has no explicit model directive (concrete id or resolve_model_family cheap) — prose-only intent is a regression"
   fi
 }
 

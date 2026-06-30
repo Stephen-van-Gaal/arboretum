@@ -101,9 +101,7 @@ For a query that no preset covers, translate it to a query-spec **in a
 subagent**, never in the main context — this keeps the translation cost
 constant regardless of how long the parent session has run.
 
-1. **Dispatch a subagent on a concrete Haiku-class model** — set the dispatch
-   tool's `model` parameter to `claude-haiku-4-5` (never let the sub-task
-   inherit the session's frontier default) — with a *fixed minimal prompt*
+1. **Dispatch a subagent on a cheap (Haiku-class) model.** Obtain the id and pass it as the dispatch tool's `model` parameter: `bash -c 'source scripts/lib/model-families.sh && resolve_model_family cheap'` (never let the sub-task inherit the session's frontier default). Use a *fixed minimal prompt*
    containing only:
    - the query-spec schema (cite `docs/definitions/roadmap-view-spec.md`),
    - the project label vocabulary (`roadmap_config_list component_values` plus

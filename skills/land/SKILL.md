@@ -2,6 +2,7 @@
 name: land
 owner: git-workflow-tooling
 scope: plugin-only
+default-model: capable   # assess-driver floor (#923): read-only assessment runs Sonnet; merge judgment stays frontier in the main thread
 description: Drive an open pull request to merge-ready through the configured repo backend. GitHub gets the full CI/reviewer loop; Azure DevOps gets explicit PR state/policy checks and merge handoff guidance. Chained from /finish; also runnable standalone on any open PR.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob, ScheduleWakeup, Skill, Task
@@ -168,6 +169,16 @@ the report the driver returns, never the driver's transcript. The cache is alrea
 cold each iteration (~900s poll interval > 5min cache TTL), so the saving comes
 from the driver's small fresh context, not cache warmth; the envelope + the
 `.arboretum/land/<N>/` ledgers are the cross-iteration state.
+
+**Resolve the driver's model floor (#924).** Before dispatching, run
+`bash scripts/resolve-stage-model.sh land` and pass the emitted id as the
+dispatch tool's `model` parameter (the land assess driver floors at `capable` →
+Sonnet; the **merge/disposition judgment stays frontier in the main thread**, so
+only the read-only assessment is downgraded). If it prints `SESSION_DEFAULT`,
+omit the parameter. Stamp the same value: write `stage: land` + `model:
+<resolved id>` into the driver brief, and export `ARBORETUM_STAGE=land` (and
+`ARBORETUM_WF` if unset) so the driver's `ledger_append` rows carry stage +
+model (D7).
 
 **Driver brief (conductor → driver):**
 

@@ -23,6 +23,7 @@
 | scripts/health-check.sh | docs/contracts/health-check.contract.md | full |
 | scripts/heartbeat.sh | docs/contracts/heartbeat.contract.md | full |
 | scripts/land-handler.sh | docs/contracts/land-handler.contract.md | full |
+| scripts/lib/model-families.sh | docs/contracts/model-families.contract.md | full |
 | scripts/lib/owner-doc-resolve.sh | docs/contracts/owner-doc-resolve.contract.md | full |
 | scripts/lib/scope-resolve.sh | docs/contracts/scope-resolve.contract.md | full |
 | scripts/lib/scrub-control-chars.sh | docs/contracts/scrub-control-chars.contract.md | full |
@@ -62,6 +63,7 @@
 | scripts/render-ledger-journey.sh | docs/contracts/render-ledger-journey.cli-contract.md | cli |
 | scripts/request-review.sh | docs/contracts/request-review.cli-contract.md | cli |
 | scripts/resolve-codex-companion.sh | docs/contracts/resolve-codex-companion.cli-contract.md | cli |
+| scripts/resolve-stage-model.sh | docs/contracts/resolve-stage-model.cli-contract.md | cli |
 | scripts/resolve-workflow-slot.sh | docs/contracts/resolve-workflow-slot.cli-contract.md | cli |
 | scripts/review-adapter-codex.sh | docs/contracts/review-adapter-codex.cli-contract.md | cli |
 | scripts/review-dispatch.sh | docs/contracts/review-dispatch.cli-contract.md | cli |

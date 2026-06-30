@@ -2,6 +2,7 @@
 name: cleanup
 owner: workflow-unification
 scope: plugin-only
+default-model: cheap   # driver floor (#923): mechanical orchestration runs Haiku-class
 description: Post-merge cleanup — verify merge state, safely remove the merged local branch/session worktree, and verify spec status. Use after a PR has been merged.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit, Grep, Glob, AskUserQuestion, Task
@@ -176,6 +177,16 @@ briefed with the steps below; see `docs/specs/skill-and-agent-authoring.spec.md`
 § "Fresh-context driver dispatch". The cleanup driver **inlines** its procedure
 rather than invoking a skill, so there is no skill name to confuse with a
 `subagent_type`.)
+
+**Resolve the driver's model floor (#924).** Before dispatching, run
+`bash scripts/resolve-stage-model.sh cleanup` and pass the emitted id as the
+dispatch tool's `model` parameter (cleanup floors at `cheap` → Haiku-class); if
+it prints `SESSION_DEFAULT`, omit the parameter and inherit the session model.
+Stamp the same value so selection and accounting are one loop: write
+`stage: cleanup` + `model: <resolved id>` into the driver brief, and export
+`ARBORETUM_STAGE=cleanup` (and `ARBORETUM_WF` if unset) so any `ledger_append`
+rows the driver writes carry the stage + model (D7; closes the blank-field gap
+in `docs/specs/token-accounting.spec.md`).
 
 Brief the driver with the captured `$BRANCH`, `$SESSION_WORKTREE`, the merged PR
 number `$MERGED_PR_NUMBER`, the resolved backend, and the tracker-close decision
