@@ -67,6 +67,28 @@ test-tiers:
 | Artifact | Why it matters |
 |---|---|
 
+## Substrate Survey
+
+<!-- HUMAN/AI — Classify every referent this design names as a mechanism
+     carrier or seam (script, skill, spec, frontmatter field, label, ledger).
+     Status enum:
+       exists    — implemented & functional today; Evidence MUST cite the
+                   implementing code (script/skill/hook/config/test that reads,
+                   writes, or defines it) — NOT a spec/design that merely names it.
+       spec-only — appears only in specs/design/roadmap; no implementing code.
+                   Must NOT be relied on as present substrate.
+       to-build  — this design (or a child it names) will create it. Legitimate.
+     Then a Verdict line naming any referent the design relies on AS PRESENT
+     whose status is spec-only (or to-build by other work) — those are
+     substrate violations to resolve before shipping.
+     REQUIRED (non-empty) on kind: shaping docs; good hygiene on buildable docs.
+     See S2-9 in docs/contracts/s2-design-to-build.contract.md. -->
+
+| Referent | Kind | Status | Evidence |
+|---|---|---|---|
+
+**Verdict:**
+
 ## Proposed Document Changes
 
 <!-- HUMAN - Source section for design-package's Durable Document Change Set.

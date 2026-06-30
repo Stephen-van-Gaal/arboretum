@@ -279,6 +279,13 @@ kind: shaping
 ---
 
 # Shaping doc — non-buildable
+
+## Substrate Survey
+| Referent | Kind | Status | Evidence |
+|---|---|---|---|
+| validate-design-spec.sh | script | exists | scripts/validate-design-spec.sh |
+
+**Verdict:** no substrate violations.
 MD
 bash "$VALIDATE" "$f" >/dev/null 2>&1 || fail "shaping case — validator should accept kind: shaping"
 # `|| rc=$?` captures the non-zero exit without tripping `set -e`.

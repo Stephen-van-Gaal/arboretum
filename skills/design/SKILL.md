@@ -304,14 +304,21 @@ test-tiers:
 **Epic / shaping design docs** (a doc that stops after human review — its children
 build individually, never this doc) instead carry the optional `kind: shaping`
 marker and **omit the five build-targeted fields**; only `related-issue` is
-required. `validate-design-spec.sh` accepts this, and `/build` refuses such a doc
-(read-s2 exit 3). Use it for epic-level design docs so they validate without
-masquerading as a buildable `/build` input (S2 contract v1.1, #692):
+required in frontmatter. `validate-design-spec.sh` accepts this, and `/build`
+refuses such a doc (read-s2 exit 3). Use it for epic-level design docs so they
+validate without masquerading as a buildable `/build` input (S2 contract v1.1,
+#692):
 
 ```yaml
 related-issue: <N>
 kind: shaping
 ```
+
+A `kind: shaping` doc must **also carry a non-empty `## Substrate Survey`
+section** (S2 contract v1.3, S2-9, #934) — the substrate survey `design-package`
+Step 6 performs. `validate-design-spec.sh` fails a shaping doc that omits it
+(`S2-DRIFT … Substrate Survey`), so the survey is part of producing a valid
+shaping doc, not optional.
 
 (Auto-emitting `kind: shaping` from an epic/shaping `/design` session is not yet
 automated — set it by hand for now.)

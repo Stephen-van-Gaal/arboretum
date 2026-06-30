@@ -126,6 +126,36 @@ change, why it matters, and phase. Use these boundaries:
 | Seam authority | May be edited before build when implementation depends on it. Includes definitions and contracts the implementation must obey. |
 | Generated/evidence authority | Do not finalize before build unless the evidence already exists. Ownership, Tests, Design record, decision harvest, register, and contract coverage remain `/finish`/`/consolidate` work. |
 
+**Substrate survey.** Before presenting the package, perform the substrate
+survey on the session document and emit a `## Substrate Survey` section into it.
+Classify every referent the design names as a mechanism *carrier or seam* —
+script, skill, spec, frontmatter field, label, ledger — in a table
+`| Referent | Kind | Status | Evidence |`:
+
+- `exists` — implemented and functional today. **Evidence must cite the
+  implementing code** (a script/skill/hook/config/test that reads, writes, or
+  defines the referent), *not* a spec or design doc that merely names it. This
+  evidence rule is the point: a referent found only in specs cannot be marked
+  `exists`, so a future/spec-only concept relied on as a carrier surfaces here.
+- `spec-only` — appears only in specs/design/roadmap; no implementing code. Must
+  not be relied on as present substrate.
+- `to-build` — this design (or a child it names) will create it. Legitimate
+  forward reference.
+
+Close the section with a **Verdict** line naming any referent the design relies
+on *as present* whose status is `spec-only` (or `to-build` by other work). Those
+are substrate violations. If the survey finds one, return `stop` (Step 7) and
+name it — do not let a doc that leans on unbuilt infrastructure ship.
+
+Emit the section for **both** doc kinds (it is cheap and good hygiene). The
+mechanical floor is the validator: `validate-design-spec.sh` (S2-9) requires a
+non-empty `## Substrate Survey` section on `kind: shaping` docs and rejects a
+shaping doc that omits it (the agent owns the judgment; the validator owns the
+presence check). This is the sibling of the new-script gate-prerequisite check
+below: that one verifies what must *exist before build*; this one verifies what
+the doc *relies on as already present*. See S2-9 in
+`docs/contracts/s2-design-to-build.contract.md`. (#934)
+
 **New-script gate-prerequisite seam scaffolding.** When the Durable Document
 Change Set introduces one or more new `scripts/*.sh` files (excluding `_`-prefixed
 components, which the gates skip), the build gate (`scripts/ci-checks.sh`) will

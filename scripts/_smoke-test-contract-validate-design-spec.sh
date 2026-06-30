@@ -70,4 +70,24 @@ if [ "$rc" = 1 ] && grep -q "kind: not in" "$ERR"; then pass VDS-10; else fail_c
 bash "$VALIDATOR" "$FIX/design-mapping-kind.md" 2>"$ERR"; rc=$?
 if [ "$rc" = 1 ] && grep -q "kind: must be a scalar" "$ERR"; then pass VDS-11; else fail_case VDS-11 "rc=$rc err=$(cat "$ERR")"; fi
 
+# VDS-12 — kind: shaping missing Substrate Survey → exit 1, 'Substrate Survey' (#934)
+bash "$VALIDATOR" "$FIX/design-shaping-no-substrate.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "S2-DRIFT:" "$ERR" && grep -q "Substrate Survey" "$ERR"; then pass VDS-12; else fail_case VDS-12 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-13 — kind: shaping heading only inside a code fence → exit 1 (does not count) (#934)
+bash "$VALIDATOR" "$FIX/design-shaping-fenced-substrate.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "Substrate Survey" "$ERR"; then pass VDS-13; else fail_case VDS-13 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-14 — kind: shaping empty Substrate Survey section → exit 1, 'section is empty' (#934)
+bash "$VALIDATOR" "$FIX/design-shaping-empty-substrate.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "Substrate Survey" "$ERR"; then pass VDS-14; else fail_case VDS-14 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-15 — kind: shaping survey opening with an H3 subheading → exit 0 (deeper headings are content, not a boundary) (#934)
+bash "$VALIDATOR" "$FIX/design-shaping-subheading-substrate.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 0 ] && ! grep -q "S2-DRIFT:" "$ERR"; then pass VDS-15; else fail_case VDS-15 "rc=$rc err=$(cat "$ERR")"; fi
+
+# VDS-16 — kind: shaping heading fenced by ``` despite an inner ~~~ line → exit 1 (fence family tracked to opener) (#934)
+bash "$VALIDATOR" "$FIX/design-shaping-fence-mismatch-substrate.md" 2>"$ERR"; rc=$?
+if [ "$rc" = 1 ] && grep -q "Substrate Survey" "$ERR"; then pass VDS-16; else fail_case VDS-16 "rc=$rc err=$(cat "$ERR")"; fi
+
 [ "$fail" = 0 ] && echo "validate-design-spec contract: ALL PASS" || exit 1

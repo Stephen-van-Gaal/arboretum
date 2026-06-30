@@ -1,6 +1,6 @@
 ---
 seam: s2-design-to-build
-version: 1.2
+version: 1.3
 producer-type: skill
 consumer-type: skill
 consumes:
@@ -80,9 +80,11 @@ When any one required field is missing or violates its constraint, `/build` writ
 - **S2-6: Plan-path existence.** When `/design` writes `plan: <path>`, the path resolves to an existing file at the time `/design` exits.
 - **S2-7: Binding — producer/consumer skills invoke the validator.** The `/design` and `/build` skills actually call `validate-design-spec.sh` (the gate is wired, not just documented). Test: `tests/contracts/s2/s2-7-binding-skills-invoke-validator.sh`.
 - **S2-8: Shaping-doc accept-and-refuse.** A `kind: shaping` doc with only `related-issue` passes `validate-design-spec.sh` (exit 0); `read-s2-frontmatter.sh` refuses it with exit 3 and a non-buildable message. An out-of-enum `kind` value is rejected independently by both gates — `validate-design-spec.sh` exit 1 naming the field, and `read-s2-frontmatter.sh` exit 2 (drift) even with otherwise-complete fields. Buildable-path behaviour (`kind` absent/`buildable`) is unchanged. (#692)
+- **S2-9: Shaping-doc substrate-survey requirement.** A `kind: shaping` doc must carry a non-empty `## Substrate Survey` section — the mechanical floor under the agent's substrate survey (every referent the doc names as a carrier/seam classified `exists`/`spec-only`/`to-build`, with evidence required for `exists`). `validate-design-spec.sh` rejects a shaping doc whose `## Substrate Survey` heading is absent or empty (exit 1, stderr names `Substrate Survey`); presence-only — the table and verdict are not parsed. The scan is fence-aware: a `## Substrate Survey` line that appears only inside a fenced code block (a quoted example) does not satisfy the floor. The gate applies only to `kind: shaping`; an out-of-enum/invalid `kind` fails on the kind error alone and is not additionally checked for the survey. Buildable docs (`kind` absent/`buildable`) are unaffected. Test: `tests/contracts/s2/s2-9-substrate-survey.sh`. (#934)
 
 ## Versioning
 
+- **1.3** (2026-06-28) — additive: `kind: shaping` docs must carry a non-empty `## Substrate Survey` section, enforced by `validate-design-spec.sh` (S2-9). Mechanical floor under the agent-side substrate survey driven by `design-package` Step 6; presence-only, the table/verdict are not parsed. Buildable-path behaviour unchanged — backward-compatible for buildable producers; existing shaping docs without the section now fail producer validation by design (#934).
 - **1.2** (2026-06-28) — `/build` Branch 2 output protocol is now mode-conditional (#928): an applicable tier dispatches `superpowers:test-driven-development` in `mode=direct` or when a plan-execution mode has no plan to carry the cycle (`plan: null`); in a plan-execution mode *with* a plan, Branch 2 folds into Branch 3 (no separate TDD dispatch) with an advisory, non-gating TDD-presence check. Behaviour-only change to the consumer-side dispatch description — the producer schema (the five fields + `kind`) is unchanged, so this is backward-compatible for producers.
 - **1.1** (2026-06-08) — additive: optional `kind: {buildable, shaping}` field (absent ⇒ buildable). `kind: shaping` lets a non-buildable epic/shaping design doc pass producer validation without the build-targeted fields and be refused by `/build` (read-s2 exit 3). Backward-compatible — existing docs unchanged. Adds invariant + S2-8; also backfills the previously-undocumented S2-7 binding bullet (its test shipped in WS4 but was never listed here) (#692).
 - **1.0** (2026-05-24) — initial contract; producer + consumer shapes per WS1 §D3, with the producer side reflecting the unified `/design` behaviour from PR #329 and the consumer side reflecting `/build` from PR #321 (WS1 build).

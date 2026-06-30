@@ -96,9 +96,77 @@ else:
     if kind not in KIND_ENUM:
         issues.append(f"kind: not in {sorted(KIND_ENUM)} (got {kind!r})")
 if kind != "buildable":
-    # Non-buildable (or invalid kind): stop after the identity check. The
-    # build-only fields are neither required nor validated here; /build
-    # refuses the doc at consume time via read-s2-frontmatter.sh (exit 3).
+    # Non-buildable (or invalid kind): stop after the identity check, plus the
+    # shaping-only substrate-survey requirement (S2-9, #934). The build-only
+    # fields are neither required nor validated here; /build refuses the doc at
+    # consume time via read-s2-frontmatter.sh (exit 3).
+    if kind == "shaping":
+        # S2-9: a shaping doc must carry a non-empty `## Substrate Survey`
+        # section — the mechanical floor under the agent's substrate survey.
+        # Presence-only: the heading must exist with at least one non-blank,
+        # non-heading content line under it. The table/verdict are not parsed.
+        with open(spec_path, encoding="utf-8") as body:
+            lines = body.read().splitlines()
+        # Fence-aware scan: a `## Substrate Survey` line inside a fenced code
+        # block is a quoted example, not the real section — skip it. A fence is
+        # closed only by a run of the same marker family (``` vs ~~~) at least
+        # as long as the opener (CommonMark), so a ~~~ line inside a ``` fence
+        # (or a shorter ``` run inside a longer one) does not end it.
+        def _fence_run(s):
+            # Return the (char, length) of a leading fence run, or (None, 0).
+            if s[:3] in ("```", "~~~"):
+                ch = s[0]
+                return ch, len(s) - len(s.lstrip(ch))
+            return None, 0
+
+        fence_marker = ""  # the opening run, e.g. "```" or "~~~~"; "" when open
+        heading_idx = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            ch, n = _fence_run(stripped)
+            if not fence_marker:
+                if ch is not None:
+                    fence_marker = ch * n  # open a fence
+                    continue
+                if stripped == "## Substrate Survey":
+                    heading_idx = i
+                    break
+            else:
+                # Inside a fence: close only on a same-family run >= opener that
+                # is *only* fence chars (a closing fence carries no info string).
+                if (
+                    ch == fence_marker[0]
+                    and n >= len(fence_marker)
+                    and stripped == ch * n
+                ):
+                    fence_marker = ""
+                continue
+        if heading_idx is None:
+            issues.append(
+                "Substrate Survey: required section missing (kind: shaping)"
+            )
+        else:
+            has_content = False
+            for line in lines[heading_idx + 1:]:
+                stripped = line.strip()
+                # A fenced code block under the heading is real content.
+                if stripped.startswith("```") or stripped.startswith("~~~"):
+                    has_content = True
+                    break
+                # Only a new top-level (H1/H2) heading ends the section. Deeper
+                # subheadings (### …) and non-heading '#' lines (#1 …) are
+                # section content, not a boundary.
+                if (
+                    stripped.startswith("# ")
+                    or stripped.startswith("## ")
+                    or stripped in ("#", "##")
+                ):
+                    break
+                if stripped:
+                    has_content = True
+                    break
+            if not has_content:
+                issues.append("Substrate Survey: section is empty")
     with open(issues_path, "w", encoding="utf-8") as out:
         for issue in issues:
             out.write(issue + "\n")

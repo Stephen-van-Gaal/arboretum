@@ -1,6 +1,6 @@
 ---
 seam: validate-design-spec
-version: 1.2
+version: 1.3
 producer-type: script
 consumer-type: script
 consumes:
@@ -31,7 +31,9 @@ Validates the design spec at the positional path argument. Parses the leading fr
 
 Cross-field invariants: `plan: null` forbids `implementation-mode: executing-plans`; a `plan:` path must be relative and resolve to an existing file under the repo root (located by walking up for a `.git` dir or `CLAUDE.md`). Emits one summary `S2-DRIFT:` line plus one indented bullet per issue to stderr; never mutates the spec.
 
-**`kind` handling (S2 v1.1, #692).** An optional `kind` field (closed enum `{buildable, shaping}`; absent ⇒ buildable) controls which schema applies. For `kind: shaping` (a non-buildable epic/shaping doc) the validator checks **only** `related-issue` and skips `triage`, `implementation-mode`, `plan`, `test-tiers`, and the cross-field invariants — so a shaping doc validates without the build-targeted fields. An out-of-enum `kind`, or a **mapping-valued** `kind` (e.g. `kind: {value: shaping}`, which flattens to `kind.<sub>` with no scalar `kind`), is a `kind:` drift issue rather than being read as absent — a malformed shaping marker never passes as buildable (fail-safe).
+**`kind` handling (S2 v1.1, #692).** An optional `kind` field (closed enum `{buildable, shaping}`; absent ⇒ buildable) controls which schema applies. For `kind: shaping` (a non-buildable epic/shaping doc) the validator checks `related-issue` and the substrate-survey requirement below, and skips `triage`, `implementation-mode`, `plan`, `test-tiers`, and the cross-field invariants — so a shaping doc validates without the build-targeted fields. An out-of-enum `kind`, or a **mapping-valued** `kind` (e.g. `kind: {value: shaping}`, which flattens to `kind.<sub>` with no scalar `kind`), is a `kind:` drift issue rather than being read as absent — a malformed shaping marker never passes as buildable (fail-safe).
+
+**Substrate-survey requirement (S2 v1.3, S2-9, #934).** A `kind: shaping` doc must additionally carry a non-empty `## Substrate Survey` section. The validator scans the body (fence-aware: a heading inside a code fence does not count) and emits `  - Substrate Survey: required section missing (kind: shaping)` when the heading is absent, or `  - Substrate Survey: section is empty` when it has no content before the next top-level (H1/H2) heading. Presence-only — the table and verdict are not parsed. The check applies **only** to `kind: shaping`; an out-of-enum/invalid `kind` fails on the `kind` error alone and is not additionally checked for the survey. Buildable docs are unaffected.
 
 ## Consumer
 
@@ -72,14 +74,19 @@ Consumer-type: `script`. Two consumer classes assert on this validator's output:
 - **VDS-4:** `plan:` pointing at a missing file (`design-plan-missing-file.md`) → exit 1, stderr `  - plan: file not found …`.
 - **VDS-5:** invocation error — non-existent path → exit 2, stderr `file not found`, no `S2-DRIFT:` line.
 - **VDS-6:** invocation error — missing `scripts/lib/yaml-lite.sh` helper → exit 2, stderr `yaml-lite helper not found`, no `S2-DRIFT:` line.
-- **VDS-7:** `kind: shaping` with only `related-issue` → exit 0 (identity-only; build fields not required). (#692)
+- **VDS-7:** `kind: shaping` with `related-issue` + a non-empty `## Substrate Survey` → exit 0 (identity-only; build fields not required). (#692, #934)
 - **VDS-8:** `kind: shaping` missing `related-issue` → exit 1, `  - related-issue: missing`. (#692)
-- **VDS-9:** `kind: shaping` with stray build fields present → exit 0 (fields ignored). (#692)
+- **VDS-9:** `kind: shaping` with stray build fields present (and a `## Substrate Survey`) → exit 0 (fields ignored). (#692, #934)
 - **VDS-10:** out-of-enum `kind` → exit 1, `  - kind: not in [...]`. (#692)
 - **VDS-11:** mapping-valued `kind` → exit 1, `  - kind: must be a scalar enum value …` (not read as absent ⇒ buildable). (#692)
+- **VDS-12:** `kind: shaping` missing `## Substrate Survey` → exit 1, `  - Substrate Survey: required section missing …`. (#934)
+- **VDS-13:** `kind: shaping` whose `## Substrate Survey` heading is only inside a code fence → exit 1 (fence-aware; does not count). (#934)
+- **VDS-14:** `kind: shaping` with an empty `## Substrate Survey` section → exit 1, `  - Substrate Survey: section is empty`. (#934)
+- **VDS-15:** `kind: shaping` whose survey opens with a deeper (H3) subheading / `#`-prefixed content → exit 0 (only a new H1/H2 heading ends the section). (#934)
 
 ## Versioning
 
+- **1.3** (2026-06-28) — S2 v1.3 substrate-survey support (#934): `kind: shaping` docs must additionally carry a non-empty `## Substrate Survey` section (fence-aware, presence-only; absent → `Substrate Survey: required section missing`, empty → `section is empty`). Adds VDS-12..15; VDS-7/9 fixtures now carry the section. Buildable schema unchanged.
 - **1.2** (2026-06-08) — S2 v1.1 `kind` support (#692): `kind: shaping` validates identity-only (`related-issue`); out-of-enum or mapping-valued `kind` is `kind:` drift (exit 1), never read as absent; absent ⇒ buildable five-field schema unchanged. Adds VDS-7..11.
 - **1.1** (2026-06-01) — missing YAML-lite helper is an invocation error (exit 2) with no `S2-DRIFT:` summary.
 - **1.0** (2026-05-30) — initial contract. Validator shape as of `scripts/validate-design-spec.sh` on `main` (S2-DRIFT stderr format, exit 0/1/2). Issue #303 (WS5 PR 7a).

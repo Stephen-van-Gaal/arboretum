@@ -12,3 +12,10 @@ test-tiers:
 ---
 
 # Fixture: Shaping spec with stray build fields (accepted; fields ignored)
+
+## Substrate Survey
+| Referent | Kind | Status | Evidence |
+|---|---|---|---|
+| validate-design-spec.sh | script | exists | scripts/validate-design-spec.sh |
+
+**Verdict:** no substrate violations — fixture references only existing carriers.
