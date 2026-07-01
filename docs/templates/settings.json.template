@@ -4,7 +4,6 @@
       "Bash(bash scripts/health-check.sh *)",
       "Bash(bash scripts/generate-register.sh *)",
       "Bash(bash scripts/review-dispatch.sh *)",
-      "Bash(bash scripts/build-review-request.sh *)",
       "Bash(bash scripts/review-registry-filter.sh *)",
       "Bash(bash scripts/review-adapter-codex.sh *)",
       "Bash(bash scripts/merge-review-manifests.sh *)",

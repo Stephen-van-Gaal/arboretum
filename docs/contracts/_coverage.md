@@ -8,7 +8,6 @@
 | scripts/audit-test-metadata.sh | docs/contracts/audit-test-metadata.cli-contract.md | cli |
 | scripts/backfill-stage-labels.sh | docs/contracts/backfill-stage-labels.cli-contract.md | cli |
 | scripts/bootstrap-project.sh | docs/contracts/bootstrap-project.cli-contract.md | cli |
-| scripts/build-review-request.sh | docs/contracts/build-review-request.cli-contract.md | cli |
 | scripts/check-section-dispatch.sh | docs/contracts/check-section-dispatch.cli-contract.md | cli |
 | scripts/ci-checks.sh | docs/contracts/ci-checks.cli-contract.md | cli |
 | scripts/ci-preflight.sh | docs/contracts/ci-preflight.cli-contract.md | cli |
