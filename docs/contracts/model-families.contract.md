@@ -64,7 +64,7 @@ returns non-zero (no stdout).
 - **MF-2: unknown fails loud.** An unrecognized family returns non-zero with a
   stderr diagnostic and no stdout.
 - **MF-3: single source.** Each concrete id (`claude-haiku-4-5`,
-  `claude-sonnet-4-6`, `claude-opus-4-8`) appears only in `model-families.sh`,
+  `claude-sonnet-5`, `claude-opus-4-8`) appears only in `model-families.sh`,
   not in any other script or skill surface.
 
 ## Versioning

@@ -16,7 +16,7 @@ run(){ bash "$ROOT/scripts/resolve-stage-model.sh" "$@"; }
 # Floor only (frontmatter) -> capable id
 printf -- '---\nname: demo\ndefault-model: capable\n---\nbody\n' > "$TMP/skills/demo/SKILL.md"
 out="$(run demo --skills-root "$TMP/skills" --config "$TMP/none.yml")"
-[ "$out" = "claude-sonnet-4-6" ] && pass "floor capable -> sonnet" || fail "floor got '$out'"
+[ "$out" = "claude-sonnet-5" ] && pass "floor capable -> sonnet" || fail "floor got '$out'"
 
 # No floor -> SESSION_DEFAULT
 printf -- '---\nname: demo\n---\nbody\n' > "$TMP/skills/demo/SKILL.md"

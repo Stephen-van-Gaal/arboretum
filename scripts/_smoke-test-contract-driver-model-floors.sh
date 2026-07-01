@@ -26,8 +26,8 @@ check_fm skills/ai-surface-review/SKILL.md capable "ai-surface-review"
 
 # 2. general-security floored via .arboretum.yml override — resolved end-to-end.
 gs="$(bash "$ROOT/scripts/resolve-stage-model.sh" general-security 2>/dev/null || true)"
-[ "$gs" = "claude-sonnet-4-6" ] && pass "general-security override -> capable id" \
-  || fail "general-security resolved '$gs' want claude-sonnet-4-6 (capable)"
+[ "$gs" = "claude-sonnet-5" ] && pass "general-security override -> capable id" \
+  || fail "general-security resolved '$gs' want claude-sonnet-5 (capable)"
 
 # 3. Each dispatcher references the resolver at its dispatch site.
 for f in skills/cleanup/SKILL.md skills/land/SKILL.md skills/finish/SKILL.md; do

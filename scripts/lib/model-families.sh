@@ -9,12 +9,12 @@
 # vocabulary and still glob-match token-rates.sh (*haiku*/*sonnet*/*opus*), so
 # accounting needs no change.
 #
-# Concrete ids verified 2026-06-28 (claude-api Appendix). Re-verify on change.
+# Concrete ids verified 2026-07-01 (claude-api Appendix). Re-verify on change.
 
 resolve_model_family() {
   case "${1:-}" in
     cheap)    echo "claude-haiku-4-5" ;;
-    capable)  echo "claude-sonnet-4-6" ;;
+    capable)  echo "claude-sonnet-5" ;;
     frontier) echo "claude-opus-4-8" ;;
     *)
       echo "model-families: unknown family '${1:-}' (want cheap|capable|frontier)" >&2

@@ -28,7 +28,7 @@ else
 fi
 
 # Single source: each concrete id appears only in model-families.sh
-for id in claude-haiku-4-5 claude-sonnet-4-6 claude-opus-4-8; do
+for id in claude-haiku-4-5 claude-sonnet-5 claude-opus-4-8; do
   hits="$(grep -rl --include='*.sh' --include='*.md' -- "$id" "$ROOT/scripts" "$ROOT/skills" 2>/dev/null \
     | grep -vE '_smoke-test-|/contracts/|model-families\.sh$' || true)"
   if [ -z "$hits" ]; then
