@@ -47,17 +47,17 @@ for phrase in \
 done
 ok "design-package states boundary and recognition procedure"
 
-plan_line=$(grep -n "^### 4\. Plan fold-in" "$DESIGN" | cut -d: -f1)
-package_line=$(grep -n "^### 5\. Design package" "$DESIGN" | cut -d: -f1)
-[ -n "$plan_line" ] || fail "/design missing Step 4 Plan fold-in"
+produce_line=$(grep -n "^### 4\. Produce dispatch" "$DESIGN" | cut -d: -f1 || true)
+package_line=$(grep -n "^### 5\. Design package" "$DESIGN" | cut -d: -f1 || true)
+[ -n "$produce_line" ] || fail "/design missing Step 4 Produce dispatch"
 [ -n "$package_line" ] || fail "/design missing Step 5 Design package"
-[ "$plan_line" -lt "$package_line" ] \
-  || fail "/design must fold in the plan before invoking design-package"
+[ "$produce_line" -lt "$package_line" ] \
+  || fail "/design must dispatch produce (spec + plan authoring) before invoking design-package"
 grep -q "After the AI-facing session document and plan exist" "$DESIGN" \
   || fail "/design missing post-plan design-package invocation rule"
 grep -q "validate buildability after the \`plan:\` field is final" "$DESIGN" \
   || fail "/design missing post-plan buildability validation rule"
-ok "/design runs design-package only after plan fold-in"
+ok "/design runs design-package only after produce dispatch (spec + plan authoring)"
 
 for class in strict-design-session partial-design-session custom-s2-design-session plan unknown; do
   grep -q "$class" "$PACKAGE" \

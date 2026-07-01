@@ -106,6 +106,7 @@
 | scripts/workspace-context.sh | docs/contracts/workspace-context.contract.md | full |
 | scripts/workspace-list.sh | docs/contracts/workspace-list.contract.md | full |
 | scripts/write-agent-brief.sh | docs/contracts/write-agent-brief.contract.md | full |
+| scripts/write-design-brief.sh | docs/contracts/write-design-brief.contract.md | full |
 | scripts/write-escape-hatch.sh | docs/contracts/write-escape-hatch.contract.md | full |
 | .claude/hooks/pre-commit-branch-check.sh | docs/contracts/pre-commit-branch-check.cli-contract.md | cli |
 | .claude/hooks/prompt-timestamp.sh | docs/contracts/prompt-timestamp.cli-contract.md | cli |
