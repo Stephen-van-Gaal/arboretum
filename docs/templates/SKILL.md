@@ -24,7 +24,7 @@ Bash — three tiers, in order of preference:
 
     Why it works: the script is the wrapper. Its behaviour is governed and version-
     controlled; the wildcard covers arguments but not arbitrary shell expansion.
-    /health-check and /init-project use this form — copy those as examples.
+    /health-check uses this form — copy that as an example.
 
   Tier 2 — scoped to git sub-commands:
     Use when the skill runs specific git read-only operations in addition to or

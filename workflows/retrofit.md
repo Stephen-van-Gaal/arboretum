@@ -38,7 +38,7 @@ graph TD
 | Step | Reads | Produces | Location | Authority |
 |---|---|---|---|---|
 | 1. Assess | existing codebase, `git log --stat` | mental model of pain hotspots | (notes) | — |
-| 2. Bootstrap (`/init-project` or `/arboretum:init`) | empty arbo state | arboretum scaffolding alongside existing code | `docs/`, `.claude/`, `CLAUDE.md` | source |
+| 2. Bootstrap (`/arboretum:init` or `bin/arboretum bootstrap`) | empty arbo state | arboretum scaffolding alongside existing code | `docs/`, `.claude/`, `CLAUDE.md` | source |
 | 3. Triage | git history, codebase | highest-pain area selection | (notes) | — |
 | 4. Govern one | code in selected area | new spec + `# owner:` comments | `docs/specs/`, source files | owning |
 | 5. Expand | next pain area | next spec; repeat as needed | as above | as above |
@@ -59,7 +59,7 @@ Read the codebase. Understand its structure, count files and modules, identify m
 
 ### Step 2: Bootstrap
 
-→ `/init-project` in the existing project directory
+→ `/arboretum:init` in the existing project directory (or `bin/arboretum bootstrap` if the plugin isn't installed)
 
 This creates the arboretum scaffolding (`CLAUDE.md`, `docs/`, `.claude/`) alongside the existing code. It does not modify existing files.
 

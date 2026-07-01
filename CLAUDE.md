@@ -79,7 +79,7 @@ retrofit         assess → bootstrap → triage → govern-one → [expand]*
 
 **Workflow:** `/start`, `/design`, `/finish`, `/cleanup`, `/reflect`
 
-**Governance:** `/consolidate`, `/init-project`, `/architect`, `/pr`, `/publish`
+**Governance:** `/consolidate`, `/architect`, `/pr`, `/publish`
 
 **Continuity:** `/handoff` — queues a single GitHub issue with the `next-up` label so the next session boots oriented on it. Auto-invoked by `/finish`, `/cleanup`, `/reflect`; the boot banner surfaces whichever open issue carries `next-up` (cached at `.arboretum/next-cache.json`). Requires `gh` CLI installed and authenticated.
 

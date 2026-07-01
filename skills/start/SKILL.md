@@ -396,7 +396,7 @@ See `workflows/README.md ## Workflow transitions` for the full transition table.
 - Do not modify product code or make commits. This skill only gathers context,
   recommends routing, and writes the verified `agent-ready` brief when that
   lane is selected.
-- If the project is at Layer 0 with no governed documents yet, mention that `/init-project` can set up the infrastructure, but don't block on it.
+- If the project is at Layer 0 with no governed documents yet, mention that `/init` can set up the infrastructure, but don't block on it.
 - If the project has an existing codebase without governance, suggest the **retrofit** workflow instead.
 - Keep the output concise. The user wants to start working, not read a manual.
 

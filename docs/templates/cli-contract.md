@@ -6,7 +6,7 @@ script: scripts/<name>.sh          # path to the script being contracted
 version: 1.0                        # semver-light per WS3a §D7
 invokers:                           # list of who invokes this script
   - type: skill                     # type+name pair for typed invokers
-    name: /init-project
+    name: /init
   - type: developer                 # bare 'type: developer' for human invocation
 related-designs:
   - docs/superpowers/specs/<design-spec-filename>.md

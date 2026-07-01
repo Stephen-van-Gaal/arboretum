@@ -18,7 +18,7 @@ You have an idea for a project but no code yet.
 /arboretum:init → /architect → [spike → /consolidate]* → build
 ```
 
-(Pre-plugin projects use `/init-project` in place of `/arboretum:init`; both produce the same scaffolding.)
+(Projects without the plugin installed use `bin/arboretum bootstrap` in place of `/arboretum:init`; both produce the same scaffolding.)
 
 ## Artifact Flow
 

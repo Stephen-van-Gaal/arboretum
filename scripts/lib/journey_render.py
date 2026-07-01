@@ -29,7 +29,7 @@ def build_fam(rates_blob):
 
 STAGE_SKILLS = {
     'start','start-bugfix','design','build','finish','cleanup','land','pr','architect',
-    'init','init-project','consolidate','publish','security-review','reflect','roadmap',
+    'init','consolidate','publish','security-review','reflect','roadmap',
     'handoff','health-check',
 }
 def fam(model):

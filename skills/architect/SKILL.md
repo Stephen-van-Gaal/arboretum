@@ -2,7 +2,7 @@
 name: architect
 owner: workflow-unification
 scope: plugin-only
-description: "Interview the user to determine project shape, match to an architecture archetype, surface essential decisions, recommend spikes, and scaffold ARCHITECTURE.md and group documents. Standalone or called by /init-project."
+description: "Interview the user to determine project shape, match to an architecture archetype, surface essential decisions, recommend spikes, and scaffold ARCHITECTURE.md and group documents. Standalone or called by /init."
 allowed-tools:
   - Read
   - Write
@@ -21,7 +21,7 @@ Interview the user to understand their project's shape, match it to an architect
 ## When to invoke
 
 - **Standalone:** user runs `/architect` directly
-- **Via `/init-project`:** called as a step after project bootstrapping
+- **Via `/init`:** called as a step after project bootstrapping
 - **Two modes:** greenfield (no existing code) and existing project (has code or specs)
 
 ## Mode detection

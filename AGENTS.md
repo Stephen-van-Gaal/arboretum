@@ -76,7 +76,7 @@ User-facing skills live in `skills/` (the plugin location, where the loader reso
 
 **Workflow (6):** `/start`, `/start-bugfix`, `/design`, `/finish`, `/cleanup`, `/reflect`
 
-**Governance (6):** `/consolidate`, `/init-project`, `/architect`, `/pr`, `/publish`, `/receive-review`
+**Governance (5):** `/consolidate`, `/architect`, `/pr`, `/publish`, `/receive-review`
 
 **Continuity (1):** `/handoff` — queues a single GitHub issue as `next-up` so the next session boots oriented on it. Auto-invoked by `/finish`, `/cleanup`, `/reflect`. The boot banner surfaces whichever open issue carries the `next-up` label via `.claude/hooks/session-start.sh` (cached at `.arboretum/next-cache.json`, refreshed by `scripts/refresh-next-cache.sh` with a 1-hour TTL). Hard-fails with install/auth instructions if `gh` is missing. See issue #155.
 
