@@ -68,6 +68,12 @@ add "agent-prep:in-progress"  "5319e7" "Spec-quality verified but not yet timing
 add "provisionally-resolved"  "fbca04" "Soft-state: PR evidence partially supports closing — review"
 add "provisionally-stale"     "fbca04" "Soft-state: open >90d, no activity signal — review or close"
 
+# Autonomy-grant vocabulary (#915 slice 1 — closed set; exclusive per issue,
+# set at the design→build grant gate. Unlabelled = design-only, today's default.)
+add "autonomy:pause-at-land"  "0e8a16" "Autonomy grant: autonomous /build → /finish → /pr; human drives /land"
+add "autonomy:pause-at-merge" "0e8a16" "Autonomy grant: also runs the /land loop; human makes the merge call"
+add "autonomy:auto-merge"     "0e8a16" "Autonomy grant: full — merge on clean convergence (gated by auto_merge_enabled)"
+
 # Pipeline stage labels (exclusive per issue; set by log-stage.sh — #570)
 add "stage:start"             "0e8a16" "Pipeline stage: /start"
 add "stage:design"            "0e8a16" "Pipeline stage: /design"

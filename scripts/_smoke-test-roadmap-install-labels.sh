@@ -26,7 +26,8 @@ output="$(bash "$INSTALLER" --dry-run --no-components)"
 for label in \
   type:epic type:feature type:bug type:spike type:refactor type:docs type:chore \
   horizon:now horizon:next horizon:later \
-  blocked agent-ready agent-prep:in-progress provisionally-resolved provisionally-stale
+  blocked agent-ready agent-prep:in-progress provisionally-resolved provisionally-stale \
+  autonomy:pause-at-land autonomy:pause-at-merge autonomy:auto-merge
 do
   if printf '%s\n' "$output" | cut -f1 | grep -Fxq "$label"; then
     echo "PASS  framework-fixed: $label"
@@ -35,6 +36,22 @@ do
     fail=1
   fi
 done
+
+# Test 1b: the autonomy:* vocabulary is a CLOSED set of exactly three labels
+# (#915 slice 1). design-only is the absence of a label, never an emitted one.
+autonomy_count="$(printf '%s\n' "$output" | cut -f1 | grep -c '^autonomy:' || true)"
+if [ "$autonomy_count" -eq 3 ]; then
+  echo "PASS  autonomy vocabulary is closed (exactly 3 labels)"
+else
+  echo "FAIL  autonomy vocabulary: expected exactly 3 autonomy:* labels, got $autonomy_count"
+  fail=1
+fi
+if printf '%s\n' "$output" | cut -f1 | grep -Fxq "autonomy:design-only"; then
+  echo "FAIL  autonomy:design-only must NOT be a label (it is the absence of a grant)"
+  fail=1
+else
+  echo "PASS  autonomy:design-only is correctly not a label"
+fi
 
 # Test 2: --no-components excludes component:* and audience:*
 component_count="$(printf '%s\n' "$output" | cut -f1 | grep -c '^component:' || true)"

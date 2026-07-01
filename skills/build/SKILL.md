@@ -100,6 +100,36 @@ bash scripts/log-stage.sh "$ISSUE" "/build" entered \
 
 If the helper exits non-zero, surface the error and refuse to proceed — the entry-state write is the precondition for the journey-log invariant.
 
+#### Read the autonomy grant (#917 / #922 — read-only in slice 1)
+
+Read the run's recorded autonomy grant so the build knows its boundary, and
+surface it:
+
+Capture the reader's output and exit code explicitly — the grant read must
+**never** terminate `/build` (a piped `$(... | grep | cut)` would abort under
+`set -o pipefail` if the reader exits non-zero):
+
+```bash
+GRANT_OUT="$(bash scripts/read-autonomy-grant.sh "$ISSUE" 2>&1)" && GRANT_RC=0 || GRANT_RC=$?
+if [ "$GRANT_RC" -eq 0 ]; then
+  GRANT=$(printf '%s\n' "$GRANT_OUT" | grep -m1 '^grant=' | cut -d= -f2)
+  echo "Autonomy grant for this run: ${GRANT:-design-only}"
+else
+  echo "Autonomy grant unreadable (read-autonomy-grant.sh exit $GRANT_RC): $GRANT_OUT" >&2
+  echo "Proceeding — slice 1 does not act on the grant."
+fi
+```
+
+The grant rides the pipeline-state seam (the exclusive `autonomy:*` label set at
+the `/design` grant gate; `grant=design-only` when unlabelled). **In slice 1 this
+is read-only — `/build` does not yet act on the grant.** Trigger evaluation,
+autonomous `/land`, and the derived merge gate land in #918–#921; until then the
+run is fully attended regardless of tier. Do not change build behaviour based on
+`$GRANT` here — only surface it. A non-zero exit means the grant could not be
+cleanly resolved — **exit 1** is a tracker/arg failure, **exit 2** is grant drift
+(more than one, or an out-of-vocabulary, `autonomy:*` label). In either case
+surface it but do not block the build.
+
 #### Worktree guard (create-if-absent, #716)
 
 Before dispatching implementation work, apply the worktrees-always

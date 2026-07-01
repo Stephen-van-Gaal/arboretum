@@ -23,6 +23,8 @@
       "Bash(bash scripts/read-s2-frontmatter.sh *)",
       "Bash(bash scripts/read-test-config.sh *)",
       "Bash(bash scripts/read-review-config.sh *)",
+      "Bash(bash scripts/read-autonomy-config.sh *)",
+      "Bash(bash scripts/read-autonomy-grant.sh *)",
       "Bash(bash scripts/request-review.sh *)",
       "Bash(bash scripts/collect-review.sh *)",
       "Bash(bash scripts/verify-agent-ready.sh *)",

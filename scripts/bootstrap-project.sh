@@ -304,6 +304,18 @@ backend: github
 # Patch-lane workflow config.
 patch_lane:
   investigation_budget_minutes: 15
+# Autonomy-grant gate config (#915). Authoritative source for the gate
+# parameters; read by scripts/read-autonomy-config.sh. The trigger floor is
+# tunable but not removable; auto_merge_enabled defaults false (conservative
+# by construction — the top tier is unreachable until the project opts in).
+autonomy:
+  default_grant: pause-at-merge
+  triggers:
+    ci_hard_fail_attempts: 2
+    thrash_window_rounds: 3
+    cost_ceiling_tokens: 500000
+  cost_ceiling_overridable: true
+  auto_merge_enabled: false
 ARBORETUM
   echo "  created: .arboretum.yml"
   # Seed the journey-log author allowlist (#249) via the lifecycle helper.

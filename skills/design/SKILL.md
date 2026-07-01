@@ -267,11 +267,82 @@ low-friction path from verified `agent-ready` and therefore skipped `/design`.
 Do not log `/design exited` or hand off to `/build` until that approval has
 happened; while waiting for review, the stage is still in `/design`.
 
-After approval, if `$ISSUE` is set, log:
+#### 6a. Grant gate (buildable sessions only — the design→build autonomy authorization, #917)
+
+For a **buildable** session, the human review you just completed is also the
+**grant gate**: the single synchronous authorization of *how far this run
+proceeds unattended* (#915 D1/D8). It does not move the review-before-build
+pause — it extends it with one tier choice. (Skip this for `kind: shaping`
+sessions: a shaping doc ships no run to authorize.)
+
+Read the project's default tier, then ask the human with the **one common
+closed-option affordance** (D8 — an `AskUserQuestion`):
+
+Fail closed — if the config reader errors (invalid `.arboretum.yml`, removed
+trigger floor), the grant gate must **not** proceed with an undefined
+recommendation:
+
+```bash
+if ! AUTONOMY_CFG="$(bash scripts/read-autonomy-config.sh)"; then
+  echo "Grant gate: autonomy config is invalid — fix .arboretum.yml before setting a grant." >&2
+  # Stop here; do not present the gate.
+fi
+DEFAULT_GRANT=$(printf '%s\n' "$AUTONOMY_CFG" | grep -m1 '^default_grant=' | cut -d= -f2)
+[ -n "$DEFAULT_GRANT" ] || { echo "Grant gate: default_grant unreadable — stop." >&2; }
+```
+
+Present exactly these options, with the `$DEFAULT_GRANT` tier pre-selected and
+labelled `(Recommended)`:
+
+- **design-only** — *(today's default)* no autonomous reach; the human drives
+  `/build → … → merge`. Sets no label.
+- **autonomy:pause-at-land** — autonomous `/build → /finish → /pr`; human drives `/land`.
+- **autonomy:pause-at-merge** — also runs the `/land` loop unattended; human makes the merge call.
+- **autonomy:auto-merge** — full reach; merge on clean convergence (eligibility only — still gated by `auto_merge_enabled`).
+
+**The human grants; Codex advises but never grants (D1).** If a design-package
+Codex review recommended a tier, surface it as advice in the prompt — it is an
+input, never the decision. Never auto-select above `$DEFAULT_GRANT` on Codex's
+say-so.
+
+Record the chosen tier `$GRANT` (one of `pause-at-land | pause-at-merge |
+auto-merge | design-only`). For a real tier, set the exclusive label (the
+authoritative carrier, read downstream by `scripts/read-autonomy-grant.sh`). For
+`design-only`, **actively clear any existing `autonomy:*` label** — a prior run
+(re-running `/design`, or downgrading a grant) may have left a stale tier that
+`read-autonomy-grant.sh` would otherwise keep returning; absence-of-label is the
+design-only carrier, so the label must be removed, not merely not-added:
+
+```bash
+( cd "$(git rev-parse --show-toplevel)" && source scripts/roadmap/lib.sh && \
+  if [ "$GRANT" != "design-only" ]; then
+    roadmap_set_prefix_exclusive_label "$ISSUE" autonomy "$GRANT"
+  else
+    # design-only: remove any stale autonomy:* label so the grant reads as design-only.
+    stale=$(roadmap_tracker_issue_show "$ISSUE" --json labels --jq '.labels[].name' 2>/dev/null \
+            | grep '^autonomy:' | paste -sd, - || true)
+    [ -n "$stale" ] && roadmap_tracker_issue_update "$ISSUE" --remove-label "$stale"
+  fi )
+```
+
+**Slice-1 scope (be honest, do not overclaim, #917).** This gate *records* the
+grant; it does **not** yet make `/build` or any later stage act autonomously.
+Trigger evaluation, autonomous `/land`, and the derived merge gate arrive in
+#918–#921 — until then the run proceeds exactly as today regardless of the tier.
+Say so at the gate rather than implying the run will now drive itself.
+
+After approval (and, for buildable sessions, after recording the grant), if
+`$ISSUE` is set, log `/design exited` — buildable sessions carry the grant on the
+seam as a `grant=` entry (the pipeline-state journey log is the grant's audit
+trail, #922); shaping sessions log it grant-free:
 
 ```bash
 if [ -n "${ISSUE:-}" ]; then
-  bash scripts/log-stage.sh "$ISSUE" /design exited
+  if [ "${GRANT:-}" != "" ]; then
+    bash scripts/log-stage.sh "$ISSUE" /design exited "grant=$GRANT"
+  else
+    bash scripts/log-stage.sh "$ISSUE" /design exited
+  fi
 fi
 ```
 
