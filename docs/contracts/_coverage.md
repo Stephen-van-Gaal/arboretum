@@ -16,6 +16,7 @@
 | scripts/cleanup-merged-session.sh | docs/contracts/cleanup-merged-session.cli-contract.md | cli |
 | scripts/cleanup-tracker-closure.sh | docs/contracts/cleanup-tracker-closure.cli-contract.md | cli |
 | scripts/collect-review.sh | docs/contracts/collect-review.cli-contract.md | cli |
+| scripts/detect-design-doc-pr.sh | docs/contracts/detect-design-doc-pr.cli-contract.md | cli |
 | scripts/explore-doc.sh | docs/contracts/explore-doc.cli-contract.md | cli |
 | scripts/generate-coverage.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/generate-register.sh | docs/contracts/register-pipeline.contract.md | full |

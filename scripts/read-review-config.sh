@@ -112,5 +112,18 @@ for k, v in data.items():
         hlogins.append(v)
 out.append("human_reviewers=" + ",".join(hlogins))
 
+# design_doc_policy (#935): reviewer subset + complexity-gate bypass for the
+# design-doc PR class. yaml-lite emits a scalar sequence with EMPTY brackets
+# (review.design_doc_policy.reviewers[]=<name>), one line per element — and
+# those same-key lines collapse in the `data` dict above (last wins), so read
+# them from the raw parsed lines in file order to preserve every reviewer.
+ddp_reviewers = []
+for line in os.environ.get("REVIEW_PARSED", "").splitlines():
+    if line.startswith("review.design_doc_policy.reviewers[]="):
+        ddp_reviewers.append(line.split("=", 1)[1])
+out.append("design_doc_policy.reviewers=" + ",".join(ddp_reviewers))
+bypass = data.get("review.design_doc_policy.bypass_complexity_gate", "false")
+out.append(f"design_doc_policy.bypass_complexity_gate={bypass}")
+
 print("\n".join(out))
 PY

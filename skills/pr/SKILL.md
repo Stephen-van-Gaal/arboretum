@@ -344,14 +344,40 @@ After the PR is open (and not left as `--draft`), request the configured
 reviewers through the review seam — this replaces the older "is Copilot PR
 review enabled?" convention with the declared `.arboretum.yml` `review:` block.
 
-On `github`, run the remote readiness gate before requesting reviewers:
+**Design-doc PR class (#935).** Before requesting reviewers, determine whether
+this is a design-doc PR: resolve the branch's design spec by slug
+(`docs/superpowers/specs/*-<slug>-design.md`, same branch-slug convention as
+§5.5) and read its `kind:` frontmatter, and classify the diff with
+`bash scripts/classify-pr-change.sh "$BASE"`. When the design spec is
+`kind: shaping` **and** the diff classifies as `docs-config`, this is a
+design-doc PR — request review with the design-doc subset:
+
+    bash scripts/request-review.sh "$PR_NUMBER" --design-doc
+
+which requests only the configured `design_doc_policy.reviewers` (Codex), forced
+regardless of complexity-gating. Otherwise request reviewers normally (no
+`--design-doc`).
+
+If the design spec cannot be resolved by slug (or is not `kind: shaping`), the
+flag stays empty and `/pr` requests reviewers normally — a safe degradation
+(Codex still fires via the default `review:` block; only the Copilot-suppression
+and forced-request scoping are skipped).
+
+On `github`, run the remote readiness gate (and resolve the design-doc class) in
+**one** shell block — `DESIGN_DOC_FLAG` is a shell variable, so it must be set
+and consumed in the same Bash invocation (shell state does not persist across
+separate tool calls). Detection is delegated to `scripts/detect-design-doc-pr.sh`
+(the single source shared with `/land`, so the class never drifts between
+skills); it prints `--design-doc` or nothing:
 
 ```bash
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+DESIGN_DOC_FLAG="$(bash scripts/detect-design-doc-pr.sh "$(workspace_base_ref)")"  # --design-doc or empty (#935)
 PR_NUMBER="${PR_ID:-$(gh pr view --json number --jq .number 2>/dev/null)}"
 REMOTE_READINESS="$(bash scripts/pr-readiness.sh remote "$PR_NUMBER")"
 printf '%s\n' "$REMOTE_READINESS"
 case "$REMOTE_READINESS" in
-  readiness=ready\ *) bash scripts/request-review.sh "$PR_NUMBER" ;;
+  readiness=ready\ *) bash scripts/request-review.sh "$PR_NUMBER" $DESIGN_DOC_FLAG ;;
   *) echo "Remote readiness is not ready; do not request reviewers yet." >&2; exit 1 ;;
 esac
 ```

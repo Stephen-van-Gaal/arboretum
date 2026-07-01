@@ -120,10 +120,18 @@ printf '%s\n' "$REMOTE_READINESS"
 
 Handle the normalized result:
 
-- **`readiness=draft-clean`** — mark the PR ready (`gh pr ready "$PR"`),
-  request configured reviewers (`bash scripts/request-review.sh "$PR"`), then
-  re-run remote readiness without `--allow-draft` and wait for GitHub to
-  recompute.
+- **`readiness=draft-clean`** — mark the PR ready (`gh pr ready "$PR"`), request
+  configured reviewers **scoped to the design-doc class when applicable** (#935),
+  then re-run remote readiness without `--allow-draft` and wait for GitHub to
+  recompute. Use the shared detector (same source as `/pr`) so a design-doc PR
+  requests Codex-only here too:
+
+  ```bash
+  gh pr ready "$PR"
+  source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+  DD_FLAG="$(bash scripts/detect-design-doc-pr.sh "$(workspace_base_ref)")"  # --design-doc or empty
+  bash scripts/request-review.sh "$PR" $DD_FLAG
+  ```
 - **`readiness=ready`** — proceed to Phase 2 and active review/CI work.
 - **`reason=ci-failing`** — foreground failing checks as the first triage item;
   route into the fix loop before reviewer triage.
@@ -531,8 +539,17 @@ order:
 3. top-level review summary comment;
 4. `.arboretum/land/<N>/closeout.json`.
 
-Then run `bash scripts/request-review.sh <N> --re-request` when the configured
-review policy says another review round is needed. Re-enter the poll loop.
+Then re-request review when the configured review policy says another round is
+needed — scoped to the design-doc class when applicable (#935), so a design-doc
+PR re-requests Codex-only and does not re-add Copilot across the loop:
+
+```bash
+source "$(git rev-parse --show-toplevel)/scripts/workspace-context.sh"
+DD_FLAG="$(bash scripts/detect-design-doc-pr.sh "$(workspace_base_ref)")"  # --design-doc or empty
+bash scripts/request-review.sh <N> --re-request $DD_FLAG
+```
+
+Re-enter the poll loop.
 
 ### 6. Exit condition
 

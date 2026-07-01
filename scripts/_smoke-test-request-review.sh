@@ -64,6 +64,45 @@ out="$(cd "$tmp/nomech" && REVIEW_DRY_RUN=1 bash "$REQ" 999 2>&1)"; rc=$?
 echo "$out" | grep -qi "ghost.*no .*mechanism" || note "missing-mechanism reviewer should warn and skip"
 echo "$out" | grep -qiE "requested: ghost via *$" && note "missing-mechanism reviewer should not print an empty 'via' success"
 
+# --- --design-doc requests only the policy reviewer subset (#935) ---
+dd_tmp="$(mktemp -d)"
+cat > "$dd_tmp/.arboretum.yml" <<'YML'
+backend: github
+review:
+  ai_reviewers:
+    - name: copilot
+      request: ready-for-review
+      cadence: auto-flaky
+    - name: codex
+      request: comment
+      cadence: comment-trigger
+  design_doc_policy:
+    reviewers: [codex]
+    bypass_complexity_gate: true
+YML
+out="$(cd "$dd_tmp" && REVIEW_DRY_RUN=1 bash "$REQ" 7 --design-doc 2>/dev/null)"
+echo "$out" | grep -qi 'codex'   || note "--design-doc did not request codex"
+echo "$out" | grep -qi 'copilot' && note "--design-doc must NOT request copilot"
+rm -rf "$dd_tmp"
+
+# --- --design-doc with an empty/absent policy requests NOTHING, never all (#935 C2) ---
+de_tmp="$(mktemp -d)"
+cat > "$de_tmp/.arboretum.yml" <<'YML'
+backend: github
+review:
+  ai_reviewers:
+    - name: copilot
+      request: ready-for-review
+      cadence: auto-flaky
+    - name: codex
+      request: comment
+      cadence: comment-trigger
+YML
+out="$(cd "$de_tmp" && REVIEW_DRY_RUN=1 bash "$REQ" 7 --design-doc 2>/dev/null)"
+echo "$out" | grep -qi 'copilot' && note "--design-doc with empty policy must NOT fall back to copilot"
+echo "$out" | grep -qi 'requested:' && note "--design-doc with empty policy should request no reviewers"
+rm -rf "$de_tmp"
+
 # --- Azure DevOps backend (AI request stubbed) ---
 mkdir -p "$tmp/ado"
 cat > "$tmp/ado/.arboretum.yml" <<'YML'

@@ -30,6 +30,24 @@ echo "$cfg" | grep -qE '^ai_reviewer\.copilot\.request=' \
 grep -q 'ai_reviewer\\\.' "$SCRIPT_DIR/request-review.sh" \
   || note "consumer request-review.sh no longer reads the 'ai_reviewer.<name>.<field>' form"
 
+# --- design_doc_policy producer/consumer coupling (#935) ---
+cat > "$tmp/.arboretum.yml" <<'YML'
+backend: github
+review:
+  ai_reviewers:
+    - name: codex
+      request: comment
+      cadence: comment-trigger
+  design_doc_policy:
+    reviewers: [codex]
+    bypass_complexity_gate: true
+YML
+ddpcfg="$(cd "$tmp" && bash "$SCRIPT_DIR/read-review-config.sh" 2>/dev/null)"
+echo "$ddpcfg" | grep -qx 'design_doc_policy.reviewers=codex' \
+  || note "producer dropped design_doc_policy.reviewers"
+grep -q 'design_doc_policy' "$SCRIPT_DIR/request-review.sh" \
+  || note "consumer request-review.sh no longer reads design_doc_policy"
+
 # --- 2. Normalized-record key set (collect-review.sh) ---
 mkdir -p "$tmp/fix"
 echo '[{"id":1,"path":"a","line":2,"user":{"login":"x"},"in_reply_to_id":null,"body":"b"}]' > "$tmp/fix/gh-inline.json"

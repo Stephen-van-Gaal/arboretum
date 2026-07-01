@@ -49,6 +49,28 @@ general-release pipeline follows the sequence below; the B4 review dispatch
 
 ### Step 1: Verify implementation state
 
+**Shaping-doc no-build mode (#935).** First determine whether this is a
+`kind: shaping` ship. Resolve the branch's design spec by slug
+(`docs/superpowers/specs/*-<slug>-design.md`, same branch-slug convention as
+`/pr`) and read its `kind:` frontmatter. When `kind: shaping`, the branch
+**never ran `/build`**, so there is no `/build exited` value in pipeline-state —
+this is expected, not an error. Do **not** fail closed on the absent build-exit
+status. Instead run the shaping-doc ship path: skip the build-exit gate below,
+skip the Step-4 `/consolidate` reconcile (a shaping doc touches no `# owner:`
+files, so there is nothing to reconcile and no spec status to flip), run a
+read-only health summary, and continue to `/pr` → `/land`. The remaining
+buildable gate (success vs escape-hatch) applies only to `kind: buildable`
+branches.
+
+**Shaping-doc mode opens a *ready* (non-draft) PR (#935).** This is load-bearing,
+not a style choice: the chained ship tail defaults to `/pr --draft`, and a draft
+PR skips reviewer requests in `/pr` entirely — `/land` requests them later via
+plain `request-review.sh "$PR"` (no `--design-doc`), so the design-doc class
+would never be applied and Codex would not be scoped/forced. Per the design's
+Git-strategy ("a normal, non-draft PR on the design-doc branch"), shaping-doc
+mode invokes `/pr` **without** `--draft` so `/pr`'s Step-9 design-doc detection
+runs and requests Codex-only at PR open. See Step 6.
+
 **Routing on `/build`'s exit-status (S3-8).** Before any other verification, read the most recent `/build exited` journey-log entry on the active issue and route on its `exit-status:` value. Until `scripts/get-latest-stage-log.sh` ships (WS9 follow-up), this is a descriptive routing — the operator confirms which path `/build` exited on:
 
 When `exit-status: success` is the most recent `/build exited` value, continue the ship tail below (verify → consolidate → review dispatch (B4) → ship → PR).
@@ -155,6 +177,11 @@ For each spec affected by this branch, ensure its status is `active` (matches cu
 If all affected specs are already at `active`, this step is a no-op (skip silently).
 
 Skip this step entirely for documentation-only changes (no source files in the diff).
+
+**Shaping-doc mode skips this step.** On a `kind: shaping` branch (see the
+no-build mode above) there are no owned-file changes to reconcile and no
+governed spec to flip; skip `/consolidate` and proceed to the review dispatch /
+`/pr`.
 
 ### Step 5: Review dispatch (B4)
 
@@ -405,6 +432,12 @@ For the chained GitHub ship tail, invoke `/pr --draft` by default unless the
 user explicitly requested a ready PR. The draft PR is the draft-candidate:
 GitHub can compute mergeability, but reviewers are not requested until `/land`
 confirms remote readiness.
+
+**Exception — shaping-doc mode (#935):** a `kind: shaping` branch invokes `/pr`
+**without** `--draft` (a ready PR), so `/pr`'s design-doc detection requests
+Codex-only at PR open. A draft would defer the request to `/land`, which does
+not carry the design-doc class — defeating the feature. See the shaping-doc
+no-build mode in Step 1.
 
 Present the PR URL when done.
 

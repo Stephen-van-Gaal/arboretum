@@ -44,6 +44,9 @@ No arguments. Reads `./.arboretum.yml` from the current working directory.
 - `re_review_condition=<never|unresolved-only|substantive-only|always>`
 - `ai_reviewer.<name>.<request|re_request|cadence>=<value>` (per enabled reviewer)
 - `human_reviewers=<comma-separated logins or empty>`
+- `design_doc_policy.reviewers=<comma-separated names>` — reviewers requested
+  for the design-doc PR class (`#935`); empty when unset.
+- `design_doc_policy.bypass_complexity_gate=<true|false>` — default `false`.
 
 When the `review:` block is absent, prints only the two policy defaults and a
 single `warn:` line to stderr.

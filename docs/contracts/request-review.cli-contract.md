@@ -30,12 +30,15 @@ touching the network.
 ### Arguments
 
 ```
-request-review.sh <pr> [--reviewer <name>] [--re-request]
+request-review.sh <pr> [--reviewer <name>] [--re-request] [--design-doc]
 ```
 
 - `<pr>` (positional, required) — the pull request number (positive integer).
 - `--reviewer <name>` — restrict the request to one configured reviewer.
 - `--re-request` — use each reviewer's `re_request` mechanism instead of `request`.
+- `--design-doc` — design-doc PR class (`#935`): request only the
+  `design_doc_policy.reviewers` subset from the `review:` block (Codex), forced
+  regardless of complexity-gating.
 
 ### Environment
 

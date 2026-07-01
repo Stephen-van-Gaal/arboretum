@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # owner: git-workflow-tooling
 # scope: plugin-only
-# request-review.sh <pr> [--reviewer <name>] [--re-request]
+# request-review.sh <pr> [--reviewer <name>] [--re-request] [--design-doc]
 #
 # Request (or re-request) the AI reviewers declared in .arboretum.yml's
-# review: block, each via its configured mechanism. Backend-dispatched:
+# review: block, each via its configured mechanism. With --design-doc, request
+# only the design_doc_policy.reviewers subset (Codex), forced (#935).
+# Backend-dispatched:
 #   github       — live (ready-for-review flip, @reviewer comment, api-request)
 #   azure-devops — AI-reviewer request stubbed (no native bot); human
 #                  reviewers are added via `az repos pr reviewer add`
@@ -19,17 +21,19 @@ set -uo pipefail
 PR=""
 REVIEWER_FILTER=""
 RE_REQUEST=0
+DESIGN_DOC=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --reviewer)
       [ "$#" -ge 2 ] || { echo "request-review.sh: --reviewer requires a value" >&2; exit 2; }
       REVIEWER_FILTER="$2"; shift 2 ;;
     --re-request) RE_REQUEST=1; shift ;;
+    --design-doc) DESIGN_DOC=1; shift ;;
     -*) echo "request-review.sh: unknown flag $1" >&2; exit 2 ;;
     *) [ -z "$PR" ] && PR="$1"; shift ;;
   esac
 done
-[ -n "$PR" ] || { echo "usage: request-review.sh <pr> [--reviewer <name>] [--re-request]" >&2; exit 2; }
+[ -n "$PR" ] || { echo "usage: request-review.sh <pr> [--reviewer <name>] [--re-request] [--design-doc]" >&2; exit 2; }
 case "$PR" in *[!0-9]*) echo "request-review.sh: PR must be a positive integer (got '$PR')" >&2; exit 2;; esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,6 +59,24 @@ CONFIG="$(cd "$ROOT" && bash "$SCRIPT_DIR/read-review-config.sh" 2>/dev/null)" |
 # Unique reviewer names from the config.
 NAMES="$(printf '%s\n' "$CONFIG" | sed -n 's/^ai_reviewer\.\([^.]*\)\..*/\1/p' | sort -u)"
 [ -n "$NAMES" ] || { echo "request-review.sh: no AI reviewers configured"; exit 0; }
+
+# Design-doc PR class (#935): request only the design_doc_policy.reviewers subset
+# (Codex), suppressing auto-flaky Copilot on prose. The complexity-gate bypass
+# (design D6) is satisfied by construction — request-review.sh requests
+# unconditionally, so design-doc PRs are never gated out; bypass_complexity_gate
+# is advisory for /pr, not a knob this script reads.
+if [ "$DESIGN_DOC" = "1" ]; then
+  DDP="$(printf '%s\n' "$CONFIG" | sed -n 's/^design_doc_policy\.reviewers=//p')"
+  # An absent or empty policy must NOT silently fall back to the full ai_reviewers
+  # set — that would request Copilot on a design doc, the exact opposite of the
+  # suppression intent. Request nothing and say why.
+  if [ -n "$(printf '%s' "$DDP" | tr -d '[:space:]')" ]; then
+    NAMES="$(printf '%s\n' "$DDP" | tr ',' '\n' | sed '/^$/d' | sort -u)"
+  else
+    echo "request-review.sh: --design-doc set but design_doc_policy.reviewers is empty; requesting no reviewers (configure design_doc_policy.reviewers, e.g. [codex])." >&2
+    exit 0
+  fi
+fi
 
 # PR-vs-issue guard (live only — dry-run never hits the network).
 if [ -z "$DRY_RUN" ]; then

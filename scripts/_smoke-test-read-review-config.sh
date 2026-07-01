@@ -58,4 +58,24 @@ echo "$err" | grep -qi "re_review_condition" || note "invalid enum error should 
 # Fixture 4: missing .arboretum.yml → exit 1 (not a crash)
 ( cd "$tmp" && rm -f .arboretum.yml && bash "$READER" >/dev/null 2>&1 ) && note "missing config should exit non-zero"
 
+# --- design_doc_policy (#935) ---
+ddp_tmp="$(mktemp -d)"
+cat > "$ddp_tmp/.arboretum.yml" <<'YML'
+backend: github
+review:
+  ai_reviewers:
+    - name: codex
+      request: comment
+      cadence: comment-trigger
+  design_doc_policy:
+    reviewers: [codex]
+    bypass_complexity_gate: true
+YML
+ddp="$(cd "$ddp_tmp" && bash "$SCRIPT_DIR/read-review-config.sh" 2>/dev/null)"
+echo "$ddp" | grep -qx 'design_doc_policy.reviewers=codex' \
+  || note "design_doc_policy.reviewers not emitted as comma list"
+echo "$ddp" | grep -qx 'design_doc_policy.bypass_complexity_gate=true' \
+  || note "design_doc_policy.bypass_complexity_gate not emitted"
+rm -rf "$ddp_tmp"
+
 [ "$fail" -eq 0 ] && echo "PASS: read-review-config" || exit 1

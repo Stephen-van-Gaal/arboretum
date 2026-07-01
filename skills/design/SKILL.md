@@ -247,10 +247,12 @@ Sequence summary:
 
 For a `kind: buildable` session, both the design spec and the plan now exist and
 the exit hands off to `/build`. For a `kind: shaping` session, only the design
-spec exists (build-targeted fields omitted) and the exit is **terminal at human
-review** — there is no `/build` handoff, because its children are filed and built
-as separate issues, never this doc. **Before exiting**, run the S2 producer
-self-check:
+spec exists (build-targeted fields omitted). The exit is **gated on human review
+of the design package**, then — unlike before — **hands off to `/finish`** so the
+design doc ships on the one canonical path (`/finish` → `/pr` → `/land` → merge)
+and is reviewed by Codex before its children build (#935). It does **not** hand
+off to `/build` (the doc builds nothing itself; its children are filed as
+separate issues). **Before exiting**, run the S2 producer self-check:
 
 ```bash
 bash scripts/validate-design-spec.sh <design-spec-path>
@@ -258,8 +260,8 @@ bash scripts/validate-design-spec.sh <design-spec-path>
 
 If the validator exits non-zero, the spec is malformed against the S2 contract — fix the named field(s) and re-run before handing off. Per the S2 contract's D4 single-source-of-truth property, this is the same validator `/build` invokes at its entry step; passing it here guarantees `/build` will accept the spec.
 
-Before exiting (to `/build` for a buildable session, or terminally for a shaping
-session), stop for human review of the design package.
+Before exiting (to `/build` for a buildable session, or to `/finish` for a
+shaping session), stop for human review of the design package.
 Everything-else work must not proceed into implementation until the user
 approves the goals, requirements, done criteria, design decisions, test
 approach, and plan. The only no-review exception is work that entered the
@@ -346,9 +348,19 @@ if [ -n "${ISSUE:-}" ]; then
 fi
 ```
 
-For a `kind: shaping` session the exit is terminal here: there is no `/build`
-handoff. Stop after the human approves the design package; the doc's children are
-filed and built as separate issues. The buildable handoff below does not apply.
+For a `kind: shaping` session, after the human approves the design package, hand
+off to `/finish` (hand-off, not auto-invoke — same convention as the buildable
+`/build` handoff):
+
+```
+/finish
+```
+
+`/finish` recognizes the `kind: shaping` branch and runs its no-build shaping-doc
+mode (skips the build-exit gate and the `/consolidate` reconcile), opens the
+design-doc PR via `/pr` (Codex-only review), and drives `/land` to a merge-gated
+close — the doc is reviewed and on main before its children are filed and built.
+The buildable `/build` handoff below does not apply.
 
 After approval (buildable sessions), hand off to `/build` with the design spec
 path:

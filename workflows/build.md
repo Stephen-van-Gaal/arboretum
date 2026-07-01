@@ -111,6 +111,13 @@ where available. It does not merge; merge remains human-owned.
 
 Verified `agent-ready` skips this step entirely.
 
+**Shaping/design-doc PRs get Codex review before children build (#935).** When a
+`/design` session produces a `kind: shaping` doc, it ships on the normal tail
+(`/finish` → `/pr` → `/land`). `/pr` recognizes the design-doc PR class and
+requests Codex (only); `/land` merge-gates on the review. Incorporate Codex
+findings on the same worktree, then merge to main — the doc must be on main, and
+reviewed, before its children build.
+
 ### 3. Build — `/build`
 
 `/build` is the build-stage orchestrator. It reads the design spec's S2 frontmatter (or the agent brief) and dispatches:
