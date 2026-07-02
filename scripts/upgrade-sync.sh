@@ -124,6 +124,7 @@ is_obsolete_release_helper() {
     scripts/read-release-intent.sh) return 0 ;;
     scripts/prepare-release-package.sh) return 0 ;;
     scripts/bump-version.sh) return 0 ;;
+    scripts/backfill-stage-labels.sh) return 0 ;;
     *) return 1 ;;
   esac
 }
