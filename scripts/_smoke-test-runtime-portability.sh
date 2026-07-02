@@ -52,8 +52,6 @@ for test_script in \
   scripts/_smoke-test-contract-read-s2-frontmatter.sh \
   scripts/_smoke-test-contract-read-test-config.sh \
   scripts/_smoke-test-contract-validate-design-spec.sh \
-  scripts/_smoke-test-validate-cli-contract.sh \
-  scripts/_smoke-test-contract-validate-cli-contract.sh \
   scripts/_smoke-test-contract-contract-coverage.sh
 do
   out=$(cd "$ROOT" && run_no_yaml bash "$test_script" 2>&1); rc=$?

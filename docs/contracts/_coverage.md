@@ -90,7 +90,6 @@
 | scripts/token-scenario.sh | docs/contracts/token-scenario.cli-contract.md | cli |
 | scripts/upgrade-sync.sh | docs/contracts/upgrade-sync.cli-contract.md | cli |
 | scripts/validate-build-exit.sh | docs/contracts/validate-build-exit.contract.md | full |
-| scripts/validate-cli-contract.sh | docs/contracts/validate-cli-contract.contract.md | full |
 | scripts/validate-coverage-manifest.sh | docs/contracts/contract-coverage.contract.md | full |
 | scripts/validate-cross-refs.sh | docs/contracts/validate-cross-refs.contract.md | full |
 | scripts/validate-design-spec.sh | docs/contracts/validate-design-spec.contract.md | full |

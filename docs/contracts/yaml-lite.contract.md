@@ -57,7 +57,6 @@ Consumers read the normalized line protocol and apply their own schema:
 - `scripts/read-s2-frontmatter.sh` reads S2 input frontmatter and emits build-dispatch fields.
 - `scripts/read-test-config.sh` reads the governed test-command declaration.
 - `scripts/validate-design-spec.sh` reads S2 frontmatter fields and emits `S2-DRIFT:` diagnostics.
-- `scripts/validate-cli-contract.sh` reads CLI-contract frontmatter fields and emits `CLI-CONTRACT-DRIFT:` diagnostics.
 - `scripts/generate-coverage.sh` reads `owns[]` and `script` fields when regenerating `docs/contracts/_coverage.md`.
 
 Consumers must not reimplement comment stripping, quote stripping, block-list
